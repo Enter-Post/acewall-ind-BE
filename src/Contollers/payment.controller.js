@@ -1,6 +1,8 @@
 import Purchase from '../Models/purchase.model.js';
-import Withdrawal from '../Models/Withdrawal.model.js'; 
+import Withdrawal from '../Models/Withdrawal.model.js';
 import mongoose from "mongoose";
+import nodemailer from "nodemailer";
+
 
 // Get Teacher Earnings
 export const getTeacherEarnings = async (req, res) => {
@@ -10,7 +12,7 @@ export const getTeacherEarnings = async (req, res) => {
     const earnings = await Purchase.aggregate([
       {
         $match: {
-          teacher: new  mongoose.Types.ObjectId(teacherId),
+          teacher: new mongoose.Types.ObjectId(teacherId),
           status: 'completed'
         }
       },
@@ -28,10 +30,10 @@ export const getTeacherEarnings = async (req, res) => {
       teacher: teacherId,
       status: 'completed'
     })
-    .populate('student', 'firstName lastName email')
-    .populate('course', 'title')
-    .sort({ createdAt: -1 })
-    .limit(10);
+      .populate('student', 'firstName lastName email')
+      .populate('course', 'title')
+      .sort({ createdAt: -1 })
+      .limit(10);
 
     res.json({
       earnings: earnings[0] || { totalEarnings: 0, totalSales: 0, totalRevenue: 0 },
@@ -79,6 +81,13 @@ export const getTeacherPaymentStats = async (req, res) => {
   try {
     const teacherId = req.user.id;
 
+    // Extract pagination parameters from query string (default to page 1 and pageSize 10)
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 16;
+
+    const skip = (page - 1) * pageSize;
+    const limit = pageSize;
+
     // Today date range
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -100,10 +109,9 @@ export const getTeacherPaymentStats = async (req, res) => {
       )
       .reduce((acc, tx) => acc + tx.teacherEarning, 0);
 
-    // 🆕 Fetch all approved withdrawals
+    // Fetch all withdrawals (including approved, pending, etc.)
     const withdrawals = await Withdrawal.find({
       teacher: teacherId,
-      status: "approved",
     });
 
     const totalWithdrawals = withdrawals.reduce((acc, tx) => acc + tx.amount, 0);
@@ -137,13 +145,16 @@ export const getTeacherPaymentStats = async (req, res) => {
         },
       },
     ]);
-    
-const recentWithdrawals = await Withdrawal.find({
-  teacher: teacherId,
-  status: "approved",
-})
-.sort({ processedAt: -1 })
-.limit(5); 
+
+    // Fetch recent withdrawals with pagination
+    const [totalWithdrawalsCount, recentWithdrawals] = await Promise.all([
+      Withdrawal.countDocuments({ teacher: teacherId }), // Get the total number of withdrawals
+      Withdrawal.find({ teacher: teacherId })
+        .sort({ processedAt: -1 })
+        .skip(skip)
+        .limit(limit),
+    ]);
+
     res.json({
       stats: {
         totalRevenue,
@@ -153,20 +164,27 @@ const recentWithdrawals = await Withdrawal.find({
         todayRevenue,
       },
       revenueOverTime,
-      recentWithdrawals
+      recentWithdrawals,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalWithdrawalsCount / pageSize),
+        totalWithdrawalsCount,
+      },
     });
   } catch (err) {
     console.error("Error in getTeacherPaymentStats:", err);
     res.status(500).json({ message: "Failed to fetch payment stats" });
   }
 };
+
+
 export const requestWithdrawal = async (req, res) => {
   try {
     const teacherId = req.user.id;
-const { amount, method, stripeAccountId } = req.body;
-if (method === "stripe" && !stripeAccountId) {
-  return res.status(400).json({ message: "Stripe Account ID is required." });
-}
+    const { amount, method, stripeAccountId } = req.body;
+    if (method === "stripe" && !stripeAccountId) {
+      return res.status(400).json({ message: "Stripe Account ID is required." });
+    }
     if (!amount || amount <= 0) {
       return res.status(400).json({ message: "Invalid amount" });
     }
@@ -188,7 +206,7 @@ if (method === "stripe" && !stripeAccountId) {
       teacher: teacherId,
       amount,
       method,
-        stripeAccountId: method === "stripe" ? stripeAccountId : undefined, // ✅ Save it if method is stripe
+      stripeAccountId: method === "stripe" ? stripeAccountId : undefined, // ✅ Save it if method is stripe
       status: "pending",
     });
 
@@ -201,7 +219,7 @@ if (method === "stripe" && !stripeAccountId) {
 export const getAllWithdrawals = async (req, res) => {
   try {
     const withdrawals = await Withdrawal.find()
-      .populate("teacher", "name email") // optional: show teacher details
+      .populate("teacher", "firstName lastName email") // optional: show teacher details
       .sort({ createdAt: -1 });
 
     res.status(200).json({ withdrawals });
@@ -210,24 +228,77 @@ export const getAllWithdrawals = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch withdrawals" });
   }
 };
+
 export const updateStripeId = async (req, res) => {
   try {
     const { stripeAccountId } = req.body;
     const { id } = req.params;
 
+    // Check if stripeAccountId exists for approval and status change
+    if (!stripeAccountId) {
+      return res.status(400).json({ message: "Stripe Account ID is required for approval." });
+    }
+
+    // Get current date for processedAt
+    const processedAt = new Date();
+
+    // Find the withdrawal and update only the necessary fields
     const withdrawal = await Withdrawal.findByIdAndUpdate(
       id,
-      { stripeAccountId },
+      {
+        stripeAccountId,
+        status: stripeAccountId === "approved" ? "approved" : "rejected", // Update status based on action
+        processedAt, // Set processedAt field when it's approved/rejected
+      },
       { new: true }
-    );
+    ).populate("teacher", "firstName lastName email"); // Make sure teacher data is populated here
 
     if (!withdrawal) {
       return res.status(404).json({ message: "Withdrawal not found" });
     }
 
-    res.status(200).json({ message: "Stripe Account ID updated", withdrawal });
+    // Send email to teacher notifying them about the withdrawal status update
+    const { name, email } = withdrawal.teacher; // Fetch teacher's details
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.MAIL_HOST,
+      port: Number(process.env.MAIL_PORT),
+      secure: Number(process.env.MAIL_PORT) === 465, // true for 465, false for 587
+      auth: {
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: `"Admin Team " <${process.env.MAIL_USER}>`,
+      to: email, // Send to the teacher's email
+      subject: `Your Withdrawal Status Update`,
+      html: `
+        <h3>Withdrawal Status Update</h3>
+        <p><strong>Dear ${name},</strong></p>
+        <p>Your withdrawal request has been <strong>${withdrawal.status}</strong>.</p>
+        <p><strong>Processed At:</strong> ${processedAt}</p>
+        <p><strong>Stripe Account ID:</strong> ${stripeAccountId}</p>
+        <p>If you have any questions, feel free to contact our support team.</p>
+        <br/>
+        <p>Best regards,</p>
+        <p>The Support Team</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ message: "Stripe Account ID and status updated, and email sent", withdrawal });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to update Stripe Account ID" });
   }
 };
+
+
+
+
+
+
+
