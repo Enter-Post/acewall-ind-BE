@@ -7,6 +7,9 @@ import { ObjectId } from "bson"; // Import ObjectId
 import Enrollment from "../Models/Enrollement.model.js";
 import e from "express";
 import Submission from "../Models/submission.model.js";
+import Discussion from "../Models/discussion.model.js";
+
+
 
 export const createAssessment = async (req, res) => {
   const {
@@ -267,27 +270,18 @@ export const getAllassessmentforStudent = async (req, res) => {
   const studentId = req.user._id;
 
   try {
-    // 1. Get all enrollments for the student
-    const allEnrollmentofStudent = await Enrollment.find({
-      student: studentId,
-    });
+    // 1. Get all enrollments of the student
+    const allEnrollmentofStudent = await Enrollment.find({ student: studentId });
 
-    // 2. Extract course IDs from enrollments
     const courseIds = allEnrollmentofStudent.map(
       (enrollment) => new mongoose.Types.ObjectId(enrollment.course)
     );
 
-    // Optional log for debugging
-    console.log("Course IDs:", courseIds);
-
-    // 3. Aggregate assessments for those courses
+    // 2. Fetch assessments
     const assessments = await Assessment.aggregate([
       {
-        $match: {
-          course: { $in: courseIds },
-        },
+        $match: { course: { $in: courseIds } },
       },
-      // Join with course
       {
         $lookup: {
           from: "coursesches",
@@ -297,8 +291,6 @@ export const getAllassessmentforStudent = async (req, res) => {
         },
       },
       { $unwind: { path: "$course", preserveNullAndEmptyArrays: true } },
-
-      // Join with chapter
       {
         $lookup: {
           from: "chapters",
@@ -308,8 +300,6 @@ export const getAllassessmentforStudent = async (req, res) => {
         },
       },
       { $unwind: { path: "$chapter", preserveNullAndEmptyArrays: true } },
-
-      // Join with lesson
       {
         $lookup: {
           from: "lessons",
@@ -319,8 +309,15 @@ export const getAllassessmentforStudent = async (req, res) => {
         },
       },
       { $unwind: { path: "$lesson", preserveNullAndEmptyArrays: true } },
-
-      // Check if the student submitted the assessment
+      {
+        $lookup: {
+          from: "assessmentcategories",
+          localField: "category",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
       {
         $lookup: {
           from: "submissions",
@@ -331,12 +328,7 @@ export const getAllassessmentforStudent = async (req, res) => {
                 $expr: {
                   $and: [
                     { $eq: ["$assessment", "$$assessmentId"] },
-                    {
-                      $eq: [
-                        "$studentId",
-                        new mongoose.Types.ObjectId(studentId),
-                      ],
-                    },
+                    { $eq: ["$studentId", new mongoose.Types.ObjectId(studentId)] },
                   ],
                 },
               },
@@ -345,15 +337,12 @@ export const getAllassessmentforStudent = async (req, res) => {
           as: "submissions",
         },
       },
-
-      // Add submission status
       {
         $addFields: {
           isSubmitted: { $gt: [{ $size: "$submissions" }, 0] },
+          source: "assessment",
         },
       },
-
-      // Shape final output
       {
         $project: {
           _id: 1,
@@ -363,6 +352,8 @@ export const getAllassessmentforStudent = async (req, res) => {
           dueDate: 1,
           createdAt: 1,
           isSubmitted: 1,
+          category: 1,
+          source: 1,
           "course._id": 1,
           "course.courseTitle": 1,
           "chapter._id": 1,
@@ -371,20 +362,116 @@ export const getAllassessmentforStudent = async (req, res) => {
           "lesson.title": 1,
         },
       },
+    ]);
 
-      // Optional: sort submitted first
+    // 3. Fetch discussions
+    const discussions = await Discussion.aggregate([
       {
-        $sort: {
-          isSubmitted: 1,
+        $match: { course: { $in: courseIds } },
+      },
+      {
+        $lookup: {
+          from: "coursesches",
+          localField: "course",
+          foreignField: "_id",
+          as: "course",
+        },
+      },
+      { $unwind: { path: "$course", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "chapters",
+          localField: "chapter",
+          foreignField: "_id",
+          as: "chapter",
+        },
+      },
+      { $unwind: { path: "$chapter", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "lessons",
+          localField: "lesson",
+          foreignField: "_id",
+          as: "lesson",
+        },
+      },
+      { $unwind: { path: "$lesson", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "assessmentcategories",
+          localField: "category",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "discussioncomments", // collection name for comments
+          let: { discussionId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$discussion", "$$discussionId"] },
+                    { $eq: ["$createdby", new mongoose.Types.ObjectId(studentId)] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "comments",
+        },
+      },
+
+      {
+        $addFields: {
+          isSubmitted: { $gt: [{ $size: "$comments" }, 0] },
+          title: "$topic", // align with assessments
+          source: "discussion",
+        },
+      },
+
+      // {
+      //   $addFields: {
+      //     isSubmitted: false, // For now, no submissions logic for discussions
+      //     title: "$topic", // align with assessment field
+      //     source: "discussion",
+      //   },
+      // },
+      {
+        $project: {
+          _id: 1,
+          type: 1,
+          title: 1,
+          description: 1,
           dueDate: 1,
+          createdAt: 1,
+          isSubmitted: 1,
+          category: 1,
+          source: 1,
+          "course._id": 1,
+          "course.courseTitle": 1,
+          "chapter._id": 1,
+          "chapter.title": 1,
+          "lesson._id": 1,
+          "lesson.title": 1,
         },
       },
     ]);
 
-    // 4. Return the response
-    res.status(200).json(assessments);
+    // 4. Merge both and sort
+    const combined = [...assessments, ...discussions].sort((a, b) => {
+      if (a.isSubmitted === b.isSubmitted) {
+        return new Date(a.dueDate) - new Date(b.dueDate);
+      }
+      return a.isSubmitted ? 1 : -1;
+    });
+
+    res.status(200).json(combined);
   } catch (err) {
-    console.error("Error fetching assessments for student:", err);
+    console.error("Error fetching assessments/discussions for student:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
