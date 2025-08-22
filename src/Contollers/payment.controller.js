@@ -218,16 +218,72 @@ export const requestWithdrawal = async (req, res) => {
 };
 export const getAllWithdrawals = async (req, res) => {
   try {
-    const withdrawals = await Withdrawal.find()
-      .populate("teacher", "firstName lastName email") // optional: show teacher details
-      .sort({ createdAt: -1 });
+    // Get the page and limit from the query params, default to page 1 and limit 10 if not provided
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit; // Skip the appropriate number of documents for pagination
 
-    res.status(200).json({ withdrawals });
+    // Fetch total number of withdrawals for statistics
+    const totalWithdrawalsCount = await Withdrawal.countDocuments();
+
+    // Fetch withdrawal stats (approved, pending, rejected)
+    const withdrawalStats = await Withdrawal.aggregate([
+      {
+        $group: {
+          _id: "$status", // Group by status (approved, pending, rejected)
+          count: { $sum: 1 }, // Count the number of withdrawals for each status
+        },
+      },
+      {
+        $project: {
+          _id: 0, // Exclude the _id field
+          status: "$_id", // Alias the _id to 'status'
+          count: 1, // Include the count
+        },
+      },
+    ]);
+
+    // Format the withdrawal stats into an object
+    const stats = {
+      approved: 0,
+      pending: 0,
+      rejected: 0,
+    };
+
+    // Map aggregated stats into the stats object
+    withdrawalStats.forEach((stat) => {
+      if (stat.status === "approved") stats.approved = stat.count;
+      if (stat.status === "pending") stats.pending = stat.count;
+      if (stat.status === "rejected") stats.rejected = stat.count;
+    });
+
+    // Fetch the withdrawals with pagination
+    const withdrawals = await Withdrawal.find()
+      .populate("teacher", "firstName lastName email")
+      .sort({ createdAt: -1 }) // Sort by created date
+      .skip(skip) // Skip the appropriate number of withdrawals for pagination
+      .limit(limit); // Limit the number of withdrawals per page
+
+    // Calculate total pages
+    const totalPages = Math.ceil(totalWithdrawalsCount / limit);
+
+    // Send the response with withdrawals, stats, and pagination details
+    res.status(200).json({
+      withdrawals,
+      stats, // Include stats in the response
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalWithdrawalsCount,
+      },
+    });
   } catch (err) {
-    console.error(err);
+    console.error("Error fetching withdrawals:", err);
     res.status(500).json({ message: "Failed to fetch withdrawals" });
   }
 };
+
+
 
 export const updateStripeId = async (req, res) => {
   try {
