@@ -78,22 +78,23 @@ export const createDiscussion = async (req, res) => {
 
 export const getDiscussionsOfTeacher = async (req, res) => {
   const teacherId = req.user._id;
-  const { type, typeId } = req.params
   try {
-    const discussions = await Discussion.find({
+    const discussion = await Discussion.find({
       createdby: teacherId,
-      type: type,
-      [type]: typeId
-    }).populate("course", "courseTitle thumbnail");
+    }).populate({
+      path: "course",
+      select: "courseTitle thumbnail",
+    });
 
     res
       .status(200)
-      .json({ message: "Discussions fetched successfully", discussions });
+      .json({ message: "Discussions fetched successfully here", discussion });
   } catch (error) {
     console.log("error in getting discussion", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
 
 export const getDiscussionbyId = async (req, res) => {
   const id = req.params.id;
@@ -149,3 +150,32 @@ export const discussionforStudent = async (req, res) => {
     });
   }
 };
+
+
+export const chapterDiscussions = async (req, res) => {
+  const { chapterId } = req.params
+  try {
+    const discussion = await Discussion.find({ chapter: chapterId }).populate("course", "courseTitle thumbnail")
+    if (!discussion || discussion.length === 0) {
+      return res.status(404).json({ message: "No discussions found for this chapter" });
+    }
+    res.status(200).json({ message: "Discussions fetched successfully", discussion })
+  } catch (error) {
+    console.log("error in fetching chapter discussions", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export const lessonDiscussions = async (req, res) => {
+  const { lessonId } = req.params
+  try {
+    const discussion = await Discussion.find({ lesson: lessonId }).populate("course", "courseTitle thumbnail")
+    if (!discussion || discussion.length === 0) {
+      return res.status(404).json({ message: "No discussions found for this lesson" });
+    }
+    res.status(200).json({ message: "Discussions fetched successfully", discussion })
+  } catch (error) {
+    console.log("error in fetching chapter discussions", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+} 
