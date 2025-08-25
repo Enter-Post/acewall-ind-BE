@@ -433,13 +433,6 @@ export const getAllassessmentforStudent = async (req, res) => {
         },
       },
 
-      // {
-      //   $addFields: {
-      //     isSubmitted: false, // For now, no submissions logic for discussions
-      //     title: "$topic", // align with assessment field
-      //     source: "discussion",
-      //   },
-      // },
       {
         $project: {
           _id: 1,
