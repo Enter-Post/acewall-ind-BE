@@ -7,7 +7,6 @@ import {
   updateUser,
   checkUser,
   allTeacher,
-  verifyOtpAndSignup,
   initiateSignup,
   resendOTP,
   forgetPassword,
@@ -23,6 +22,8 @@ import {
   uploadTeacherDocument,
   deleteTeacherDocument,
   verifyTeacherDocument,
+  verifyEmailOtp,
+  verifyPhoneOtp,
 } from "../Contollers/auth.controller.js";
 import { isUser } from "../middlewares/Auth.Middleware.js";
 import { upload } from "../lib/multer.config.js";
@@ -30,7 +31,8 @@ import { upload } from "../lib/multer.config.js";
 const router = express.Router();
 
 router.post("/register", initiateSignup);
-router.post("/verifyOTP", verifyOtpAndSignup);
+router.post("/verifyOTP", verifyEmailOtp);
+router.post("/verifyPhoneOTP", verifyPhoneOtp);
 router.post("/resendOTP", resendOTP);
 router.post("/login", login);
 router.post("/forgotPassword", forgetPassword);
@@ -53,8 +55,6 @@ router.post("/updatePasswordOTP", isUser, updatePasswordOTP);
 router.put("/updatePassword", isUser, updatePassword);
 router.post("/updateEmailOTP", isUser, updateEmailOTP);
 router.put("/updateEmail", isUser, updateEmail);
-
-
 router.post(
   "/uploadDocument",
   isUser,
