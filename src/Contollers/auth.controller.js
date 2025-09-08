@@ -524,7 +524,28 @@ export const checkUser = async (req, res) => {
 
 export const allTeacher = async (req, res) => {
   try {
-    const teachers = await User.find({ role: "teacher" }).select(
+    const { name, email } = req.query;
+
+    // Build query based on available filters
+    let query = { role: "teacher" };
+
+    // Filter by name (firstName or lastName)
+    if (name) {
+      const nameRegex = new RegExp(name, "i"); // Case-insensitive search
+      query.$or = [
+        { firstName: { $regex: nameRegex } },
+        { lastName: { $regex: nameRegex } }
+      ];
+    }
+
+    // Filter by email
+    if (email) {
+      const emailRegex = new RegExp(email, "i"); // Case-insensitive search
+      query.email = { $regex: emailRegex };
+    }
+
+    // Fetch teachers with the constructed query
+    const teachers = await User.find(query).select(
       "firstName lastName email createdAt profileImg _id isVarified"
     );
 
@@ -553,10 +574,32 @@ export const allTeacher = async (req, res) => {
 };
 
 
+
 export const allStudent = async (req, res) => {
   try {
-    const students = await User.find({ role: "student" }).select(
-      "firstName lastName email createdAt courses profileImg id"
+    const { name, email } = req.query; // Get filter query parameters
+
+    // Build the base query
+    let query = { role: "student" };
+
+    // Apply filter for name (either firstName or lastName)
+    if (name) {
+      const nameRegex = new RegExp(name, "i"); // Case-insensitive regex search
+      query.$or = [
+        { firstName: { $regex: nameRegex } },
+        { lastName: { $regex: nameRegex } },
+      ];
+    }
+
+    // Apply filter for email
+    if (email) {
+      const emailRegex = new RegExp(email, "i");
+      query.email = { $regex: emailRegex };
+    }
+
+    // Fetch students with the constructed query
+    const students = await User.find(query).select(
+      "firstName lastName email createdAt courses profileImg _id"
     );
 
     const formattedStudent = students.map((student) => ({
@@ -573,6 +616,7 @@ export const allStudent = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: err.message });
   }
 };
+
 
 export const getStudentById = async (req, res) => {
   try {
