@@ -3,19 +3,23 @@ import Chapter from "../../Models/chapter.model.sch.js";
 import Quarter from "../../Models/quarter.model.js";
 
 export const createChapter = async (req, res) => {
-  const quarter = req.params.quarterId;
   const course = req.params.courseId;
   const createdby = req.user._id;
-  const { title, description } = req.body;
+  const { title, description, quarter } = req.body;
 
   try {
-    const chapter = await Chapter.create({
+    const chapterObject = {
       title,
       description,
-      quarter,
       course,
       createdby,
-    });
+    };
+
+    if (mongoose.Types.ObjectId.isValid(quarter)) {
+      chapterObject.quarter = quarter;
+    }
+
+    const chapter = await Chapter.create(chapterObject);
     res.status(201).json({ message: "Chapter created successfully", chapter });
   } catch (error) {
     console.log("error in creating chapter", error);
@@ -84,7 +88,12 @@ export const getChapterwithLessons = async (req, res) => {
           as: "quarter",
         },
       },
-      { $unwind: "$quarter" },
+      {
+        $unwind: {
+          path: "$quarter",
+          preserveNullAndEmptyArrays: true, // ✅ allow chapters without quarter
+        },
+      },
 
       // Lookup Semester via Quarter
       {
@@ -95,13 +104,17 @@ export const getChapterwithLessons = async (req, res) => {
           as: "semester",
         },
       },
-      { $unwind: "$semester" },
+      {
+        $unwind: {
+          path: "$semester",
+          preserveNullAndEmptyArrays: true, // ✅ allow chapters without semester
+        },
+      },
 
-      // Optional: Lookup Lessons and Assessments (if needed)
+      // Lookup Lessons with Assessments
       {
         $lookup: {
           from: "lessons",
-
           localField: "_id",
           foreignField: "chapter",
           as: "lessons",
@@ -143,10 +156,10 @@ export const getChapterwithLessons = async (req, res) => {
         },
       },
 
+      // Lookup Chapter Assessments
       {
         $lookup: {
           from: "assessments",
-
           let: { chapterId: "$_id" },
           pipeline: [
             {
@@ -180,9 +193,7 @@ export const getChapterwithLessons = async (req, res) => {
     ]);
 
     if (!chapters || chapters.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "No chapters found for this quarter" });
+      return res.status(404).json({ message: "Chapter not found" });
     }
 
     res.status(200).json({
@@ -198,7 +209,6 @@ export const getChapterwithLessons = async (req, res) => {
 
 export const getChapterOfQuarter = async (req, res) => {
   const { courseId, quarterId } = req.params;
-
   try {
     const quarter = await Quarter.findById(quarterId);
 
@@ -330,12 +340,29 @@ export const getChapterOfQuarter = async (req, res) => {
       chapters,
     });
   } catch (error) {
-    console.error("error in getting chapters with lessons", error);
+    console.error("error in getting chapters of Quarter", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
+export const ChapterofCourse = async (req, res) => {
 
+  try {
+    const { courseId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({ error: "Invalid courseId" });
+    }
+    const chapters = await Chapter.find({ course: courseId });
+
+    console.log(chapters, "chapters")
+
+    res.status(200).json({ message: "Chapter found successfully", chapters });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
 export const editChapter = async (req, res) => {
   const { chapterId } = req.params;
   const { title, description } = req.body;

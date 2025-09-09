@@ -112,9 +112,6 @@ export const unEnrollment = async (req, res) => {
 export const studentCourseDetails = async (req, res) => {
   const { enrollmentId } = req.params;
 
-
-  console.log(enrollmentId, "enrollmentId")
-
   try {
     const enrolledData = await Enrollment.aggregate([
       {
@@ -201,6 +198,7 @@ export const studentCourseDetails = async (req, res) => {
                 teachingPoints: 1,
                 semester: 1,
                 quarter: 1,
+                semesterbased: 1,
                 requirements: 1,
                 createdby: {
                   _id: "$createdby._id",
@@ -226,8 +224,6 @@ export const studentCourseDetails = async (req, res) => {
       },
       { $unwind: "$courseDetails" },
     ]);
-
-    console.log(enrolledData, "enrolledData")
 
     if (!enrolledData || enrolledData.length === 0) {
       return res.status(404).json({ message: "Enrollment not found" });
