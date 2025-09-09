@@ -9,8 +9,6 @@ import e from "express";
 import Submission from "../Models/submission.model.js";
 import Discussion from "../Models/discussion.model.js";
 
-
-
 export const createAssessment = async (req, res) => {
   const {
     title,

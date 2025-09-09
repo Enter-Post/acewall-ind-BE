@@ -13,7 +13,9 @@ export const createLesson = async (req, res) => {
   try {
     let uploadedFiles = [];
 
+    // Check if PDF files exist
     if (pdfFiles && pdfFiles.length > 0) {
+      // Process each PDF file and upload to Cloudinary
       for (const file of pdfFiles) {
         const result = await uploadToCloudinary(file.buffer, "lesson_pdfs");
 
@@ -25,12 +27,13 @@ export const createLesson = async (req, res) => {
       }
     }
 
+    // Create new lesson with or without PDF files
     const newLesson = new Lesson({
       title,
       description,
       youtubeLinks,
       otherLink,
-      pdfFiles: uploadedFiles,
+      pdfFiles: uploadedFiles.length > 0 ? uploadedFiles : undefined, // If no PDF files, set as undefined
       chapter,
       createdby,
     });
@@ -41,7 +44,7 @@ export const createLesson = async (req, res) => {
 
     res.status(201).json({ message: "Lesson created successfully", newLesson });
   } catch (error) {
-    console.log("error in creating chapter", error);
+    console.log("error in creating lesson", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };

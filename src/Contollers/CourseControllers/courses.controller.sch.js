@@ -20,11 +20,12 @@ export const createCourseSch = async (req, res) => {
     subcategory,
     language,
     courseDescription,
+    semesterbased,
     teachingPoints,
     requirements,
     published,
     price,
-    courseType,
+    // courseType,
   } = req.body;
 
   const files = req.files;
@@ -43,33 +44,6 @@ export const createCourseSch = async (req, res) => {
       };
     }
 
-    // ✅ Upload documents
-    const documentFields = [
-      "governmentId",
-      "resume",
-      "certificate",
-      "transcript",
-    ];
-    const documents = {};
-
-    for (const field of documentFields) {
-      const file = files[field]?.[0];
-
-      if (file) {
-        const uploadResult = await uploadToCloudinary(
-          file.buffer,
-          "course_documents"
-        );
-        documents[field] = {
-          url: uploadResult.secure_url,
-          publicId: uploadResult.public_id,
-          filename: file.originalname,
-        };
-      } else {
-        documents[field] = null;
-      }
-    }
-
     // ✅ Parse JSON fields
     const parsedTeachingPoints = JSON.parse(teachingPoints);
     const parsedRequirements = JSON.parse(requirements);
@@ -82,14 +56,15 @@ export const createCourseSch = async (req, res) => {
       thumbnail,
       language,
       courseDescription,
+      semesterbased,
       teachingPoints: parsedTeachingPoints,
       requirements: parsedRequirements,
       createdby,
       price,
       published,
       price,
-      courseType,
-      documents,
+      // courseType,
+      // documents,
     });
 
     res.status(201).json({ course, message: "Course created successfully" });

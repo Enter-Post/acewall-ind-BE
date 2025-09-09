@@ -68,11 +68,12 @@ app.use(
   cors({
     origin: [
       "https://acewall.vercel.app",
-           "https://acewallscholars.vercel.app",
+      "https://acewallscholars.vercel.app",
       "https://acewall-admin.vercel.app",
       "https://acewall-admin-independent.vercel.app",
       "https://acewall.vercel.app",
       "http://localhost:5173",
+      "http://localhost:4173",
       "http://localhost:5174",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
