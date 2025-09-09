@@ -44,33 +44,6 @@ export const createCourseSch = async (req, res) => {
       };
     }
 
-    // ✅ Upload documents
-    // const documentFields = [
-    //   "governmentId",
-    //   "resume",
-    //   "certificate",
-    //   "transcript",
-    // ];
-    // const documents = {};
-
-    // for (const field of documentFields) {
-    //   const file = files[field]?.[0];
-
-    //   if (file) {
-    //     const uploadResult = await uploadToCloudinary(
-    //       file.buffer,
-    //       "course_documents"
-    //     );
-    //     documents[field] = {
-    //       url: uploadResult.secure_url,
-    //       publicId: uploadResult.public_id,
-    //       filename: file.originalname,
-    //     };
-    //   } else {
-    //     documents[field] = null;
-    //   }
-    // }
-
     // ✅ Parse JSON fields
     const parsedTeachingPoints = JSON.parse(teachingPoints);
     const parsedRequirements = JSON.parse(requirements);
