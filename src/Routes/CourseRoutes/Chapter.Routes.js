@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  ChapterofCourse,
   createChapter,
   deleteChapter,
   editChapter,
@@ -11,7 +12,8 @@ import { isUser } from "../../middlewares/Auth.Middleware.js";
 
 const router = express.Router();
 
-router.post("/create/:courseId/:quarterId", isUser, createChapter);
+router.get("/chapterofCourse/:courseId", isUser, ChapterofCourse);
+router.post("/create/:courseId", isUser, createChapter);
 // router.get("/:quarterId", isUser, getChapterofCourse);
 router.delete("/:chapterId", isUser, deleteChapter);
 router.get("/:courseId/:quarterId", isUser, getChapterOfQuarter);

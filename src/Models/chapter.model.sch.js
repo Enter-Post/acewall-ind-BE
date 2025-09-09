@@ -8,7 +8,6 @@ const ChapterSchema = new mongoose.Schema(
     quarter: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Semester",
-      required: true,
     },
     course: {
       type: mongoose.Schema.Types.ObjectId,
