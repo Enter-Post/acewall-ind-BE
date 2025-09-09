@@ -9,6 +9,7 @@ import crypto from "crypto";
 import { v2 as cloudinary } from "cloudinary";
 import Enrollment from "../Models/Enrollement.model.js";
 import mongoose from "mongoose";
+import twilio from "twilio";
 
 export const initiateSignup = async (req, res) => {
   const {
@@ -237,6 +238,12 @@ export const verifyPhoneOtp = async (req, res) => {
     if (!otpEntry || !otpEntry.isVerified) {
       return res.status(400).json({ message: "Email not verified yet." });
     }
+
+    const isExpired = Date.now() > otpEntry.expiresAt;
+    const isValid = await bcrypt.compare(otp, otpEntry.phoneOtp);
+
+    console.log(isExpired, "isExpired")
+    console.log(isValid, "isValid")
 
     if (!isValid || isExpired) {
       return res.status(400).json({ message: "Invalid or expired phone OTP." });
