@@ -31,6 +31,10 @@ const SchCourseSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    semesterbased: {
+      type: Boolean,
+      required: true,
+    },
     semester: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -84,10 +88,10 @@ const SchCourseSchema = new mongoose.Schema(
       default: "pending",
       enum: ["approved", "rejected", "pending"],
     },
-        price: {
+    price: {
       type: Number,
       required: false,
-      default: 0, 
+      default: 0,
       min: 0
     },
   },

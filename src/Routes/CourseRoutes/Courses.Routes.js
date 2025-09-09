@@ -53,10 +53,6 @@ router.get("/details/:courseId", isUser, getCourseDetails);
 router.get("/get/:id", getunPurchasedCourseByIdSch);
 router.get("/getstdprew/:id", isUser, getunPurchasedCourseByIdStdPrew);
 router.get("/courseDetailsStdPre/:courseId", isUser, courseDetailsStdPre);
-
-
-
-
 router.delete("/delete/:courseId", isUser, deleteCourseSch);
 router.get("/getcourseDueDate/:courseId", isUser, getDueDate);
 router.put(
