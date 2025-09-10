@@ -374,14 +374,13 @@ export const resendPhoneOTP = async (req, res) => {
 export const login = async (req, res) => {
   const { email, password } = req.body;
   try {
-    if (!password || !email) {
+    if (!email || !password) {
       return res.status(400).json({
-        message: "all fields must be filled",
+        message: "All fields must be filled",
       });
     }
 
     const user = await User.findOne({ email });
-
     if (!user) {
       return res.status(400).json({
         error: true,
@@ -390,21 +389,24 @@ export const login = async (req, res) => {
     }
 
     const isAuthorized = await bcrypt.compare(password, user.password);
-
     if (!isAuthorized) {
-      return res.status(500).json({
+      return res.status(401).json({
         error: true,
         message: "Invalid Credentials",
       });
     }
-    generateToken(user._id, user.role, res);
+
+    // ✅ Pass both req and res here
+    const token = generateToken(user._id, user.role, req, res);
+
     return res.status(200).json({
-      message: "Login Successfull",
+      message: "Login Successful",
+      token, // optional, since cookie is already set
     });
   } catch (error) {
-    console.log("error in login==>", error.message);
+    console.error("error in login==>", error.message);
     return res.status(500).json({
-      message: "Some this Went Wrong, sorry for inconvenience",
+      message: "Something went wrong, sorry for inconvenience",
     });
   }
 };
@@ -548,19 +550,39 @@ export const resetPassword = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    res.clearCookie("jwt", {
+    // Detect portal like in generateToken/isUser
+    let host = "";
+    const origin = req.get("origin");
+
+    if (origin) {
+      try {
+        host = new URL(origin).hostname;
+      } catch (err) {
+        console.error("Invalid origin header:", origin);
+      }
+    }
+    if (!host && req.hostname) {
+      host = req.hostname;
+    }
+
+    const portal = host && host.startsWith("admin.") ? "admin" : "client";
+    const cookieName = portal === "admin" ? "admin_jwt" : "client_jwt";
+
+    // Clear the cookie
+    res.clearCookie(cookieName, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // true on production (HTTPS)
+      secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      path: "/", // must match the original cookie path
+      path: "/", // Must match original cookie path
     });
+
     return res.status(200).json({
-      message: "User Logged Out Successfully",
+      message: `User logged out successfully from ${portal} portal`,
     });
   } catch (error) {
-    console.log("error in logout==>", error.message);
+    console.error("Error in logout =>", error.message);
     return res.status(500).json({
-      message: "Some this Went Wrong, sorry for inconvenience",
+      message: "Something went wrong, sorry for the inconvenience",
     });
   }
 };
@@ -684,8 +706,6 @@ export const allTeacher = async (req, res) => {
   }
 };
 
-
-
 export const allStudent = async (req, res) => {
   try {
     const { name, email } = req.query; // Get filter query parameters
@@ -727,7 +747,6 @@ export const allStudent = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: err.message });
   }
 };
-
 
 export const getStudentById = async (req, res) => {
   try {
@@ -874,7 +893,6 @@ export const updateProfileImg = async (req, res) => {
   }
 };
 
-
 export const updatePasswordOTP = async (req, res) => {
   const userId = req.user._id;
   const { oldPassword, newPassword, confirmPassword } = req.body;
@@ -959,7 +977,6 @@ export const updatePasswordOTP = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 
 export const updatePassword = async (req, res) => {
   const { email, otp } = req.body;
@@ -1104,11 +1121,6 @@ export const updateEmail = async (req, res) => {
     return res.status(500).json("Internal Server Error");
   }
 };
-
-
-
-
-
 
 export const uploadTeacherDocument = async (req, res) => {
   try {

@@ -1,51 +1,82 @@
 import jwt from "jsonwebtoken";
 import User from "../Models/user.model.js";
-// import Admin from "../Models/admins.model.js";
+// import Admin from "../Models/admins.model.js";   // Uncomment later if needed
 
+// ----------------- Helper: detect portal -----------------
+function getPortalFromReq(req) {
+  let host = "";
+
+  // Try Origin header first (browser fetch/AJAX usually sets this)
+  const origin = req.get("origin");
+  if (origin) {
+    try {
+      host = new URL(origin).hostname;
+    } catch (err) {
+      console.error("Invalid origin header:", origin);
+    }
+  }
+
+  // Fallback to req.hostname (server-level detection)
+  if (!host && req.hostname) {
+    host = req.hostname;
+  }
+
+  // Default to client if still unknown
+  if (!host) return "client";
+
+  return host.startsWith("admin.") ? "admin" : "client";
+}
+
+// ----------------- Middleware -----------------
 export const isUser = async (req, res, next) => {
-  //   console.log("middleware executed", req);
   try {
-    const token = req.cookies.jwt;
+    // Detect which portal this request is for
+    const portal = getPortalFromReq(req); // 'admin' or 'client'
+    const cookieName = portal === "admin" ? "ind_admin_jwt" : "ind_client_jwt";
 
+    const token = req.cookies?.[cookieName];
     if (!token) {
-      return res.status(400).json({
-        message: "user not found",
+      return res.status(401).json({
+        error: true,
+        message: `No auth token provided for ${portal} portal`,
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRAT);
-
-    // console.log(decoded);
-
-    if (!decoded) {
-      return res.status(500).json({
-        message: "Unauthorized token",
+    // Verify token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRAT);
+    } catch (err) {
+      return res.status(401).json({
+        error: true,
+        message: "Invalid or expired token",
       });
     }
 
-    const customer = await User.findById(decoded.userID).select("-password");
-    // const admin = await Admin.findById(decoded.userID).select("-password");
+    // Validate portal audience
+    if (!decoded || decoded.aud !== portal) {
+      return res.status(401).json({
+        error: true,
+        message: "Cross-portal token detected",
+      });
+    }
 
-    if (!customer) {
-      return res.status(500).json({
+    // Lookup user (later you could branch for Admin vs User model)
+    const user = await User.findById(decoded.userID).select("-password");
+    if (!user) {
+      return res.status(404).json({
+        error: true,
         message: "User not found",
       });
     }
 
-    req.user = customer;
-
-    // if (admin) {
-    //   req.user = admin;
-    // } else {
-    //   req.user = customer;
-    // }
-
+    req.user = user;
     next();
   } catch (error) {
-    console.log("error in isUser middleware ==>", error);
+    console.error("Error in isUser middleware:", error);
     return res.status(500).json({
       error: true,
-      message: "some thing went wrong",
+      message: "Authentication failed",
     });
   }
 };
