@@ -566,7 +566,7 @@ export const logout = async (req, res) => {
     }
 
     const portal = host && host.startsWith("admin.") ? "admin" : "client";
-    const cookieName = portal === "admin" ? "admin_jwt" : "client_jwt";
+    const cookieName = portal === "admin" ? "ind_admin_jwt" : "ind_client_jwt";
 
     // Clear the cookie
     res.clearCookie(cookieName, {
