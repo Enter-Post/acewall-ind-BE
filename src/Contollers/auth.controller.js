@@ -184,6 +184,9 @@ export const verifyEmailOtp = async (req, res) => {
     const isExpired = Date.now() > otpEntry.expiresAt;
     const isValid = await bcrypt.compare(otp, otpEntry.otp);
 
+    console.log(isExpired, "isExpired");
+    console.log(isValid, "isValid");
+
     if (!isValid || isExpired) {
       return res.status(400).json({ message: "Invalid or expired OTP." });
     }
@@ -210,7 +213,7 @@ export const verifyEmailOtp = async (req, res) => {
     const hashedOTP = await bcrypt.hash(phoneOtp, 10);
 
     // Save to DB with expiry (5 min)
-    otpEntry.phoneOtp = await bcrypt.hash(hashedOTP, 10);
+    otpEntry.phoneOtp = hashedOTP
     otpEntry.expiresAt = Date.now() + 10 * 60 * 1000;
     await otpEntry.save();
 
