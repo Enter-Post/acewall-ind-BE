@@ -75,6 +75,8 @@ app.use(
       "http://localhost:5173",
       "http://localhost:4173",
       "http://localhost:5174",
+      "https://acewallscholarslearningonline.org/",
+      "https://admin.acewallscholarslearningonline.org/"
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     credentials: true,
