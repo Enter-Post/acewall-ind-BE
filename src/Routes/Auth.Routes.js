@@ -25,6 +25,8 @@ import {
   verifyEmailOtp,
   verifyPhoneOtp,
   resendPhoneOTP,
+  updatePhoneOTP,
+  updatePhone,
 } from "../Contollers/auth.controller.js";
 import { isUser } from "../middlewares/Auth.Middleware.js";
 import { upload } from "../lib/multer.config.js";
@@ -57,8 +59,8 @@ router.post("/updatePasswordOTP", isUser, updatePasswordOTP);
 router.put("/updatePassword", isUser, updatePassword);
 router.post("/updateEmailOTP", isUser, updateEmailOTP);
 router.put("/updateEmail", isUser, updateEmail);
-
-
+router.post("/updatePhoneOTP", isUser, updatePhoneOTP)
+router.put("/updatePhone", isUser, updatePhone)
 router.post(
   "/uploadDocument",
   isUser,
