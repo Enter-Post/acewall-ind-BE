@@ -85,6 +85,7 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+app.use("/api/assessmentCategory", AssessmentCategoryRoutes);
 app.use("/api/stripe", stripeRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/category", categoryRoutes);
@@ -98,7 +99,6 @@ app.use("/api/conversation/", conversationRoutes);
 app.use("/api/messeges", messegesRoutes);
 app.use("/api/purchase", purchasesRoutes);
 app.use("/api/assessment", assessmentRoutes);
-app.use("/api/assessmentCategory", AssessmentCategoryRoutes);
 app.use("/api/gradebook", gredesRoutes);
 app.use("/api/announcements", announcementRoutes);
 app.use("/api/enrollment", enrollmentRoutes);

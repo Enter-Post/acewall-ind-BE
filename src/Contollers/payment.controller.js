@@ -287,39 +287,42 @@ export const getAllWithdrawals = async (req, res) => {
 
 export const updateStripeId = async (req, res) => {
   try {
-    const { stripeAccountId } = req.body;
+    const { stripeAccountId, action } = req.body; // ✅ separate action
     const { id } = req.params;
 
-    // Check if stripeAccountId exists for approval and status change
-    if (!stripeAccountId) {
-      return res.status(400).json({ message: "Stripe Account ID is required for approval." });
+    if (!action) {
+      return res.status(400).json({ message: "Action is required (approved/rejected)." });
     }
 
     // Get current date for processedAt
     const processedAt = new Date();
 
-    // Find the withdrawal and update only the necessary fields
-    const withdrawal = await Withdrawal.findByIdAndUpdate(
-      id,
-      {
-        stripeAccountId,
-        status: stripeAccountId === "approved" ? "approved" : "rejected", // Update status based on action
-        processedAt, // Set processedAt field when it's approved/rejected
-      },
-      { new: true }
-    ).populate("teacher", "firstName lastName email"); // Make sure teacher data is populated here
+    // Build update object
+    const updateData = {
+      status: action, // ✅ set status based on action
+      processedAt,
+    };
+
+    // Only update stripeAccountId if provided
+    if (stripeAccountId) {
+      updateData.stripeAccountId = stripeAccountId;
+    }
+
+    const withdrawal = await Withdrawal.findByIdAndUpdate(id, updateData, {
+      new: true,
+    }).populate("teacher", "firstName lastName email");
 
     if (!withdrawal) {
       return res.status(404).json({ message: "Withdrawal not found" });
     }
 
-    // Send email to teacher notifying them about the withdrawal status update
-    const { name, email } = withdrawal.teacher; // Fetch teacher's details
+    // Send email to teacher
+    const { firstName, email } = withdrawal.teacher;
 
     const transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST,
       port: Number(process.env.MAIL_PORT),
-      secure: Number(process.env.MAIL_PORT) === 465, // true for 465, false for 587
+      secure: Number(process.env.MAIL_PORT) === 465,
       auth: {
         user: process.env.MAIL_USER,
         pass: process.env.MAIL_PASS,
@@ -328,14 +331,14 @@ export const updateStripeId = async (req, res) => {
 
     const mailOptions = {
       from: `"Admin Team " <${process.env.MAIL_USER}>`,
-      to: email, // Send to the teacher's email
+      to: email,
       subject: `Your Withdrawal Status Update`,
       html: `
         <h3>Withdrawal Status Update</h3>
-        <p><strong>Dear ${name},</strong></p>
+        <p><strong>Dear ${firstName},</strong></p>
         <p>Your withdrawal request has been <strong>${withdrawal.status}</strong>.</p>
         <p><strong>Processed At:</strong> ${processedAt}</p>
-        <p><strong>Stripe Account ID:</strong> ${stripeAccountId}</p>
+        ${stripeAccountId ? `<p><strong>Stripe Account ID:</strong> ${stripeAccountId}</p>` : ""}
         <p>If you have any questions, feel free to contact our support team.</p>
         <br/>
         <p>Best regards,</p>
@@ -345,12 +348,16 @@ export const updateStripeId = async (req, res) => {
 
     await transporter.sendMail(mailOptions);
 
-    res.status(200).json({ message: "Stripe Account ID and status updated, and email sent", withdrawal });
+    res.status(200).json({
+      message: "Withdrawal updated successfully, and email sent",
+      withdrawal,
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Failed to update Stripe Account ID" });
+    res.status(500).json({ message: "Failed to update withdrawal" });
   }
 };
+
 
 
 
