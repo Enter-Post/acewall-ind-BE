@@ -279,6 +279,10 @@ export const courseDetailsStdPre = async (req, res) => {
   }
 };
 
+
+
+
+
 export const getunPurchasedCourseByIdStdPrew = async (req, res) => {
   try {
     const courseId = req.params.id;
@@ -294,21 +298,11 @@ export const getunPurchasedCourseByIdStdPrew = async (req, res) => {
           foreignField: "_id",
           as: "category",
           pipeline: [
-            {
-              $project: {
-                _id: 1,
-                title: 1,
-              },
-            },
+            { $project: { _id: 1, title: 1 } },
           ],
         },
       },
-      {
-        $unwind: {
-          path: "$category",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
+      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
       {
         $lookup: {
           from: "subcategories",
@@ -316,22 +310,11 @@ export const getunPurchasedCourseByIdStdPrew = async (req, res) => {
           foreignField: "_id",
           as: "subcategory",
           pipeline: [
-            {
-              $project: {
-                _id: 1,
-                title: 1,
-              },
-            },
+            { $project: { _id: 1, title: 1 } },
           ],
         },
       },
-      {
-        $unwind: {
-          path: "$subcategory",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      // Get semester by matching courseId in semester's courses array
+      { $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true } },
       {
         $lookup: {
           from: "semesters",
@@ -349,6 +332,14 @@ export const getunPurchasedCourseByIdStdPrew = async (req, res) => {
             },
           ],
           as: "semester",
+        },
+      },
+      {
+        $lookup: {
+          from: "chapters",
+          localField: "_id",
+          foreignField: "course",
+          as: "chapters",
         },
       },
       {
@@ -386,22 +377,6 @@ export const getunPurchasedCourseByIdStdPrew = async (req, res) => {
       },
       {
         $lookup: {
-          from: "enrollments",
-          let: { courseId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $eq: ["$course", "$$courseId"],
-                },
-              },
-            },
-          ],
-          as: "enrollments",
-        },
-      },
-      {
-        $lookup: {
           from: "users",
           localField: "createdby",
           foreignField: "_id",
@@ -417,8 +392,8 @@ export const getunPurchasedCourseByIdStdPrew = async (req, res) => {
                 email: 1,
               },
             },
-          ]
-        }
+          ],
+        },
       },
       {
         $unwind: {
@@ -437,10 +412,15 @@ export const getunPurchasedCourseByIdStdPrew = async (req, res) => {
       message: "Course fetched successfully",
     });
   } catch (error) {
-    console.error("Error in getunPurchasedCourseByIdSch:", error);
+    console.error("Error in getunPurchasedCourseByIdStdPrew:", error);
     res.status(500).json({ error: error.message });
   }
 };
+
+
+
+
+
 
 export const getunPurchasedCourseByIdSch = async (req, res) => {
   try {
