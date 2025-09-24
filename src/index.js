@@ -35,6 +35,7 @@ import quarterRoutes from "./Routes/CourseRoutes/Quarter.Routes.js";
 import pagesRoutes from "./Routes/Pages.Routes.js";
 import teacherPaymentRoutes from "./Routes/TeacherPayment.Routes.js";
 import gpaRoutes from "./Routes/GPA.Routes.js";
+import contactRoutes from "./Routes/Contact.Routes.js"; 
 
 import stripeRoutes from "./Routes/Stripe.Routes.js";
 import { handleStripeWebhook } from "./Contollers/stripe.controller.js";
@@ -108,6 +109,7 @@ app.use("/api/newsletter", newsletter);
 app.use("/api/support", supportRoutes);
 app.use("/api/pages", pagesRoutes);
 app.use("/api/teacher", teacherPaymentRoutes);
+app.use("/api/contact", contactRoutes);
 
 app.use("/api/discussion", discussionRoutes);
 app.use("/api/discussionComment", discussionCommentRoutes);
@@ -115,6 +117,7 @@ app.use("/api/replyDiscussion", replyDiscussionRoutes);
 app.use("/api/semester", semesterRoutes);
 app.use("/api/quarter", quarterRoutes);
 app.use("/api/gpa", gpaRoutes);
+
 
 server.listen(PORT, () => {
   connectDB();
