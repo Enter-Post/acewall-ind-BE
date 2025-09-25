@@ -428,6 +428,8 @@ export const getunPurchasedCourseByIdStdPrew = async (req, res) => {
       },
     ]);
 
+    console.log(courseData , "courseData")
+
     if (!courseData || courseData.length === 0) {
       return res.status(404).json({ error: "Course not found" });
     }

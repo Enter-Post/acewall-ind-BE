@@ -220,11 +220,17 @@ export const verifyEmailOtp = async (req, res) => {
     const userData = otpEntry.userData;
 
     // 🚀 Send SMS using purchased number
+    try {
     await twilioClient.messages.create({
       body: `Your Acewall Scholars phone verification code is: ${phoneOtp}`,
       from: process.env.TWILIO_PHONE_NUMBER, // purchased Twilio number
       to: userData.phone,
-    });
+    });      
+    } catch (error) {
+      console.error("Error sending phone OTP via Twilio:", error.message);
+      return res.status(500).json({ message: "Failed to send OTP your phone." });
+    }
+
 
     res.json({ message: "Email verified. Phone OTP sent." });
   } catch (error) {
