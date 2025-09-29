@@ -27,6 +27,8 @@ import {
   resendPhoneOTP,
   updatePhoneOTP,
   updatePhone,
+  previewSignIn,
+  previewSignOut,
 } from "../Contollers/auth.controller.js";
 import { isUser } from "../middlewares/Auth.Middleware.js";
 import { upload } from "../lib/multer.config.js";
@@ -71,4 +73,6 @@ router.post(
 router.delete('/teacher/document/:documentId', isUser, deleteTeacherDocument);
 router.patch("/verify-document/:userId/:documentId", verifyTeacherDocument);
 
+router.post("/previewSignIn", isUser, previewSignIn)
+router.post("/previewSignOut", isUser, previewSignOut)
 export default router;

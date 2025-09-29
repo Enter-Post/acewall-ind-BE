@@ -66,7 +66,7 @@ export const createCourseSch = async (req, res) => {
       // courseType,
       // documents,
     });
-
+    await Enrollment.create({ student: createdby, course: course._id });
     res.status(201).json({ course, message: "Course created successfully" });
   } catch (error) {
     console.log("error in createCourseSch", error);

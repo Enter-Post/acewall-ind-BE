@@ -30,8 +30,7 @@ function getPortalFromReq(req) {
 // ----------------- Middleware -----------------
 export const isUser = async (req, res, next) => {
   try {
-    // Detect which portal this request is for
-    const portal = getPortalFromReq(req); // 'admin' or 'client'
+    const portal = getPortalFromReq(req);
     const cookieName = portal === "admin" ? "ind_admin_jwt" : "ind_client_jwt";
 
     const token = req.cookies?.[cookieName];
@@ -40,9 +39,8 @@ export const isUser = async (req, res, next) => {
         error: true,
         message: `No auth token provided for ${portal} portal`,
       });
-    }
+    } 
 
-    // Verify token
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRAT);
@@ -53,7 +51,6 @@ export const isUser = async (req, res, next) => {
       });
     }
 
-    // Validate portal audience
     if (!decoded || decoded.aud !== portal) {
       return res.status(401).json({
         error: true,
@@ -61,16 +58,8 @@ export const isUser = async (req, res, next) => {
       });
     }
 
-    // Lookup user (later you could branch for Admin vs User model)
-    const user = await User.findById(decoded.userID).select("-password");
-    if (!user) {
-      return res.status(404).json({
-        error: true,
-        message: "User not found",
-      });
-    }
+    req.user = decoded.user;
 
-    req.user = user;
     next();
   } catch (error) {
     console.error("Error in isUser middleware:", error);
