@@ -35,21 +35,69 @@ export const sendSchoolcontactmail = async (req, res) => {
 
         // Mail options
         const mailOptions = {
-            from: `"Acewall Scholars Contact" <${process.env.MAIL_USER}>`, // sender address
-            to: ["support@acewallscholars.org", "programs@acewallscholars.org"], 
+            from: `"Acewall Scholars Contact" <${process.env.MAIL_USER}>`,
+            to: ["support@acewallscholars.org", "programs@acewallscholars.org"],
             subject: `New Contact Submission from ${organization}`,
             html: `
-        <h2>New School Contact Information</h2>
-        <p><b>Organization:</b> ${organization}</p>
-        <p><b>Contact Person:</b> ${contactPerson}</p>
-        <p><b>Contact Number:</b> ${contactNumber}</p>
-        <p><b>Contact Email:</b> ${contactEmail}</p>
-        <p><b>No of Teachers:</b> ${teachers}</p>
-        <p><b>No of Students:</b> ${students}</p>
-        <p><b>School Size:</b> ${schoolSize}</p>
-        <p><b>Address:</b> ${address}</p>
-      `,
+  <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+    <!-- Header -->
+    <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+      
+      <div style="background: #156082; padding: 20px; text-align: center;">
+        <img src="https://yourdomain.com/logo.png" alt="Acewall Scholars Logo" style="height: 50px; margin-bottom: 10px;" />
+        <h1 style="color: #ffffff; margin: 0; font-size: 20px;">New School Contact Submission</h1>
+      </div>
+
+      <!-- Body -->
+      <div style="padding: 20px; color: #333;">
+        <p style="font-size: 16px; margin-bottom: 20px;">You have received a new contact submission from a school.</p>
+        
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px; font-weight: bold; background: #f0f4f8; width: 40%;">Organization</td>
+            <td style="padding: 8px;">${organization}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold; background: #f0f4f8;">Contact Person</td>
+            <td style="padding: 8px;">${contactPerson}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold; background: #f0f4f8;">Contact Number</td>
+            <td style="padding: 8px;">${contactNumber}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold; background: #f0f4f8;">Contact Email</td>
+            <td style="padding: 8px;">${contactEmail}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold; background: #f0f4f8;">No. of Teachers</td>
+            <td style="padding: 8px;">${teachers}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold; background: #f0f4f8;">No. of Students</td>
+            <td style="padding: 8px;">${students}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold; background: #f0f4f8;">School Size</td>
+            <td style="padding: 8px;">${schoolSize}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; font-weight: bold; background: #f0f4f8;">Address</td>
+            <td style="padding: 8px;">${address}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <div style="background: #156082; color: #ffffff; text-align: center; padding: 15px; font-size: 12px;">
+        <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+        <p style="margin: 0;">This email was automatically generated. Please do not reply.</p>
+      </div>
+    </div>
+  </div>
+  `,
         };
+
 
         // Send email
         await transporter.sendMail(mailOptions);

@@ -330,21 +330,35 @@ export const updateStripeId = async (req, res) => {
     });
 
     const mailOptions = {
-      from: `"Admin Team " <${process.env.MAIL_USER}>`,
+      from: `"Admin Team" <${process.env.MAIL_USER}>`,
       to: email,
       subject: `Your Withdrawal Status Update`,
       html: `
-        <h3>Withdrawal Status Update</h3>
-        <p><strong>Dear ${firstName},</strong></p>
-        <p>Your withdrawal request has been <strong>${withdrawal.status}</strong>.</p>
-        <p><strong>Processed At:</strong> ${processedAt}</p>
-        ${stripeAccountId ? `<p><strong>Stripe Account ID:</strong> ${stripeAccountId}</p>` : ""}
-        <p>If you have any questions, feel free to contact our support team.</p>
-        <br/>
-        <p>Best regards,</p>
-        <p>The Support Team</p>
-      `,
+  <div style="max-width:600px;margin:0 auto;padding:20px;font-family:Arial,sans-serif;border:1px solid #e0e0e0;border-radius:8px;">
+    <!-- Header -->
+    <div style="background:#28a745;padding:15px;border-radius:8px 8px 0 0;text-align:center;">
+      <h2 style="color:white;margin:0;">Withdrawal Status Update</h2>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:20px;color:#333;line-height:1.6;">
+      <p style="font-size:16px;">Dear <strong>${firstName}</strong>,</p>
+      <p>Your withdrawal request has been <strong>${withdrawal.status}</strong>.</p>
+      <p><strong>Processed At:</strong> ${processedAt}</p>
+      ${stripeAccountId ? `<p><strong>Stripe Account ID:</strong> ${stripeAccountId}</p>` : ""}
+      <p>If you have any questions, feel free to contact our support team.</p>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#f9f9f9;padding:15px;text-align:center;border-top:1px solid #e0e0e0;border-radius:0 0 8px 8px;">
+      <p style="margin:0;font-size:14px;color:#666;">
+        Best regards,<br/>The Support Team
+      </p>
+    </div>
+  </div>
+  `,
     };
+
 
     await transporter.sendMail(mailOptions);
 

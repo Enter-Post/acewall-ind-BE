@@ -18,17 +18,46 @@ export const sendSupportMail = async (req, res) => {
       },
     });
 
-    const mailOptions = {
-      from: `"Support Inquiry" <${process.env.MAIL_USER}>`,
-      to: process.env.MAIL_SUPPORT_TO,
-      subject: "New Support Request",
-      html: `
-        <h3>Support Request</h3>
-        <p><strong>Name:</strong> ${fullName}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Feedback:</strong><br/>${feedback}</p>
-      `,
-    };
+  const mailOptions = {
+  from: `"Support Inquiry" <${process.env.MAIL_USER}>`,
+  to: process.env.MAIL_SUPPORT_TO,
+  subject: "New Support Request",
+  html: `
+  <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+    <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+      
+      <!-- Logo -->
+      <div style="text-align: center; padding: 20px; background: #ffffff;">
+        <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+             alt="Acewall Scholars Logo" 
+             style="height: 60px; margin: 0 auto;" />
+      </div>
+
+      <!-- Header -->
+      <div style="background: #28a745; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Support Request</h1>
+      </div>
+
+      <!-- Body -->
+      <div style="padding: 20px; color: #333;">
+        <p style="font-size: 16px;"><strong>Name:</strong> ${fullName}</p>
+        <p style="font-size: 16px;"><strong>Email:</strong> ${email}</p>
+        <p style="font-size: 16px;"><strong>Feedback:</strong></p>
+        <div style="margin: 15px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #28a745;">
+          <p style="margin: 0; font-size: 15px; color: #444;">${feedback}</p>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+        <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+        <p style="margin: 0;">Do not reply to this automated message.</p>
+      </div>
+    </div>
+  </div>
+  `,
+};
+
 
     await transporter.sendMail(mailOptions);
 

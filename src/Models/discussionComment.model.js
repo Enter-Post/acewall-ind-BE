@@ -10,7 +10,7 @@ const DiscussionCommentSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["student", "teacher"],
+      enum: ["student", "teacher", "teacherAsStudent"],
       required: true,
     },
     createdby: {

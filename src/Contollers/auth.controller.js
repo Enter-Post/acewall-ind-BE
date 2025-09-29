@@ -95,12 +95,52 @@ export const initiateSignup = async (req, res) => {
         pass: process.env.MAIL_PASS,
       },
     });
+
     await transporter.sendMail({
       from: `"OTP Verification" <${process.env.MAIL_USER}>`,
       to: email,
-      subject: "Your OTP Code",
-      text: `Your OTP code is ${otp}. It will expire in 10 minutes.`,
+      subject: "Your OTP Code - Acewall Scholars",
+      html: `
+  <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+    <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+      
+      <!-- Logo -->
+      <div style="text-align: center; padding: 20px; background: #ffffff;">
+        <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+             alt="Acewall Scholars Logo" 
+             style="height: 60px; margin: 0 auto;" />
+      </div>
+
+      <!-- Header -->
+      <div style="background: #28a745; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 20px;">OTP Verification</h1>
+      </div>
+
+      <!-- Body -->
+      <div style="padding: 20px; color: #333; text-align: center;">
+    <p style="font-size: 16px;">
+          Hello ${user.name ? user.name : ""},
+        </p>        <p style="font-size: 16px;">Use the following One-Time Password (OTP) to complete your verification:</p>
+        
+        <div style="margin: 20px auto; display: inline-block; background: #28a745; color: #ffffff; font-size: 24px; font-weight: bold; padding: 15px 30px; border-radius: 6px; letter-spacing: 4px;">
+          ${otp}
+        </div>
+        
+        <p style="font-size: 14px; color: #666; margin-top: 20px;">
+          This code will expire in <b>10 minutes</b>. If you did not request this, please ignore this email.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+        <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+        <p style="margin: 0;">Do not reply to this automated message.</p>
+      </div>
+    </div>
+  </div>
+  `,
     });
+
 
     res.status(201).json({ message: "OTP sent to your email." });
   } catch (error) {
@@ -158,9 +198,48 @@ export const resendOTP = async (req, res) => {
     await transporter.sendMail({
       from: `"OTP Verification" <${process.env.MAIL_USER}>`,
       to: email,
-      subject: "Your New OTP Code",
-      text: `Your new OTP code is ${otp}. It will expire in 10 minutes.`,
+      subject: "Your New OTP Code - Acewall Scholars",
+      html: `
+  <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+    <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+      
+      <!-- Logo -->
+      <div style="text-align: center; padding: 20px; background: #ffffff;">
+        <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+             alt="Acewall Scholars Logo" 
+             style="height: 60px; margin: 0 auto;" />
+      </div>
+
+      <!-- Header -->
+      <div style="background: #28a745; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 20px;">New OTP Code</h1>
+      </div>
+
+      <!-- Body -->
+      <div style="padding: 20px; color: #333; text-align: center;">
+    <p style="font-size: 16px;">
+          Hello ${user.name ? user.name : ""},
+        </p>        <p style="font-size: 16px;">Here is your new One-Time Password (OTP). Use it to complete your verification:</p>
+        
+        <div style="margin: 20px auto; display: inline-block; background: #28a745; color: #ffffff; font-size: 24px; font-weight: bold; padding: 15px 30px; border-radius: 6px; letter-spacing: 4px;">
+          ${otp}
+        </div>
+        
+        <p style="font-size: 14px; color: #666; margin-top: 20px;">
+          This code will expire in <b>10 minutes</b>. If you did not request this, please ignore this email.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+        <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+        <p style="margin: 0;">Do not reply to this automated message.</p>
+      </div>
+    </div>
+  </div>
+  `,
     });
+
 
     res.status(200).json({ message: "New OTP has been sent to your email." });
   } catch (error) {
@@ -282,42 +361,65 @@ export const verifyPhoneOtp = async (req, res) => {
         to: newUser.email,
         subject: `Welcome to Acewall Scholars as an Instructor`,
         html: `
-          <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-            <h2>Welcome to Acewall Scholars, ${newUser.firstName}!</h2>
-            <p>Thank you for registering to be an instructor on the <strong>Acewall Scholars Learning Platform</strong>. We are excited to partner with you.</p>
-            <p>You can start creating your course now! Before it can be published for purchase, please submit the required documents:</p>
-            <ul>
-              <li>University Transcripts</li>
-              <li>Teachers License or Certifications in field of instruction</li>
-              <li>Two Forms of ID:
-                <ul>
-                  <li>Passport</li>
-                  <li>Government issued ID</li>
-                  <li>Driver's License</li>
-                  <li>Birth Certificate</li>
-                </ul>
-              </li>
-              <li>Resume/CV</li>
-            </ul>
-            <p><em>(File types allowed: JPG, JPEG, PDF)</em></p>
-            <p>We look forward to seeing the impact you will make!</p>
-          </div>
-        `,
+    <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+      <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+        
+        <!-- Logo -->
+        <div style="text-align: center; padding: 20px; background: #ffffff;">
+          <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+               alt="Acewall Scholars Logo" 
+               style="height: 60px; margin: 0 auto;" />
+        </div>
+
+        <!-- Header -->
+        <div style="background: #28a745; padding: 20px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Welcome to Acewall Scholars</h1>
+        </div>
+
+        <!-- Body -->
+        <div style="padding: 20px; color: #333; text-align: left;">
+          <h2 style="margin-top: 0;">Hello ${newUser.firstName},</h2>
+          <p>
+            Thank you for registering to be an <strong>Instructor</strong> on the 
+            <strong>Acewall Scholars Learning Platform</strong>. We are excited to partner with you.
+          </p>
+          <p>You can start creating your course now! Before it can be published for purchase, please submit the required documents:</p>
+          <ul>
+            <li>University Transcripts</li>
+            <li>Teacher’s License or Certifications in your field of instruction</li>
+            <li>Two Forms of ID:
+              <ul>
+                <li>Passport</li>
+                <li>Government issued ID</li>
+                <li>Driver's License</li>
+                <li>Birth Certificate</li>
+              </ul>
+            </li>
+            <li>Resume/CV</li>
+          </ul>
+          <p><em>(File types allowed: JPG, JPEG, PDF)</em></p>
+          <p>We look forward to seeing the impact you will make!</p>
+        </div>
+
+        <!-- Footer -->
+        <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+          <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+          <p style="margin: 0;">Do not reply to this automated message.</p>
+        </div>
+      </div>
+    </div>
+    `,
       };
 
-      try {
-        await transporter.sendMail(mailOptions);
-        console.log("✅ Instructor welcome email sent to:", newUser.email);
-      } catch (emailErr) {
-        console.error("❌ Error sending instructor email:", emailErr.message);
-      }
+      await transporter.sendMail(mailOptions);
     }
+
 
 
 
     // ✅ issue token
     generateToken(newUser, newUser.role, req, res);
-    
+
     res.status(201).json({ message: "User created successfully.", newUser });
   } catch (error) {
     console.error("verifyPhoneOtp error:", error.message);
@@ -468,12 +570,52 @@ export const forgetPassword = async (req, res) => {
         pass: process.env.MAIL_PASS,
       },
     });
+
     await transporter.sendMail({
       from: `"OTP Verification" <${process.env.MAIL_USER}>`,
       to: email,
-      subject: "Your OTP Code",
-      text: `Your OTP code is ${otp}. It will expire in 10 minutes.`,
+      subject: "Your OTP Code - Acewall Scholars",
+      html: `
+  <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+    <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+      
+      <!-- Logo -->
+      <div style="text-align: center; padding: 20px; background: #ffffff;">
+        <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+             alt="Acewall Scholars Logo" 
+             style="height: 60px; margin: 0 auto;" />
+      </div>
+
+      <!-- Header -->
+      <div style="background: #28a745; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 20px;">OTP Verification</h1>
+      </div>
+
+      <!-- Body -->
+      <div style="padding: 20px; color: #333; text-align: center;">
+    <p style="font-size: 16px;">
+          Hello ${user.name ? user.name : ""},
+        </p>        <p style="font-size: 16px;">Use the following One-Time Password (OTP) to complete your verification:</p>
+        
+        <div style="margin: 20px auto; display: inline-block; background: #28a745; color: #ffffff; font-size: 24px; font-weight: bold; padding: 15px 30px; border-radius: 6px; letter-spacing: 4px;">
+          ${otp}
+        </div>
+        
+        <p style="font-size: 14px; color: #666; margin-top: 20px;">
+          This code will expire in <b>10 minutes</b>. If you did not request this, please ignore this email.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+        <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+        <p style="margin: 0;">Do not reply to this automated message.</p>
+      </div>
+    </div>
+  </div>
+  `,
     });
+
 
     return res.status(200).json({
       message: "OTP sent successfully",
@@ -974,9 +1116,49 @@ export const updatePasswordOTP = async (req, res) => {
     await transporter.sendMail({
       from: `"OTP Verification" <${process.env.MAIL_USER}>`,
       to: user.email,
-      subject: "Your OTP Code",
-      text: `Your OTP code is ${otp}. It will expire in 10 minutes.`,
+      subject: "Your OTP Code - Acewall Scholars",
+      html: `
+  <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+    <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+      
+      <!-- Logo -->
+      <div style="text-align: center; padding: 20px; background: #ffffff;">
+        <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+             alt="Acewall Scholars Logo" 
+             style="height: 60px; margin: 0 auto;" />
+      </div>
+
+      <!-- Header -->
+      <div style="background: #28a745; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 20px;">OTP Verification</h1>
+      </div>
+
+      <!-- Body -->
+      <div style="padding: 20px; color: #333; text-align: center;">
+        <p style="font-size: 16px;">
+          Hello ${user.name ? user.name : ""},
+        </p>
+        <p style="font-size: 16px;">Use the following One-Time Password (OTP) to complete your verification:</p>
+        
+        <div style="margin: 20px auto; display: inline-block; background: #28a745; color: #ffffff; font-size: 24px; font-weight: bold; padding: 15px 30px; border-radius: 6px; letter-spacing: 4px;">
+          ${otp}
+        </div>
+        
+        <p style="font-size: 14px; color: #666; margin-top: 20px;">
+          This code will expire in <b>10 minutes</b>. If you did not request this, please ignore this email.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+        <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+        <p style="margin: 0;">Do not reply to this automated message.</p>
+      </div>
+    </div>
+  </div>
+  `,
     });
+
 
     return res.status(200).json({ message: "OTP sent successfully" });
 
@@ -1449,20 +1631,55 @@ export const verifyTeacherDocument = async (req, res) => {
         await transporter.sendMail({
           from: `"Admin Team" <${process.env.MAIL_USER}>`,
           to: user.email,
-          subject: "Document Rejected",
+          subject: "Document Rejected - Acewall Scholars",
           html: `
-            <h2>Hello, ${user.firstName}</h2>
-            <p>One of your submitted documents has been <strong>rejected</strong> by the admin team.</p>
-            <p>Please review your document and upload a valid one to proceed with verification.</p>
-            <br/>
-            <p>If you have any questions, feel free to reach out to support.</p>
-            <p>Best regards,<br/>Team LMS</p>
-          `,
+      <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+          
+          <!-- Logo -->
+          <div style="text-align: center; padding: 20px; background: #ffffff;">
+            <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+                 alt="Acewall Scholars Logo" 
+                 style="height: 60px; margin: 0 auto;" />
+          </div>
+
+          <!-- Header -->
+          <div style="background: #28a745; padding: 20px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Document Rejected</h1>
+          </div>
+
+          <!-- Body -->
+          <div style="padding: 20px; color: #333;">
+            <p style="font-size: 16px;">Hello ${user.firstName || ""},</p>
+            <p style="font-size: 16px;">
+              One of your submitted documents has been <strong>rejected</strong> by the admin team.
+            </p>
+            <p style="font-size: 16px;">
+              Please review your document and upload a valid one to proceed with verification.
+            </p>
+            <p style="font-size: 16px; margin-top: 20px;">
+              If you have any questions, feel free to reach out to our support team.
+            </p>
+            <p style="font-size: 16px; margin-top: 20px;">
+              Best regards,<br/>
+              <strong>Team LMS</strong>
+            </p>
+          </div>
+
+          <!-- Footer -->
+          <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+            <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+            <p style="margin: 0;">Do not reply to this automated message.</p>
+          </div>
+        </div>
+      </div>
+      `,
         });
       } catch (mailError) {
         console.error("Error sending rejection email:", mailError);
       }
     }
+
 
     return res.status(200).json({
       message: `Document ${status === "verified" ? "verified" : "rejected"} successfully.`,
