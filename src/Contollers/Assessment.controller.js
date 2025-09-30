@@ -36,11 +36,6 @@ export const createAssessment = async (req, res) => {
           throw new Error(`Invalid question type at index ${index}`);
         }
 
-        if (!q.question || q.question.length < 5) {
-          throw new Error(
-            `Question ${index + 1} must be at least 5 characters`
-          );
-        }
 
         if (typeof q.points !== "number" || q.points < 1 || q.points > 999) {
           throw new Error(`Invalid points in question ${index + 1}`);
