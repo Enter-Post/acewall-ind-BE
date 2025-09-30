@@ -66,7 +66,7 @@ export const createCourseSch = async (req, res) => {
       // courseType,
       // documents,
     });
-
+    await Enrollment.create({ student: createdby, course: course._id });
     res.status(201).json({ course, message: "Course created successfully" });
   } catch (error) {
     console.log("error in createCourseSch", error);
@@ -836,7 +836,9 @@ export const getallcoursesforteacher = async (req, res) => {
   const teacherId = req.user._id;
 
   try {
+    6
     const studentsWithCourses = await Enrollment.aggregate([
+
       // 1. Lookup course details
       {
         $lookup: {
@@ -850,7 +852,7 @@ export const getallcoursesforteacher = async (req, res) => {
       // 2. Match only courses that are created by teacher and isVerified: "approved"
       {
         $match: {
-          "courseDetails.createdby": teacherId,
+          "courseDetails.createdby": new mongoose.Types.ObjectId(teacherId),
           "courseDetails.isVerified": "approved",
         },
       },
@@ -1066,16 +1068,40 @@ export const verifyCourse = async (req, res) => {
           to: teacherEmail,
           subject: "Course Approved ✅",
           html: `
-            <h2>Congratulations, ${teacherName}!</h2>
-            <p>Your course titled <strong>"${courseTitle}"</strong> has been <strong>approved</strong> by our review team.</p>
-            <p>It is now live and visible to learners on the platform.</p>
-            <br/>
-            <p>We wish you great success in your teaching journey!</p>
-            <p>Best regards,<br/>Team LMS</p>
-          `,
+      <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+          
+          <!-- Logo -->
+          <div style="text-align: center; padding: 20px; background: #ffffff;">
+            <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+                 alt="Acewall Scholars Logo" 
+                 style="height: 60px; margin: 0 auto;" />
+          </div>
+
+          <!-- Header -->
+          <div style="background: #28a745; padding: 20px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Course Approved</h1>
+          </div>
+
+          <!-- Body -->
+          <div style="padding: 20px; color: #333;">
+            <p style="font-size: 16px;">Congratulations, <strong>${teacherName}</strong>!</p>
+            <p style="font-size: 16px;">Your course titled <strong>"${courseTitle}"</strong> has been <strong>approved</strong> by our review team.</p>
+            <p style="font-size: 16px;">It is now live and visible to learners on the platform.</p>
+            <p style="font-size: 16px; margin-top: 15px;">We wish you great success in your teaching journey!</p>
+          </div>
+
+          <!-- Footer -->
+          <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+            <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+            <p style="margin: 0;">If you have any query contact us on same email</p>
+          </div>
+        </div>
+      </div>
+      `,
         });
       } catch (mailError) {
-        console.error("Error sending approval email:", mailError);
+        console.error("❌ Error sending approval email:", mailError);
       }
     }
 
@@ -1087,18 +1113,43 @@ export const verifyCourse = async (req, res) => {
           to: teacherEmail,
           subject: "Course Rejected ❌",
           html: `
-            <h2>Hello, ${teacherName}</h2>
-            <p>We regret to inform you that your course titled <strong>"${courseTitle}"</strong> has been <strong>rejected</strong> after our review process.</p>
-            <p>Please review the course guidelines and make the necessary changes before resubmitting.</p>
-            <br/>
-            <p>If you have questions, feel free to reach out to our support team.</p>
-            <p>Best regards,<br/>Team LMS</p>
-          `,
+      <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+          
+          <!-- Logo -->
+          <div style="text-align: center; padding: 20px; background: #ffffff;">
+            <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+                 alt="Acewall Scholars Logo" 
+                 style="height: 60px; margin: 0 auto;" />
+          </div>
+
+          <!-- Header -->
+          <div style="background: #dc3545; padding: 20px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Course Rejected</h1>
+          </div>
+
+          <!-- Body -->
+          <div style="padding: 20px; color: #333;">
+            <p style="font-size: 16px;">Hello, <strong>${teacherName}</strong></p>
+            <p style="font-size: 16px;">We regret to inform you that your course titled <strong>"${courseTitle}"</strong> has been <strong>rejected</strong> after our review process.</p>
+            <p style="font-size: 16px;">Please review the course guidelines and make the necessary changes before resubmitting.</p>
+            <p style="font-size: 16px; margin-top: 15px;">If you have questions, feel free to reach out to our support team.</p>
+          </div>
+
+          <!-- Footer -->
+          <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+            <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+            <p style="margin: 0;">If you have any query contact us on same email</p>
+          </div>
+        </div>
+      </div>
+      `,
         });
       } catch (mailError) {
-        console.error("Error sending rejection email:", mailError);
+        console.error("❌ Error sending rejection email:", mailError);
       }
     }
+
 
     const message =
       isVerified === "approved"
@@ -1159,18 +1210,45 @@ export const rejectCourse = async (req, res) => {
           to: teacherEmail,
           subject: "Your Course Has Been Rejected ❌",
           html: `
-            <h2>Hello, ${teacherName}</h2>
-            <p>Your course titled <strong>"${courseTitle}"</strong> has been <strong>rejected</strong> after review.</p>
-            ${remark
-              ? `<p><strong>Reason:</strong> ${remark}</p>`
-              : "<p>No specific remarks were provided.</p>"
+  <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+    <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+      
+      <!-- Logo -->
+      <div style="text-align: center; padding: 20px; background: #ffffff;">
+        <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+             alt="Acewall Scholars Logo" 
+             style="height: 60px; margin: 0 auto;" />
+      </div>
+
+      <!-- Header -->
+      <div style="background: #dc3545; padding: 20px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Course Rejected</h1>
+      </div>
+
+      <!-- Body -->
+      <div style="padding: 20px; color: #333;">
+        <p style="font-size: 16px;">Hello, <strong>${teacherName}</strong></p>
+        <p style="font-size: 16px;">Your course titled <strong>"${courseTitle}"</strong> has been <strong>rejected</strong> after review.</p>
+        
+        ${remark
+              ? `<p style="font-size: 16px; color: #b71c1c;"><strong>Reason:</strong> ${remark}</p>`
+              : `<p style="font-size: 16px;">No specific remarks were provided.</p>`
             }
-            <p>You may revise and resubmit your course after making the required changes.</p>
-            <br/>
-            <p>If you have any questions, feel free to contact our support team.</p>
-            <p>Best regards,<br/>Team LMS</p>
-          `,
+
+        <p style="font-size: 16px;">You may revise and resubmit your course after making the required changes.</p>
+        <p style="font-size: 16px; margin-top: 15px;">If you have any questions, feel free to contact our support team.</p>
+      </div>
+
+      <!-- Footer -->
+      <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+        <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+        <p style="margin: 0;">If you have any query contact us on same email</p>
+      </div>
+    </div>
+  </div>
+  `,
         });
+
       } catch (emailError) {
         console.error("Error sending rejection email:", emailError);
       }

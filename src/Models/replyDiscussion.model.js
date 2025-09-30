@@ -5,7 +5,7 @@ const ReplyDiscussionSchema = new mongoose.Schema(
     text: { type: String, required: true },
     role: {
       type: String,
-      enum: ["student", "teacher"],
+      enum: ["student", "teacher", "teacherAsStudent"],
       required: true,
     },
     comment: {

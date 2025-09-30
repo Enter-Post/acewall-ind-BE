@@ -49,25 +49,64 @@ export const createAnnouncement = async (req, res) => {
         },
       });
 
+      // Inline dynamic greeting
+      const greeting =
+        studentEmails.length > 1
+          ? "Hello Students,"
+          : `Hello ${teacher.firstName || "Student"},`;
+
       const mailOptions = {
         from: `"${process.env.MAIL_FROM_NAME || "Course Team"}" <${process.env.MAIL_USER}>`,
         to: studentEmails, // can be an array or comma-separated string
         subject: `New Announcement: ${title}`,
         html: `
-        <h2>New Announcement for ${course.courseTitle}</h2>
-        <p>${message}</p>
-        <p><em>From: ${teacher.firstName} ${teacher.lastName}</em></p>
+    <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+      <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+        
+        <!-- Logo -->
+        <div style="text-align: center; padding: 20px; background: #ffffff;">
+          <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+               alt="Acewall Scholars Logo" 
+               style="height: 60px; margin: 0 auto;" />
+        </div>
+
+        <!-- Header -->
+        <div style="background: #28a745; padding: 20px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 20px;">New Announcement</h1>
+        </div>
+
+        <!-- Body -->
+        <div style="padding: 20px; color: #333;">
+          <p style="font-size: 16px;">${greeting}</p>
+          <p style="font-size: 16px;">There’s a new announcement for your course <strong>${course.courseTitle}</strong>:</p>
+          
+          <div style="margin: 20px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #28a745;">
+            <p style="font-size: 16px; margin: 0;">${message}</p>
+          </div>
+
+          <p style="font-size: 14px; margin-top: 10px;">
+            <em>From: ${teacher.firstName} ${teacher.lastName}</em>
+          </p>
+        </div>
+
+        <!-- Footer -->
+        <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+          <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+          <p style="margin: 0;">If you have any query contact us on same email</p>
+        </div>
+      </div>
+    </div>
     `,
       };
 
       try {
         await transporter.sendMail(mailOptions);
         console.log("✅ Emails sent to students");
-
       } catch (error) {
         console.error("❌ Error sending emails:", error);
       }
     }
+
 
 
     await announcement.save();
