@@ -836,7 +836,9 @@ export const getallcoursesforteacher = async (req, res) => {
   const teacherId = req.user._id;
 
   try {
+    6
     const studentsWithCourses = await Enrollment.aggregate([
+
       // 1. Lookup course details
       {
         $lookup: {
@@ -850,7 +852,7 @@ export const getallcoursesforteacher = async (req, res) => {
       // 2. Match only courses that are created by teacher and isVerified: "approved"
       {
         $match: {
-          "courseDetails.createdby": teacherId,
+          "courseDetails.createdby": new mongoose.Types.ObjectId(teacherId),
           "courseDetails.isVerified": "approved",
         },
       },
