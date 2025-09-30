@@ -92,7 +92,7 @@ export const createAnnouncement = async (req, res) => {
         <!-- Footer -->
         <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
           <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
-          <p style="margin: 0;">Do not reply to this automated message.</p>
+          <p style="margin: 0;">If you have any query contact us on same email</p>
         </div>
       </div>
     </div>
