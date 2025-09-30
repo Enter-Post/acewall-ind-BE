@@ -43,7 +43,7 @@ export const sendSchoolcontactmail = async (req, res) => {
     <!-- Header -->
     <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
       
-      <div style="background: #156082; padding: 20px; text-align: center;">
+      <div style="background: #28a745; padding: 20px; text-align: center;">
         <img src="https://yourdomain.com/logo.png" alt="Acewall Scholars Logo" style="height: 50px; margin-bottom: 10px;" />
         <h1 style="color: #ffffff; margin: 0; font-size: 20px;">New School Contact Submission</h1>
       </div>
@@ -89,7 +89,7 @@ export const sendSchoolcontactmail = async (req, res) => {
       </div>
 
       <!-- Footer -->
-      <div style="background: #156082; color: #ffffff; text-align: center; padding: 15px; font-size: 12px;">
+      <div style="background: #28a745; color: #ffffff; text-align: center; padding: 15px; font-size: 12px;">
         <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
         <p style="margin: 0;">This email was automatically generated. Please do not reply.</p>
       </div>
