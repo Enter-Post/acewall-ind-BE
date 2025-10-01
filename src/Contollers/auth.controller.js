@@ -119,7 +119,7 @@ export const initiateSignup = async (req, res) => {
       <!-- Body -->
       <div style="padding: 20px; color: #333; text-align: center;">
     <p style="font-size: 16px;">
-          Hello ${user.name ? user.name : ""},
+          Hello ,
         </p>        <p style="font-size: 16px;">Use the following One-Time Password (OTP) to complete your verification:</p>
         
         <div style="margin: 20px auto; display: inline-block; background: #28a745; color: #ffffff; font-size: 24px; font-weight: bold; padding: 15px 30px; border-radius: 6px; letter-spacing: 4px;">
@@ -218,7 +218,7 @@ export const resendOTP = async (req, res) => {
       <!-- Body -->
       <div style="padding: 20px; color: #333; text-align: center;">
     <p style="font-size: 16px;">
-          Hello ${user.name ? user.name : ""},
+          Hello,
         </p>        <p style="font-size: 16px;">Here is your new One-Time Password (OTP). Use it to complete your verification:</p>
         
         <div style="margin: 20px auto; display: inline-block; background: #28a745; color: #ffffff; font-size: 24px; font-weight: bold; padding: 15px 30px; border-radius: 6px; letter-spacing: 4px;">
@@ -1698,7 +1698,7 @@ export const verifyTeacherDocument = async (req, res) => {
 
 
 
-export const previewSignIn = async (req, res) => {
+export const  previewSignIn = async (req, res) => {
   const user = req.user;
 
   try {
