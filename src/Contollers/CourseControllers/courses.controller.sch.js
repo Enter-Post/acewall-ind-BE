@@ -866,6 +866,11 @@ export const getallcoursesforteacher = async (req, res) => {
         },
       },
       { $unwind: "$studentDetails" },
+      {
+        $match: {
+          "studentDetails._id": { $ne: new mongoose.Types.ObjectId(teacherId) },
+        },
+      },
       // 4. Group by student
       {
         $group: {

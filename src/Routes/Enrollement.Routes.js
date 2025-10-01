@@ -3,6 +3,7 @@ import {
   chapterDetails,
   chapterDetailsStdPre,
   enrollment,
+  enrollmentforTeacher,
   isEnrolled,
   studenCourses,
   studentCourseDetails,
@@ -30,5 +31,5 @@ router.get(
 
 router.get("/getChapter/:chapterId", isUser, chapterDetails);
 router.delete("/unenroll/:courseId", isUser, unEnrollment);
-
+router.post("/enrollmentforTeacher", isUser, enrollmentforTeacher);
 export default router;
