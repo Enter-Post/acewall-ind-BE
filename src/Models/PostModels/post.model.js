@@ -3,7 +3,7 @@
 import mongoose from "mongoose"
 
 const Post = new mongoose.Schema({
-    text: { type: String, required: true },
+    text: { type: String },
     assets: [{ url: String, fileName: String }],
     author: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     color: { type: String }
