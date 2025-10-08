@@ -2,7 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import bodyParser from "body-parser"; 
+import bodyParser from "body-parser";
 import { connectDB } from "./lib/connectDB.js";
 import { app, server, io } from "./lib/socket.io.js";
 
@@ -35,14 +35,27 @@ import quarterRoutes from "./Routes/CourseRoutes/Quarter.Routes.js";
 import pagesRoutes from "./Routes/Pages.Routes.js";
 import teacherPaymentRoutes from "./Routes/TeacherPayment.Routes.js";
 import gpaRoutes from "./Routes/GPA.Routes.js";
-import contactRoutes from "./Routes/Contact.Routes.js"; 
-
+import contactRoutes from "./Routes/Contact.Routes.js";
 import stripeRoutes from "./Routes/Stripe.Routes.js";
 import { handleStripeWebhook } from "./Contollers/stripe.controller.js";
+import postRoutes from "./Routes/PostRoutes/Post.Routes.js";
+import likesRoutes from "./Routes/PostRoutes/PostLikes.Routes.js";
+import postCommentRoutes from "./Routes/PostRoutes/PostComment.Routes.js";
+
+
+import path from "path";
+import { fileURLToPath } from "url";
+
 dotenv.config();
 
 const PORT = process.env.PORT || 5050;
-app.post("/api/stripe/webhook",express.raw({ type: "application/json" }),
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+app.post("/api/stripe/webhook", express.raw({ type: "application/json" }),
   (req, res, next) => {
     console.log("🚀 WEBHOOK RECEIVED!", new Date().toISOString());
     console.log("📝 Method:", req.method);
@@ -92,7 +105,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/category", categoryRoutes);
 app.use("/api/subcategory", subCategoryRoutes);
 app.use("/api/course", coursesRoutes);
-app.use("/api/chapter", chapterRouter); 
+app.use("/api/chapter", chapterRouter);
 app.use("/api/lesson", lessonRoutes);
 app.use("/api/comment", commentRoutes);
 app.use("/api/rating", ratingRoutes);
@@ -117,6 +130,12 @@ app.use("/api/replyDiscussion", replyDiscussionRoutes);
 app.use("/api/semester", semesterRoutes);
 app.use("/api/quarter", quarterRoutes);
 app.use("/api/gpa", gpaRoutes);
+
+app.use("/api/posts", postRoutes);
+app.use("/api/postlike", likesRoutes);
+app.use("/api/postComment", postCommentRoutes);
+
+
 
 
 server.listen(PORT, () => {
