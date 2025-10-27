@@ -594,7 +594,7 @@ export const forgetPassword = async (req, res) => {
       <!-- Body -->
       <div style="padding: 20px; color: #333; text-align: center;">
     <p style="font-size: 16px;">
-          Hello ${user.name ? user.name : ""},
+          Hello,
         </p>        <p style="font-size: 16px;">Use the following One-Time Password (OTP) to complete your verification:</p>
         
         <div style="margin: 20px auto; display: inline-block; background: #28a745; color: #ffffff; font-size: 24px; font-weight: bold; padding: 15px 30px; border-radius: 6px; letter-spacing: 4px;">
@@ -1276,7 +1276,10 @@ export const updateEmailOTP = async (req, res) => {
 
 export const updateEmail = async (req, res) => {
   const { email, otp } = req.body;
+  const userId = req.user._id
   try {
+    const user = await User.findById(userId).select("-email");
+
     const otpEntry = await OTP.findOne({ email });
 
     if (!otpEntry) {
@@ -1303,7 +1306,9 @@ export const updateEmail = async (req, res) => {
 
     const { newEmail } = otpEntry.userData;
 
-    await User.findOneAndUpdate({ email: email }, { email: newEmail });
+    const newUser = await User.findOneAndUpdate({ email: email }, { email: newEmail }, { new: true });
+
+    generateToken(newUser, newUser.role, req, res)
 
     return res.status(200).json({ message: "Email updated successfully" });
   } catch (error) {
@@ -1698,7 +1703,7 @@ export const verifyTeacherDocument = async (req, res) => {
 
 
 
-export const  previewSignIn = async (req, res) => {
+export const previewSignIn = async (req, res) => {
   const user = req.user;
 
   try {
