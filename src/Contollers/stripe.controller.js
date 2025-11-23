@@ -59,10 +59,10 @@ export const createMobileCheckoutSession = async (req, res) => {
             cancel_url: cancelURL,
         });
 
-        res.status(200).json({
-            success: true,
-            sessionId: session.id
-        });
+res.status(200).json({
+  success: true,
+  url: session.url,
+});
 
     } catch (err) {
         console.error("Mobile Stripe Checkout Error:", err);
