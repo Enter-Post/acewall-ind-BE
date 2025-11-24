@@ -79,7 +79,7 @@ export const getTeacherTransactions = async (req, res) => {
 
 export const getTeacherPaymentStats = async (req, res) => {
   try {
-    const teacherId = req.user.id;
+    const teacherId = new mongoose.Types.ObjectId(req.user.id);
 
     // Extract pagination parameters from query string (default to page 1 and pageSize 10)
     const page = parseInt(req.query.page) || 1;
@@ -150,7 +150,7 @@ export const getTeacherPaymentStats = async (req, res) => {
     const [totalWithdrawalsCount, recentWithdrawals] = await Promise.all([
       Withdrawal.countDocuments({ teacher: teacherId }), // Get the total number of withdrawals
       Withdrawal.find({ teacher: teacherId })
-        .sort({ processedAt: -1 })
+        .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
     ]);
