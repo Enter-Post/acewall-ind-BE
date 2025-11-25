@@ -7,7 +7,7 @@ import nodemailer from "nodemailer";
 // Get Teacher Earnings
 export const getTeacherEarnings = async (req, res) => {
   try {
-    const teacherId = req.user.id;
+    const teacherId = req.user._id;
 
     const earnings = await Purchase.aggregate([
       {
@@ -27,7 +27,7 @@ export const getTeacherEarnings = async (req, res) => {
     ]);
 
     const recentTransactions = await Purchase.find({
-      teacher: teacherId,
+      teacher: new mongoose.Types.ObjectId(teacherId),
       status: 'completed'
     })
       .populate('student', 'firstName lastName email')
@@ -48,7 +48,7 @@ export const getTeacherEarnings = async (req, res) => {
 // Get Teacher Transactions
 export const getTeacherTransactions = async (req, res) => {
   try {
-    const teacherId = req.user.id;
+    const teacherId = new mongoose.Types.ObjectId(req.user._id);
     const { page = 1, limit = 10, status = 'all' } = req.query;
 
     const filter = { teacher: teacherId };
@@ -79,7 +79,7 @@ export const getTeacherTransactions = async (req, res) => {
 
 export const getTeacherPaymentStats = async (req, res) => {
   try {
-    const teacherId = new mongoose.Types.ObjectId(req.user.id);
+    const teacherId = new mongoose.Types.ObjectId(req.user._id);
 
     // Extract pagination parameters from query string (default to page 1 and pageSize 10)
     const page = parseInt(req.query.page) || 1;
@@ -121,7 +121,7 @@ export const getTeacherPaymentStats = async (req, res) => {
     const revenueOverTime = await Purchase.aggregate([
       {
         $match: {
-          teacher: new mongoose.Types.ObjectId(teacherId),
+          teacher: teacherId,
           status: "completed",
           createdAt: {
             $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
@@ -149,7 +149,7 @@ export const getTeacherPaymentStats = async (req, res) => {
     // Fetch recent withdrawals with pagination
     const [totalWithdrawalsCount, recentWithdrawals] = await Promise.all([
       Withdrawal.countDocuments({ teacher: teacherId }), // Get the total number of withdrawals
-      Withdrawal.find({ teacher: teacherId })
+      Withdrawal.find({ teacher: teacherId})
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -180,7 +180,7 @@ export const getTeacherPaymentStats = async (req, res) => {
 
 export const requestWithdrawal = async (req, res) => {
   try {
-    const teacherId = req.user.id;
+    const teacherId = req.user._id;
     const { amount, method, stripeAccountId } = req.body;
     if (method === "stripe" && !stripeAccountId) {
       return res.status(400).json({ message: "Stripe Account ID is required." });
@@ -190,10 +190,10 @@ export const requestWithdrawal = async (req, res) => {
     }
 
     // Get teacher's total earnings and withdrawals
-    const purchases = await Purchase.find({ teacher: teacherId, status: "completed" });
+    const purchases = await Purchase.find({ teacher: new mongoose.Types.ObjectId(teacherId), status: "completed" });
     const totalEarnings = purchases.reduce((acc, tx) => acc + tx.teacherEarning, 0);
 
-    const withdrawals = await Withdrawal.find({ teacher: teacherId, status: "approved" });
+    const withdrawals = await Withdrawal.find({ teacher: new mongoose.Types.ObjectId(teacherId), status: "approved" });
     const totalWithdrawn = withdrawals.reduce((acc, tx) => acc + tx.amount, 0);
 
     const availableBalance = totalEarnings - totalWithdrawn;
@@ -203,7 +203,7 @@ export const requestWithdrawal = async (req, res) => {
     }
 
     const withdrawal = await Withdrawal.create({
-      teacher: teacherId,
+      teacher: new mongoose.Types.ObjectId(teacherId),
       amount,
       method,
       stripeAccountId: method === "stripe" ? stripeAccountId : undefined, // ✅ Save it if method is stripe
