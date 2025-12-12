@@ -47,34 +47,6 @@ const SchCourseSchema = new mongoose.Schema(
         ref: "Quarter",
       },
     ],
-    // courseType: {
-    //   type: String,
-    //   required: true,
-    //   enum: ["credit", "non-credit"],
-    // },
-
-    // documents: {
-    //   governmentId: {
-    //     url: { type: String },
-    //     publicId: { type: String },
-    //     filename: { type: String },
-    //   },
-    //   resume: {
-    //     url: { type: String },
-    //     publicId: { type: String },
-    //     filename: { type: String },
-    //   },
-    //   certificate: {
-    //     url: { type: String },
-    //     publicId: { type: String },
-    //     filename: { type: String },
-    //   },
-    //   transcript: {
-    //     url: { type: String },
-    //     publicId: { type: String },
-    //     filename: { type: String },
-    //   },
-    // },
 
     remarks: { type: String, maxlength: 500, default: null },
     isAppliedReverified: {
@@ -94,13 +66,14 @@ const SchCourseSchema = new mongoose.Schema(
       default: 0,
       min: 0
     },
+    gradingSystem: { type: String, enum: ["normalGrading", "StandardGrading"], default: "normalGrading" }
   },
   { timestamps: true }
 );
 
 // Custom validation for documents
 SchCourseSchema.pre("validate", function (next) {
-  
+
   // const docs = this.documents || {};
   // const type = this.courseType;
 

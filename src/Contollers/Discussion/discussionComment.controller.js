@@ -1,5 +1,6 @@
 import Discussion from "../../Models/discussion.model.js";
 import DiscussionComment from "../../Models/discussionComment.model.js";
+import { updateGradebookOnSubmission } from "../../Utiles/updateGradebookOnSubmission.js";
 
 export const getDiscussionComments = async (req, res) => {
   const { id } = req.params;
@@ -116,6 +117,13 @@ export const gradeDiscussionofStd = async (req, res) => {
     discussionComment.isGraded = true;
 
     await discussionComment.save();
+
+    await updateGradebookOnSubmission(
+      studentId,
+      discussion.course,     // courseId
+      discID,                // itemId
+      "discussion"           // type
+    );
 
     res.status(200).json({ message: "Marks graded successfully" });
   } catch (error) {

@@ -26,6 +26,7 @@ import {
   editCoureDocument,
   getunPurchasedCourseByIdStdPrew,
   courseDetailsStdPre,
+  toggleGradingSystem,
 } from "../../Contollers/CourseControllers/courses.controller.sch.js";
 
 const router = express.Router();
@@ -74,5 +75,6 @@ router.put("/editCourseDocuments/:courseId", isUser, upload.fields([
   { name: "governmentId", maxCount: 1 },
   { name: "transcript", maxCount: 1 }
 ]), editCoureDocument);
+router.put("/course/:courseId/toggle-grading", toggleGradingSystem);
 
 export default router;

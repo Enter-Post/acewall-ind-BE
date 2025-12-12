@@ -41,7 +41,7 @@ import { handleStripeWebhook } from "./Contollers/stripe.controller.js";
 import postRoutes from "./Routes/PostRoutes/Post.Routes.js";
 import likesRoutes from "./Routes/PostRoutes/PostLikes.Routes.js";
 import postCommentRoutes from "./Routes/PostRoutes/PostComment.Routes.js";
-
+import StandardGradingRoutes from "./Routes/StandardGrading.Routes.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -130,6 +130,7 @@ app.use("/api/replyDiscussion", replyDiscussionRoutes);
 app.use("/api/semester", semesterRoutes);
 app.use("/api/quarter", quarterRoutes);
 app.use("/api/gpa", gpaRoutes);
+app.use("/api/standardGrading", StandardGradingRoutes)
 
 app.use("/api/posts", postRoutes);
 app.use("/api/postlike", likesRoutes);
