@@ -6,6 +6,7 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import User from "../Models/user.model.js";
 import { uploadToCloudinary } from "../lib/cloudinary-course.config.js";
+import { updateGradebookOnSubmission } from "../Utiles/updateGradebookOnSubmission.js";
 
 dotenv.config();
 
@@ -126,6 +127,13 @@ export const submission = async (req, res) => {
     });
 
     await submission.save();
+
+    await updateGradebookOnSubmission(
+      submission.studentId,
+      assessment.course,
+      submission.assessment,
+      "assessment"
+    );
 
     // ✅ Send email if the entire assessment was auto-graded
     if (graded) {
@@ -371,6 +379,9 @@ export const teacherGrading = async (req, res) => {
     const submission = await Submission.findById(submissionId).populate(
       "studentId"
     );
+
+    const assessment = await Assessment.findById(submission.assessment);
+
     if (!submission) {
       return res.status(404).json({ message: "Submission not found" });
     }
@@ -407,6 +418,15 @@ export const teacherGrading = async (req, res) => {
 
     submission.graded = true;
     await submission.save();
+
+    if (submission.graded) {
+      await updateGradebookOnSubmission(
+        submission.studentId,
+        assessment.course,
+        submission.assessment,
+        "assessment"
+      );
+    }
 
     // ✅ Send email only if the user has an email
     const student = submission.studentId;

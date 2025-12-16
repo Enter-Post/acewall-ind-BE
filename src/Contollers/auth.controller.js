@@ -39,7 +39,7 @@ export const initiateSignup = async (req, res) => {
         .status(400)
         .json({ message: "All required fields must be filled." });
     }
-
+    console.log(("working here 1"))
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res
@@ -63,6 +63,9 @@ export const initiateSignup = async (req, res) => {
     const hashedOTP = await bcrypt.hash(otp, 10);
     const phoneNumUpdated = `+${phone.replace(/\D+/g, "")}`;
 
+    console.log(("working here 2"))
+
+
     await OTP.findOneAndUpdate(
       { email },
       {
@@ -85,6 +88,9 @@ export const initiateSignup = async (req, res) => {
       { upsert: true }
     );
 
+    console.log(("working here 3"))
+
+
     // Send OTP via email (or SMS)
     const transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST,
@@ -95,6 +101,9 @@ export const initiateSignup = async (req, res) => {
         pass: process.env.MAIL_PASS,
       },
     });
+
+    console.log(("working here 4"))
+
 
     await transporter.sendMail({
       from: `"OTP Verification" <${process.env.MAIL_USER}>`,
@@ -140,6 +149,9 @@ export const initiateSignup = async (req, res) => {
   </div>
   `,
     });
+
+    console.log(("working here 5"))
+
 
 
     res.status(201).json({ message: "OTP sent to your email." });

@@ -11,6 +11,33 @@ import Announcement from "../../Models/Annoucement.model.js";
 import Comment from "../../Models/comment.model.js";
 import nodemailer from "nodemailer";
 
+export const toggleGradingSystem = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    // Find course
+    const course = await CourseSch.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // Toggle logic
+    course.gradingSystem =
+      course.gradingSystem === "normalGrading"
+        ? "StandardGrading"
+        : "normalGrading";
+
+    await course.save();
+
+    res.status(200).json({
+      message: "Grading system updated successfully",
+      gradingSystem: course.gradingSystem,
+    });
+  } catch (error) {
+    console.error("Toggle grading error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
 export const createCourseSch = async (req, res) => {
   const createdby = req.user._id;
