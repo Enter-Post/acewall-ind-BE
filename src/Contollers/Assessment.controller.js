@@ -384,6 +384,8 @@ export const getAllassessmentforStudent = async (req, res) => {
           "course.semesterbased": 1, // Added to check logic on frontend
           "semester.name": 1,
           "quarter.name": 1,
+          "chapter._id": 1,
+          "lesson._id": 1,
           "chapter.title": 1,
           "lesson.title": 1,
         },
@@ -435,6 +437,8 @@ export const getAllassessmentforStudent = async (req, res) => {
           "course.courseTitle": 1,
           "course.thumbnail": 1,
           "course.semesterbased": 1,
+          "chapter._id": 1,
+          "lesson._id": 1,
           "semester.name": 1,
           "quarter.name": 1,
           "chapter.title": 1,
