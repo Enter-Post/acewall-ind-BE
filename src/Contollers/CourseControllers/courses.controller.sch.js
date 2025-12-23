@@ -1418,7 +1418,7 @@ export const getVerifiedCourses = async (req, res) => {
       createdby: teacherId,
       published: true,
       isVerified: "approved",
-    }).select("courseTitle");
+    }).select("courseTitle thumbnail");
 
     if (!courses || courses.length === 0) {
       return res.status(200).json({ courses: [], message: "No courses found" });
