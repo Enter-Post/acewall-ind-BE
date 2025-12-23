@@ -5,8 +5,11 @@ import {
   deleteAssessment,
   deleteFile,
   editAssessmentInfo,
+  findReminderTime,
   getAllassessmentforStudent,
   getAssesmentbyID,
+  sendAssessmentReminder,
+  setReminderTime,
   uploadFiles,
 } from "../Contollers/Assessment.controller.js";
 import { upload } from "../lib/multer.config.js";
@@ -16,6 +19,14 @@ import { createAssessment_updated } from "../Contollers/UPDATED_API_CONTROLLER/a
 
 const router = express.Router();
 
+router.post(
+  "/:assessmentId/send-reminder",
+  isUser, // ensures the sender is authenticated
+  sendAssessmentReminder
+);
+
+router.get("/findReminderTime/:assessmentId", isUser, findReminderTime)
+router.put("/setReminder/:assessmentId", isUser, setReminderTime)
 router.post("/create", upload.array("files"), isUser, createAssessment);
 router.get("/allAssessmentByTeacher", isUser, allAssessmentByTeacher);
 router.get("/getAllassessmentforStudent", isUser, getAllassessmentforStudent);
