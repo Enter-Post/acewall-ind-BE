@@ -36,7 +36,6 @@ export const createAssessment = async (req, res) => {
           throw new Error(`Invalid question type at index ${index}`);
         }
 
-
         if (typeof q.points !== "number" || q.points < 1 || q.points > 999) {
           throw new Error(`Invalid points in question ${index + 1}`);
         }
@@ -241,11 +240,15 @@ export const allAssessmentByTeacher = async (req, res) => {
       return res.status(401).json({ error: "Unauthorized. User ID missing." });
     }
 
+    // Fetch the assessments created by the teacher and populate the relevant fields
     const assessments = await Assessment.find({ createdby })
       .select(
         "dueDate title description course chapter lesson createdAt category type"
       )
-      .populate({ path: "course", select: "courseTitle" })
+      .populate({
+        path: "course", // Populate the course information from the CourseSch model
+        select: "courseTitle thumbnail isVerified semesterbased gradingSystem",  // Select the needed fields
+      })
       .populate({ path: "chapter", select: "title" })
       .populate({ path: "lesson", select: "title" })
       .populate({ path: "category", select: "name" });
@@ -263,18 +266,17 @@ export const getAllassessmentforStudent = async (req, res) => {
   const studentId = req.user._id;
 
   try {
-    // 1. Get all enrollments of the student
-    const allEnrollmentofStudent = await Enrollment.find({ student: studentId });
+    // 1. Get all enrollments
+    const allEnrollmentofStudent = await Enrollment.find({
+      student: studentId,
+    });
 
     const courseIds = allEnrollmentofStudent.map(
       (enrollment) => new mongoose.Types.ObjectId(enrollment.course)
     );
 
-    // 2. Fetch assessments
-    const assessments = await Assessment.aggregate([
-      {
-        $match: { course: { $in: courseIds } },
-      },
+    // Common lookups for both Assessments and Discussions
+    const commonLookups = [
       {
         $lookup: {
           from: "coursesches",
@@ -284,6 +286,27 @@ export const getAllassessmentforStudent = async (req, res) => {
         },
       },
       { $unwind: { path: "$course", preserveNullAndEmptyArrays: true } },
+      // Lookup Semester
+      {
+        $lookup: {
+          from: "semesters",
+          localField: "semester",
+          foreignField: "_id",
+          as: "semester",
+        },
+      },
+      { $unwind: { path: "$semester", preserveNullAndEmptyArrays: true } },
+      // Lookup Quarter
+      {
+        $lookup: {
+          from: "quarters",
+          localField: "quarter",
+          foreignField: "_id",
+          as: "quarter",
+        },
+      },
+      { $unwind: { path: "$quarter", preserveNullAndEmptyArrays: true } },
+      // Lookup Chapter
       {
         $lookup: {
           from: "chapters",
@@ -293,6 +316,7 @@ export const getAllassessmentforStudent = async (req, res) => {
         },
       },
       { $unwind: { path: "$chapter", preserveNullAndEmptyArrays: true } },
+      // Lookup Lesson
       {
         $lookup: {
           from: "lessons",
@@ -302,6 +326,7 @@ export const getAllassessmentforStudent = async (req, res) => {
         },
       },
       { $unwind: { path: "$lesson", preserveNullAndEmptyArrays: true } },
+      // Lookup Category
       {
         $lookup: {
           from: "assessmentcategories",
@@ -311,6 +336,12 @@ export const getAllassessmentforStudent = async (req, res) => {
         },
       },
       { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
+    ];
+
+    // 2. Fetch assessments
+    const assessments = await Assessment.aggregate([
+      { $match: { course: { $in: courseIds } } },
+      ...commonLookups,
       {
         $lookup: {
           from: "submissions",
@@ -349,9 +380,13 @@ export const getAllassessmentforStudent = async (req, res) => {
           source: 1,
           "course._id": 1,
           "course.courseTitle": 1,
+          "course.thumbnail": 1,
+          "course.semesterbased": 1, // Added to check logic on frontend
+          "semester.name": 1,
+          "quarter.name": 1,
           "chapter._id": 1,
-          "chapter.title": 1,
           "lesson._id": 1,
+          "chapter.title": 1,
           "lesson.title": 1,
         },
       },
@@ -359,48 +394,11 @@ export const getAllassessmentforStudent = async (req, res) => {
 
     // 3. Fetch discussions
     const discussions = await Discussion.aggregate([
-      {
-        $match: { course: { $in: courseIds } },
-      },
-      {
-        $lookup: {
-          from: "coursesches",
-          localField: "course",
-          foreignField: "_id",
-          as: "course",
-        },
-      },
-      { $unwind: { path: "$course", preserveNullAndEmptyArrays: true } },
+      { $match: { course: { $in: courseIds } } },
+      ...commonLookups,
       {
         $lookup: {
-          from: "chapters",
-          localField: "chapter",
-          foreignField: "_id",
-          as: "chapter",
-        },
-      },
-      { $unwind: { path: "$chapter", preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: "lessons",
-          localField: "lesson",
-          foreignField: "_id",
-          as: "lesson",
-        },
-      },
-      { $unwind: { path: "$lesson", preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: "assessmentcategories",
-          localField: "category",
-          foreignField: "_id",
-          as: "category",
-        },
-      },
-      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: "discussioncomments", // collection name for comments
+          from: "discussioncomments",
           let: { discussionId: "$_id" },
           pipeline: [
             {
@@ -417,15 +415,13 @@ export const getAllassessmentforStudent = async (req, res) => {
           as: "comments",
         },
       },
-
       {
         $addFields: {
           isSubmitted: { $gt: [{ $size: "$comments" }, 0] },
-          title: "$topic", // align with assessments
+          title: "$topic",
           source: "discussion",
         },
       },
-
       {
         $project: {
           _id: 1,
@@ -439,29 +435,33 @@ export const getAllassessmentforStudent = async (req, res) => {
           source: 1,
           "course._id": 1,
           "course.courseTitle": 1,
+          "course.thumbnail": 1,
+          "course.semesterbased": 1,
           "chapter._id": 1,
-          "chapter.title": 1,
           "lesson._id": 1,
+          "semester.name": 1,
+          "quarter.name": 1,
+          "chapter.title": 1,
           "lesson.title": 1,
         },
       },
     ]);
 
-    // 4. Merge both and sort
+    // 4. Merge and sort
     const combined = [...assessments, ...discussions].sort((a, b) => {
+      // Sort by submission status first, then by date
       if (a.isSubmitted === b.isSubmitted) {
-        return new Date(a.dueDate) - new Date(b.dueDate);
+        return new Date(a.dueDate?.date || a.createdAt) - new Date(b.dueDate?.date || b.createdAt);
       }
       return a.isSubmitted ? 1 : -1;
     });
 
     res.status(200).json(combined);
   } catch (err) {
-    console.error("Error fetching assessments/discussions for student:", err);
+    console.error(err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
-
 
 export const editAssessmentInfo = async (req, res) => {
   const { assessmentId } = req.params;
@@ -492,3 +492,4 @@ export const editAssessmentInfo = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
+ 

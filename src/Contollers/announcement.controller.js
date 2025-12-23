@@ -4,14 +4,17 @@ import CourseSch from "../Models/courses.model.sch.js";
 import Enrollment from "../Models/Enrollement.model.js";
 import User from "../Models/user.model.js";
 import nodemailer from "nodemailer";
+import { uploadToCloudinary } from "../lib/cloudinary-course.config.js";
+
+
 export const createAnnouncement = async (req, res) => {
-  const { title, message, courseId, teacherId } = req.body;
-
-  if (!title || !message || !courseId || !teacherId) {
-    return res.status(400).json({ error: "All fields are required." });
-  }
-
   try {
+    const { title, message, courseId, teacherId, links } = req.body;
+
+    if (!title || !message || !courseId || !teacherId) {
+      return res.status(400).json({ error: "All fields are required." });
+    }
+
     // Validate teacher
     const teacher = await User.findById(teacherId);
     if (!teacher || teacher.role !== "teacher") {
@@ -24,100 +27,137 @@ export const createAnnouncement = async (req, res) => {
       return res.status(400).json({ error: "Course not found." });
     }
 
+    // Process links
+    const linkArray = links
+      ? links
+          .split(",")
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0)
+      : [];
+
+    // Upload attachments to Cloudinary
+    const attachments = [];
+    const files = req.files?.filter((f) => f.fieldname === "attachments") || [];
+
+    for (const file of files) {
+      const result = await uploadToCloudinary(
+        file.buffer,
+        "announcement_files"
+      );
+      attachments.push({
+        url: result.secure_url,
+        publicId: result.public_id,
+        filename: file.originalname,
+        type: file.mimetype,
+      });
+    }
+
     // Create announcement
     const announcement = new Announcement({
       title,
       message,
-      course: courseId,
+      attachments,
+      links: linkArray,
       teacher: teacherId,
+      course: courseId,
     });
-
-    // Get enrolled students
-    const enrollment = await Enrollment.find({ course: courseId }).populate("student", "email");
-
-    const studentEmails = enrollment.map((enroll) => enroll.student.email);
-
-    // Send email to all enrolled students
-    if (studentEmails.length > 0 && process.env.MAIL_USER) {
-      const transporter = nodemailer.createTransport({
-        host: process.env.MAIL_HOST,
-        port: Number(process.env.MAIL_PORT),
-        secure: Number(process.env.MAIL_PORT) === 465,
-        auth: {
-          user: process.env.MAIL_USER,
-          pass: process.env.MAIL_PASS,
-        },
-      });
-
-      // Inline dynamic greeting
-      const greeting =
-        studentEmails.length > 1
-          ? "Hello Students,"
-          : `Hello ${teacher.firstName || "Student"},`;
-
-      const mailOptions = {
-        from: `"${process.env.MAIL_FROM_NAME || "Course Team"}" <${process.env.MAIL_USER}>`,
-        to: studentEmails, // can be an array or comma-separated string
-        subject: `New Announcement: ${title}`,
-        html: `
-    <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
-      <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-        
-        <!-- Logo -->
-        <div style="text-align: center; padding: 20px; background: #ffffff;">
-          <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
-               alt="Acewall Scholars Logo" 
-               style="height: 60px; margin: 0 auto;" />
-        </div>
-
-        <!-- Header -->
-        <div style="background: #28a745; padding: 20px; text-align: center;">
-          <h1 style="color: #ffffff; margin: 0; font-size: 20px;">New Announcement</h1>
-        </div>
-
-        <!-- Body -->
-        <div style="padding: 20px; color: #333;">
-          <p style="font-size: 16px;">${greeting}</p>
-          <p style="font-size: 16px;">There’s a new announcement for your course <strong>${course.courseTitle}</strong>:</p>
-          
-          <div style="margin: 20px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #28a745;">
-            <p style="font-size: 16px; margin: 0;">${message}</p>
-          </div>
-
-          <p style="font-size: 14px; margin-top: 10px;">
-            <em>From: ${teacher.firstName} ${teacher.lastName}</em>
-          </p>
-        </div>
-
-        <!-- Footer -->
-        <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
-          <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
-          <p style="margin: 0;">If you have any query contact us on same email</p>
-        </div>
-      </div>
-    </div>
-    `,
-      };
-
-      try {
-        await transporter.sendMail(mailOptions);
-        console.log("✅ Emails sent to students");
-      } catch (error) {
-        console.error("❌ Error sending emails:", error);
-      }
-    }
-
-
 
     await announcement.save();
 
+    // Fetch enrolled students + guardians
+    const enrollments = await Enrollment.find({ course: courseId }).populate(
+      "student",
+      "email guardianEmails guardianEmailPreferences firstName lastName"
+    );
+
+    const allRecipientEmails = [];
+
+    for (const enroll of enrollments) {
+      const student = enroll.student;
+      if (!student) continue;
+
+      if (student.email) allRecipientEmails.push(student.email);
+
+      if (
+        student.guardianEmails?.length &&
+        student.guardianEmailPreferences?.announcement === true
+      ) {
+        allRecipientEmails.push(...student.guardianEmails);
+      }
+    }
+
+    const uniqueEmails = [...new Set(allRecipientEmails)];
+
+    // Email sending
+    if (uniqueEmails.length > 0) {
+      const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: {
+          user: "support@acewallscholars.org",
+          pass: "dmwjwyfxaccrdxwi",
+        },
+      });
+
+      const mailAttachments = attachments.map((a) => ({
+        filename: a.filename,
+        path: a.url,
+      }));
+
+      const mailOptions = {
+        from: `"Acewall Scholars Team" <support@acewallscholars.org>`,
+        to: uniqueEmails,
+        subject: `New Announcement: ${title}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+            <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+              <div style="text-align: center; padding: 20px;">
+                <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+                    alt="Acewall Scholars Logo" 
+                    style="height: 60px; margin: 0 auto;" />
+              </div>
+              <div style="background: #28a745; padding: 20px; text-align: center;">
+                <h1 style="color: #fff; margin: 0; font-size: 20px;">New Announcement</h1>
+              </div>
+              <div style="padding: 20px; color: #333;">
+                <p style="font-size: 16px;">There’s a new announcement for your course <strong>${
+                  course.courseTitle
+                }</strong>:</p>
+                <div style="margin: 20px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #28a745;">
+                  <p style="font-size: 16px; margin: 0;">${message}</p>
+                </div>
+                ${
+                  linkArray.length
+                    ? `<p>Links:<br>${linkArray
+                        .map((l) => `<a href="${l}" target="_blank">${l}</a>`)
+                        .join("<br>")}</p>`
+                    : ""
+                }
+                <p style="font-size: 14px; margin-top: 10px;"><em>From: ${
+                  teacher.firstName
+                } ${teacher.lastName}</em></p>
+              </div>
+              <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+                <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+                <p style="margin: 0;">Do not reply to this automated message.</p>
+              </div>
+            </div>
+          </div>
+        `,
+        attachments: mailAttachments,
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log("Announcement emails sent");
+    }
+
     res.status(201).json({
-      message: "Announcement created and email sent successfully.",
+      message: "Announcement created and emails sent successfully.",
       announcement,
-      studentEmails,
     });
   } catch (err) {
-    console.error("Error creating announcement or sending email:", err);
+    console.error("Error creating announcement:", err);
     res.status(500).json({ error: "Server error." });
   }
 };
@@ -137,11 +177,17 @@ export const getAnnouncementsForCourse = async (req, res) => {
 
 export const getAnnouncementsByTeacher = async (req, res) => {
   const { teacherId } = req.params;
+  const { course } = req.query;  // Get the course filter from the query parameters
 
   try {
-    const announcements = await Announcement.find({ teacher: teacherId })
-      .populate("course", "courseTitle") // Optional: populate course title
-      .populate("teacher", "firstName lastName email"); // Optional: populate teacher info
+    // Filter by teacherId and course if provided
+    const query = { teacher: teacherId };
+    if (course) query.course = course;
+
+    const announcements = await Announcement.find(query)
+      .populate("course", "courseTitle")  // Populate course title
+      .populate("teacher", "firstName lastName email")  // Populate teacher info
+      .select('title message course attachments links createdAt updatedAt');  // Select the fields you want to return, including attachments and links
 
     res.status(200).json({ announcements });
   } catch (error) {
@@ -149,6 +195,8 @@ export const getAnnouncementsByTeacher = async (req, res) => {
     res.status(500).json({ message: "Server error fetching announcements" });
   }
 };
+
+
 
 export const deleteAnnouncement = async (req, res) => {
   const { id } = req.params;
@@ -168,19 +216,36 @@ export const deleteAnnouncement = async (req, res) => {
 
 export const getAnnouncementsForStudent = async (req, res) => {
   const studentId = req.user._id;
+
   try {
-    const enrollments = await Enrollment.find({ student: studentId }).select(
-      "course"
-    );
+    // 1. Find all courses the student is enrolled in
+    const enrollments = await Enrollment.find({ student: studentId }).select("course");
+    
+    if (!enrollments.length) {
+      return res.status(200).json({ success: true, announcements: [] });
+    }
+
     const courseIds = enrollments.map((enrollment) => enrollment.course);
+
+    // 2. Fetch announcements for those courses with all necessary fields
     const announcements = await Announcement.find({
       course: { $in: courseIds },
     })
-      .populate("course", "courseTitle")
+      .populate("course", "courseTitle thumbnail") // Added thumbnail in case you want to show course icons
+      .populate("teacher", "firstName lastName")    // Added teacher name so student knows who sent it
+      .select('title message course teacher attachments links createdAt updatedAt') 
       .sort({ createdAt: -1 });
-    res.status(200).json({ success: true, announcements });
+
+    res.status(200).json({ 
+      success: true, 
+      count: announcements.length,
+      announcements 
+    });
   } catch (error) {
-    console.error("Error fetching announcements:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    console.error("Error fetching student announcements:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Server Error fetching announcements" 
+    });
   }
 };
