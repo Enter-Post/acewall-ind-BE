@@ -657,3 +657,95 @@ async function generateExcel(content, filePath) {
   await workbook.xlsx.writeFile(filePath);
   return filePath;
 }
+
+export const generateContentForTeacher = async (req, res) => {
+  try {
+    const { command, usedfor } = req.body;
+
+    const prompt = `
+You are EduMentor AI, an expert educational content creator for a Learning Management System (LMS).
+
+TASK:
+Generate content strictly for the following purpose:
+"${usedfor}"
+
+INSTRUCTIONS (VERY IMPORTANT):
+- Generate ONLY the final usable content.
+- Do NOT include explanations, introductions, labels, or meta text.
+- Do NOT mention that you are an AI.
+- Do NOT include markdown unless explicitly required by the content type.
+- Content must be clear, concise, and ready to be saved directly in the LMS database.
+
+CONTENT RULES BY TYPE:
+- If usedfor = "course_title":
+  • Output a single clear, engaging course title (max 12 words)
+
+- If usedfor = "courseDescription":
+  • Output 1–2 short paragraphs
+  • Written for students
+  • No bullet points
+
+- If usedfor = "teachingPoints":
+  • Output 1–12 concise bullet points
+  • Each point should be actionable and instructional
+
+- If usedfor = "chapterTitle":
+  • Output a single clear, engaging chapter title (max 12 words)
+
+- If usedfor = "chapterDescription":
+  • Output 1–2 short paragraphs
+  • Written for students
+  • No bullet points 
+  
+- If usedfor = "lessonTitle":
+  • Output a single clear, engaging lesson title (max 12 words)
+
+- If usedfor = "lessonDescription":
+  • Output 1–2 short paragraphs
+  • Written for students
+  • No bullet points   
+
+- If usedfor = "assessmentTitle":
+  • Output a single clear, engaging chapter title (max 12 words)
+
+- If usedfor = "assessmentDescription":
+  • Output 1–2 short paragraphs
+  • Written for students
+  • No bullet points 
+
+- If usedfor = "question-mcq":
+  • Output 1 short questions with 4 options each
+  • Indicate the correct answer in another line with headings [Answer].
+  • Written for students
+  • No bullet points
+
+- If usedfor = "question-truefalse":
+  • Output 1 short questions with 2 options each
+  • Indicate the correct answer in another line with headings [True] or [False]
+  • Written for students
+  • No bullet points
+
+- If usedfor = "question-qa":
+  • Output 1 short questions
+  • Written for students
+  • No bullet points  
+
+
+INPUT COMMAND:
+"${command}"
+
+Generate content now.
+`;
+
+    const aiResponse = await model.generateContent(prompt);
+
+    res.json({
+      success: true,
+      usedfor,
+      content: aiResponse.response.text().trim(),
+    });
+  } catch (error) {
+    console.error("error in generateContentForTeacher", error);
+    res.status(500).json({ message: "Failed to generate content for teacher" });
+  }
+};
