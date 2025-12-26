@@ -8,6 +8,213 @@ import Enrollment from "../Models/Enrollement.model.js";
 import e from "express";
 import Submission from "../Models/submission.model.js";
 import Discussion from "../Models/discussion.model.js";
+import nodemailer from "nodemailer";
+export const sendAssessmentReminder = async (req, res) => {
+  try {
+    const { assessmentId } = req.params;
+    const teacherId = req.user._id;
+
+    if (!mongoose.Types.ObjectId.isValid(assessmentId)) {
+      return res.status(400).json({ message: "Invalid assessment ID." });
+    }
+
+    const assessment = await Assessment.findById(assessmentId)
+      .populate("course", "courseTitle")
+      .populate("createdby", "firstName lastName email");
+
+    if (!assessment) {
+      return res.status(404).json({ message: "Assessment not found." });
+    }
+
+    if (assessment.createdby._id.toString() !== teacherId.toString()) {
+      return res.status(403).json({
+        message:
+          "You are not authorized to send reminders for this assessment.",
+      });
+    }
+
+    // ✅ Find enrolled students
+    const enrollments = await Enrollment.find({
+      course: assessment.course._id,
+      student: { $ne: assessment.createdby._id },
+    }).populate("student", "email firstName lastName");
+
+    console.log(enrollments, "enrollments");
+
+    const filteredEnrollments = enrollments.filter(
+      (enr) => enr.student !== null
+    );
+
+    if (!filteredEnrollments.length) {
+      return res
+        .status(404)
+        .json({ message: "No students enrolled in this course." });
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.MAIL_HOST,
+      port: process.env.MAIL_PORT || 465,
+      secure: true,
+      auth: {
+        user: "support@acewallscholars.org",
+        pass: "dmwjwyfxaccrdxwi",
+      },
+    });
+
+    await transporter.verify().catch((err) => {
+      console.error("❌ SMTP verification failed:", err.message);
+    });
+
+    const dueDate = assessment.dueDate?.date
+      ? new Date(assessment.dueDate.date).toLocaleDateString()
+      : "Not specified";
+
+    const portalBaseURL =
+      process.env.STUDENT_PORTAL_URL || "https://portal.acewallscholars.org";
+    const assessmentLink = `${portalBaseURL}/student/assessment/${assessment._id}`;
+
+    let sentCount = 0;
+
+    for (const enrollment of filteredEnrollments) {
+      const student = enrollment.student;
+      if (!student?.email) continue;
+
+      const mailOptions = {
+        from: `"${process.env.MAIL_FROM_NAME || "Acewall Scholars"}" <${
+          process.env.MAIL_USER
+        }>`,
+        to: student.email,
+        subject: `Reminder: ${assessment.title} - Due ${dueDate}`,
+        html: `
+        <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+          <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            
+            <!-- Header -->
+            <div style="background: #10b981; padding: 20px; text-align: center;">
+              <h2 style="color: #ffffff; margin: 0; font-size: 22px;">Assessment Reminder</h2>
+            </div>
+
+            <!-- Body -->
+            <div style="padding: 20px; color: #333;">
+              <p style="font-size: 16px;">Hello ${
+                student.firstName + " " + student.lastName
+              },</p>
+              <p style="font-size: 16px;">
+                This is a reminder for your upcoming assessment:
+              </p>
+
+              <div style="margin: 20px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #10b981;">
+                <p style="margin: 5px 0; font-size: 15px;"><strong>Assessment:</strong> ${
+                  assessment.title
+                }</p>
+                <p style="margin: 5px 0; font-size: 15px;"><strong>Course:</strong> ${
+                  assessment.course.courseTitle
+                }</p>
+                <p style="margin: 5px 0; font-size: 15px;"><strong>Due Date:</strong> ${dueDate}</p>
+              </div>
+
+             
+
+              <p style="font-size: 14px; margin-top: 25px; text-align: center;">
+                Please make sure to complete it on time through your student portal.
+              </p>
+
+              <p style="font-size: 14px; margin-top: 20px;">
+                Best regards,<br>
+                <strong>${assessment.createdby.firstName} ${
+          assessment.createdby.lastName
+        }</strong><br>
+                ${assessment.createdby.email}
+              </p>
+            </div>
+
+            <!-- Footer -->
+            <div style="background: #f3f4f6; color: #555; text-align: center; padding: 12px; font-size: 12px;">
+              <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
+          
+            </div>
+          </div>
+        </div>
+        `,
+      };
+
+      try {
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ Reminder sent to ${student.email}`);
+        sentCount++;
+      } catch (err) {
+        console.error(`❌ Failed to send to ${student.email}:`, err.message);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Reminder emails sent to ${sentCount} students successfully.`,
+      data: {
+        assessmentId,
+        assessmentTitle: assessment.title,
+        dueDate,
+        studentCount: sentCount,
+        allStudents: filteredEnrollments.map((e) => ({
+          id: e.student._id,
+          name: `${e.student.firstName} ${e.student.lastName}`,
+          email: e.student.email,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("💥 Error in sendAssessmentReminder:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error while sending reminders.",
+    });
+  }
+};
+
+export const setReminderTime = async (req, res) => {
+  const { assessmentId } = req.params;
+  const { reminder } = req.body;
+
+  try {
+    const assessment = await Assessment.findById(assessmentId);
+
+    if (!assessment) {
+      return res.status(400).json({ message: "Assessment not found" });
+    }
+
+    assessment.reminderTimeBefore = reminder;
+
+    assessment.save();
+    res
+      .status(200)
+      .json({ message: "Assessment reminder time updated successfully" });
+  } catch (error) {
+    console.log("error in the edit Assessment Info", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const findReminderTime = async (req, res) => {
+  const { assessmentId } = req.params;
+  try {
+    const assessment = await Assessment.findById(assessmentId);
+
+    if (!assessment) {
+      console.log("Assessment not found");
+      return null;
+    }
+
+    res
+      .status(200)
+      .json({
+        message: "Assessment reminder time updated successfully",
+        reminderTime: assessment.reminderTimeBefore,
+      }); // Return the reminder time
+  } catch (error) {
+    console.log("error in the edit Assessment Info", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
 
 export const createAssessment = async (req, res) => {
   const {

@@ -870,41 +870,46 @@ export const allTeacher = async (req, res) => {
 
 export const allStudent = async (req, res) => {
   try {
-    const { name, email } = req.query; // Get filter query parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 6;
+    const skip = (page - 1) * limit;
+    const search = req.query.search || ""; // get search term
 
-    // Build the base query
-    let query = { role: "student" };
+    // Base query
+    const query = { role: "student" };
 
-    // Apply filter for name (either firstName or lastName)
-    if (name) {
-      const nameRegex = new RegExp(name, "i"); // Case-insensitive regex search
+    // If search provided, add filter (case-insensitive)
+    if (search) {
       query.$or = [
-        { firstName: { $regex: nameRegex } },
-        { lastName: { $regex: nameRegex } },
+        { firstName: { $regex: search, $options: "i" } },
+        { lastName: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
       ];
     }
 
-    // Apply filter for email
-    if (email) {
-      const emailRegex = new RegExp(email, "i");
-      query.email = { $regex: emailRegex };
-    }
+    const totalStudents = await User.countDocuments(query);
 
-    // Fetch students with the constructed query
-    const students = await User.find(query).select(
-      "firstName lastName email createdAt courses profileImg _id"
-    );
+    const students = await User.find(query)
+      .sort({ createdAt: -1 })
+      .select("firstName lastName email createdAt courses profileImg _id")
+      .skip(skip)
+      .limit(limit);
 
-    const formattedStudent = students.map((student) => ({
+    const formattedStudents = students.map((student) => ({
       name: `${student.firstName} ${student.lastName}`,
       email: student.email,
-      joiningDate: student.createdAt, // from timestamps
+      joiningDate: student.createdAt,
       numberOfCourses: student.courses?.length || 0,
       profileImg: student.profileImg,
       id: student._id,
     }));
 
-    res.status(200).json(formattedStudent);
+    res.status(200).json({
+      total: totalStudents,
+      currentPage: page,
+      totalPages: Math.ceil(totalStudents / limit),
+      students: formattedStudents,
+    });
   } catch (err) {
     res.status(500).json({ message: "Server Error", error: err.message });
   }
