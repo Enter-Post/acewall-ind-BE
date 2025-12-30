@@ -27,6 +27,7 @@ import {
   getunPurchasedCourseByIdStdPrew,
   courseDetailsStdPre,
   toggleGradingSystem,
+  getCourseEnrollmentStats,
 } from "../../Contollers/CourseControllers/courses.controller.sch.js";
 
 const router = express.Router();
@@ -76,5 +77,6 @@ router.put("/editCourseDocuments/:courseId", isUser, upload.fields([
   { name: "transcript", maxCount: 1 }
 ]), editCoureDocument);
 router.put("/course/:courseId/toggle-grading", toggleGradingSystem);
+router.get('/stats/:courseId', getCourseEnrollmentStats);
 
 export default router;
