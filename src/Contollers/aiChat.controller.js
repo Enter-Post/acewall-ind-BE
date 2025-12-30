@@ -660,7 +660,7 @@ async function generateExcel(content, filePath) {
 
 export const generateContentForTeacher = async (req, res) => {
   try {
-    const { command, usedfor } = req.body;
+    const { command, usedfor, difficulty } = req.body;
 
     const prompt = `
 You are EduMentor AI, an expert educational content creator for a Learning Management System (LMS).
@@ -714,19 +714,19 @@ CONTENT RULES BY TYPE:
   • No bullet points 
 
 - If usedfor = "question-mcq":
-  • Output 1 short questions with 4 options each
-  • Indicate the correct answer in another line with headings [Answer].
+  • Output 1 short questions according to the difficulty of ${difficulty} with 4 options labeled as A, B, C, D.
+  • provide the full correct answer in another line as Answer: [correct answer] without the labels (A, B, C, D).
   • Written for students
   • No bullet points
 
 - If usedfor = "question-truefalse":
-  • Output 1 short questions with 2 options each
-  • Indicate the correct answer in another line with headings [True] or [False]
+  • Output 1 short questions to the difficulty of ${difficulty} with 2 options each
+  • Indicate the correct answer in another line with headings "True" or "False"
   • Written for students
   • No bullet points
 
 - If usedfor = "question-qa":
-  • Output 1 short questions
+  • Output 1 short questions to the difficulty of ${difficulty}.
   • Written for students
   • No bullet points  
 

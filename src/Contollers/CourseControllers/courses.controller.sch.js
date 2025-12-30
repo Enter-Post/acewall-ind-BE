@@ -1559,3 +1559,62 @@ export const editCoureDocument = async (req, res) => {
     res.status(500).json({ message: error.message || "Internal Server Error" });
   }
 };
+
+
+export const getCourseEnrollmentStats = async (req, res) => {
+  const { courseId } = req.params;
+  const { range } = req.query; 
+console.log(range,"this is the range");
+
+  try {
+    let startDate = null;
+    const now = new Date();
+
+    // Calculate the date offset
+    if (range === '7d') {
+      startDate = new Date();
+      startDate.setDate(now.getDate() - 7);
+    } else if (range === '30d') {
+      startDate = new Date();
+      startDate.setMonth(now.getMonth() - 1);
+    } else if (range === '6m') {
+      startDate = new Date();
+      startDate.setMonth(now.getMonth() - 6);
+    }
+
+    const matchStage = { 
+      course: new mongoose.Types.ObjectId(courseId) 
+    };
+
+    if (startDate) {
+      matchStage.createdAt = { $gte: startDate };
+    }
+
+    const stats = await Enrollment.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { "_id": 1 } },
+      {
+        $project: {
+          _id: 0,
+          date: "$_id",
+          students: "$count"
+        }
+      }
+    ]);
+
+    // Ensure we always return an array
+    res.status(200).json({ 
+      success: true, 
+      data: stats || [] 
+    });
+  } catch (error) {
+    console.error("Stats Error:", error);
+    res.status(500).json({ success: false, message: "Error fetching stats", error: error.message });
+  }
+};
