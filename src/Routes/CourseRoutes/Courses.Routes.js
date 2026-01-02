@@ -28,10 +28,13 @@ import {
   courseDetailsStdPre,
   toggleGradingSystem,
   getCourseEnrollmentStats,
+  getUserCoursesforFilter,
 } from "../../Contollers/CourseControllers/courses.controller.sch.js";
 
 const router = express.Router();
 
+
+router.get("/getUserCoursesforFilter", isUser, getUserCoursesforFilter);
 router.post(
   "/create",
   isUser,

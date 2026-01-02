@@ -54,7 +54,7 @@ const SchCourseSchema = new mongoose.Schema(
       request: { type: String, default: null },
     },
 
-    published: { type: Boolean, default: true },
+    published: { type: Boolean, default: false },
     isVerified: {
       type: String,
       default: "pending",

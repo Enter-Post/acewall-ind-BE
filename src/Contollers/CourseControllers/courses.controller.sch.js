@@ -1563,8 +1563,8 @@ export const editCoureDocument = async (req, res) => {
 
 export const getCourseEnrollmentStats = async (req, res) => {
   const { courseId } = req.params;
-  const { range } = req.query; 
-console.log(range,"this is the range");
+  const { range } = req.query;
+  console.log(range, "this is the range");
 
   try {
     let startDate = null;
@@ -1582,8 +1582,8 @@ console.log(range,"this is the range");
       startDate.setMonth(now.getMonth() - 6);
     }
 
-    const matchStage = { 
-      course: new mongoose.Types.ObjectId(courseId) 
+    const matchStage = {
+      course: new mongoose.Types.ObjectId(courseId)
     };
 
     if (startDate) {
@@ -1609,12 +1609,184 @@ console.log(range,"this is the range");
     ]);
 
     // Ensure we always return an array
-    res.status(200).json({ 
-      success: true, 
-      data: stats || [] 
+    res.status(200).json({
+      success: true,
+      data: stats || []
     });
   } catch (error) {
     console.error("Stats Error:", error);
     res.status(500).json({ success: false, message: "Error fetching stats", error: error.message });
+  }
+};
+
+
+export const getUserCoursesforFilter = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const role = req.user.role;
+    const search = req.query.search || "";
+
+    const searchFilter = search
+      ? {
+        courseTitle: { $regex: search, $options: "i" },
+      }
+      : {};
+
+    let courses = [];
+
+    // ============================
+    // ✅ TEACHER COURSES
+    // ============================
+    if (role === "teacher") {
+      courses = await CourseSch.aggregate([
+        {
+          $match: {
+            isVerified: "approved",
+            createdby: new mongoose.Types.ObjectId(userId),
+            ...searchFilter
+
+          },
+        },
+        {
+          $lookup: {
+            from: "categories",
+            localField: "category",
+            foreignField: "_id",
+            as: "category",
+          },
+        },
+        {
+          $lookup: {
+            from: "subcategories",
+            localField: "subcategory",
+            foreignField: "_id",
+            as: "subcategory",
+          },
+        },
+        {
+          $unwind: { path: "$category", preserveNullAndEmptyArrays: true },
+        },
+        {
+          $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true },
+        },
+        {
+          $project: {
+            courseTitle: 1,
+            courseCode: 1,
+            language: 1,
+            published: 1,
+            gradingSystem: 1,
+            thumbnail: 1,
+            createdAt: 1,
+            category: {
+              _id: "$category._id",
+              name: "$category.name",
+            },
+            subcategory: {
+              _id: "$subcategory._id",
+              name: "$subcategory.name",
+            },
+          },
+        },
+        {
+          $sort: {
+            published: -1,
+            createdAt: -1,
+          },
+        },
+      ]);
+    }
+
+    if (role === "student") {
+      courses = await Enrollment.aggregate([
+        {
+          $match: {
+            student: new mongoose.Types.ObjectId(userId),
+          },
+        },
+        {
+          $lookup: {
+            from: "coursesches",
+            localField: "course",
+            foreignField: "_id",
+            as: "course",
+          },
+        },
+        {
+          $unwind: "$course",
+        },
+
+        // 🔍 Search filter here
+        {
+          $match: search
+            ? {
+              "course.courseTitle": {
+                $regex: search,
+                $options: "i",
+              },
+            }
+            : {},
+        },
+
+        {
+          $lookup: {
+            from: "categories",
+            localField: "course.category",
+            foreignField: "_id",
+            as: "category",
+          },
+        },
+        {
+          $lookup: {
+            from: "subcategories",
+            localField: "course.subcategory",
+            foreignField: "_id",
+            as: "subcategory",
+          },
+        },
+        {
+          $unwind: { path: "$category", preserveNullAndEmptyArrays: true },
+        },
+        {
+          $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true },
+        },
+        {
+          $project: {
+            _id: "$course._id",
+            courseTitle: "$course.courseTitle",
+            language: "$course.language",
+            published: "$course.published",
+            gradingSystem: "$course.gradingSystem",
+            thumbnail: "$course.thumbnail",
+            createdAt: "$course.createdAt",
+
+            progress: 1,
+            completed: 1,
+
+            category: {
+              _id: "$category._id",
+              name: "$category.name",
+            },
+            subcategory: {
+              _id: "$subcategory._id",
+              name: "$subcategory.name",
+            },
+          },
+        },
+        {
+          $sort: {
+            createdAt: -1,
+          },
+        },
+      ]);
+    }
+
+    return res.status(200).json({
+      totalCourses: courses.length,
+      courses,
+    });
+  } catch (error) {
+    console.error("Error fetching user courses:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };

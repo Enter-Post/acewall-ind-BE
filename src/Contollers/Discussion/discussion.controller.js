@@ -178,4 +178,19 @@ export const lessonDiscussions = async (req, res) => {
     console.log("error in fetching chapter discussions", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
-} 
+}
+
+export const courseDiscussions = async (req, res) => {
+  const { courseId } = req.params
+  try {
+    const discussion = await Discussion.find({ course: courseId }).populate("course", "courseTitle thumbnail")
+    if (!discussion || discussion.length === 0) {
+      return res.status(404).json({ message: "No discussions found for this lesson" });
+    }
+    res.status(200).json({ message: "Discussions fetched successfully", discussion })
+  } catch (error) {
+    console.log("error in fetching chapter discussions", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+

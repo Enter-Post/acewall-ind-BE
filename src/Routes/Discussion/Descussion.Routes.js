@@ -1,6 +1,7 @@
 import express from "express";
 import {
   chapterDiscussions,
+  courseDiscussions,
   createDiscussion,
   discussionforStudent,
   getDiscussionbyId,
@@ -18,5 +19,6 @@ router.get("/all", isUser, getDiscussionsOfTeacher);
 router.get("/:id", isUser, getDiscussionbyId);
 router.get("/chapter/:chapterId", isUser, chapterDiscussions);
 router.get("/lesson/:lessonId", isUser, lessonDiscussions);
+router.get("/course/:courseId", isUser, courseDiscussions);
 
 export default router;

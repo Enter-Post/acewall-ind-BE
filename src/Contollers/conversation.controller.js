@@ -3,6 +3,7 @@ import Conversation from "../Models/conversation.model.js";
 import Message from "../Models/messages.model.js";
 import { connect } from "mongoose";
 import Enrollment from "../Models/Enrollement.model.js";
+import CourseSch from "../Models/courses.model.sch.js";
 
 export const createConversation = async (req, res) => {
   const myId = req.user._id;
@@ -64,13 +65,13 @@ export const getMyConversations = async (req, res) => {
           conversationId: conversation._id,
           otherMember: otherMember
             ? {
-                name: `${otherMember.firstName ?? ""} ${otherMember.lastName ?? ""}`.trim() || "User not found",
-                profileImg: otherMember.profileImg || { url: "", filename: "" },
-              }
+              name: `${otherMember.firstName ?? ""} ${otherMember.lastName ?? ""}`.trim() || "User not found",
+              profileImg: otherMember.profileImg || { url: "", filename: "" },
+            }
             : {
-                name: "User not found",
-                profileImg: { url: "", filename: "" },
-              },
+              name: "User not found",
+              profileImg: { url: "", filename: "" },
+            },
           lastSeen: conversation.lastSeen,
           lastMessage: conversation.lastMessage,
           lastMessageDate: conversation.lastMessageAt,
@@ -177,3 +178,83 @@ export const getTeacherforStudent = async (req, res) => {
   }
 };
 
+
+export const getStudentsByOfTeacher = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const teacherId = req.user._id;
+
+    // 1️⃣ Verify course belongs to teacher
+    const course = await CourseSch.findOne({
+      _id: courseId,
+      createdby: teacherId,
+    }).select("courseTitle");
+
+    if (!course) {
+      return res.status(403).json({
+        message: "You are not authorized to view students of this course",
+      });
+    }
+
+    // 2️⃣ Aggregation pipeline
+    const students = await Enrollment.aggregate([
+      // Match course
+      {
+        $match: {
+          course: new mongoose.Types.ObjectId(courseId),
+        },
+      },
+
+      // Join users collection
+      {
+        $lookup: {
+          from: "users",
+          localField: "student",
+          foreignField: "_id",
+          as: "student",
+        },
+      },
+
+      // Convert student array → object
+      { $unwind: "$student" },
+
+      // Remove teacher himself
+      {
+        $match: {
+          "student._id": {
+            $ne: new mongoose.Types.ObjectId(teacherId),
+          },
+        },
+      },
+
+      // Optional: ensure only students
+      {
+        $match: {
+          "student.role": "student",
+        },
+      },
+
+      // Shape final response
+      {
+        $project: {
+          _id: "$student._id",
+          firstName: "$student.firstName",
+          lastName: "$student.lastName",
+          email: "$student.email",
+          profileImg: "$student.profileImg",
+          enrolledAt: 1,
+        },
+      },
+    ]);
+
+    res.status(200).json({
+      courseId,
+      courseTitle: course.courseTitle,
+      totalStudents: students.length,
+      students,
+    });
+  } catch (error) {
+    console.error("Error in getStudentsByOfTeacher:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
