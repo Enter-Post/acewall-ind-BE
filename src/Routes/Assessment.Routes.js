@@ -8,6 +8,7 @@ import {
   findReminderTime,
   getAllassessmentforStudent,
   getAssesmentbyID,
+  getAssessmentStats,
   sendAssessmentReminder,
   setReminderTime,
   uploadFiles,
@@ -25,6 +26,7 @@ router.post(
   sendAssessmentReminder
 );
 
+router.get("/stats/:assessmentId", isUser, getAssessmentStats);
 router.get("/findReminderTime/:assessmentId", isUser, findReminderTime)
 router.put("/setReminder/:assessmentId", isUser, setReminderTime)
 router.post("/create", upload.array("files"), isUser, createAssessment);

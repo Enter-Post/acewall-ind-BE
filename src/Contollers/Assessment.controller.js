@@ -700,3 +700,44 @@ export const editAssessmentInfo = async (req, res) => {
   }
 };
  
+
+
+export const getAssessmentStats = async (req, res) => {
+  const { assessmentId } = req.params;
+
+  try {
+    const assessment = await Assessment.findById(assessmentId);
+    if (!assessment) {
+      return res.status(404).json({ message: "Assessment not found" });
+    }
+
+    // 1. Count On-Time Submissions
+    const onTimeCount = await Submission.countDocuments({ 
+      assessment: assessmentId, 
+      status: "before due date" 
+    });
+
+    // 2. Count Late Submissions
+    const lateCount = await Submission.countDocuments({ 
+      assessment: assessmentId, 
+      status: "after due date" 
+    });
+
+    // 3. Get total students enrolled in the course
+    const totalEnrolled = await Enrollment.countDocuments({ course: assessment.course });
+
+    const submittedCount = onTimeCount + lateCount;
+    const notSubmittedCount = Math.max(0, totalEnrolled - submittedCount);
+
+    res.status(200).json({
+      totalEnrolled,
+      onTimeCount,
+      lateCount,
+      submittedCount,
+      notSubmittedCount,
+      completionRate: totalEnrolled > 0 ? ((submittedCount / totalEnrolled) * 100).toFixed(1) : 0
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching stats", error: err.message });
+  }
+};
