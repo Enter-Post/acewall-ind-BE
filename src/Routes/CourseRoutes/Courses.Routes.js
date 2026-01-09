@@ -29,10 +29,14 @@ import {
   toggleGradingSystem,
   getCourseEnrollmentStats,
   getUserCoursesforFilter,
+  getFullCourseData,
+  importCourseFromJSON,
 } from "../../Contollers/CourseControllers/courses.controller.sch.js";
 
 const router = express.Router();
 
+router.get("/:courseId/export", getFullCourseData);
+router.post('/import-full-course', isUser, importCourseFromJSON);
 
 router.get("/getUserCoursesforFilter", isUser, getUserCoursesforFilter);
 router.post(

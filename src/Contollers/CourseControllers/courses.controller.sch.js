@@ -10,6 +10,361 @@ import AssessmentCategory from "../../Models/assessment-category.js";
 import Announcement from "../../Models/Annoucement.model.js";
 import Comment from "../../Models/comment.model.js";
 import nodemailer from "nodemailer";
+import Semester from "../../Models/semester.model.js";
+import Quarter from "../../Models/quarter.model.js";
+import Discussion from "../../Models/discussion.model.js";
+
+
+export const importCourseFromJSON = async (req, res) => {
+  try {
+    const data = req.body;
+    const userId = req.user._id;
+
+    // --- STEP 0: NORMALIZE DATA DIFFERENCES ---
+    // School data has 'quarters' array, Learning Vault export has 'semesters[i].quarters'
+    // We handle both to ensure the import is robust.
+    let rawSemesters = data.semesters || data.semester || []; 
+    const rawCurriculum = data.curriculum || [];
+    const rawAssessments = data.assessments || [];
+    const rawDiscussions = data.discussions || [];
+
+    // --- STEP 1: Create the Course with Mandatory Defaults ---
+    const { 
+      _id: oldCourseId, 
+      curriculum, assessments, discussions, assessmentCategories,
+      semesters, semester, quarter, quarters, // Remove all variations of sem/qtr
+      category, subcategory, 
+      createdAt, updatedAt, __v, createdby, 
+      ...courseBody 
+    } = data;
+
+    const newCourse = await CourseSch.create({
+      ...courseBody,
+      courseTitle: `${courseBody.courseTitle || 'Untitled'} (Imported)`,
+      category: category?._id || category || null,
+      subcategory: subcategory?._id || subcategory || null,
+      createdby: userId,
+      // Mandatory Learning Vault Defaults
+      semesterbased: true,        // Always true
+      price: 2,                   // Always 2$
+      published: false, 
+      isVerified: "pending",      // Learning vault uses "pending"/"approved"
+      semester: [],               // Will populate after creation
+      quarter: [],                // Will populate after creation
+    });
+
+    // ID Maps for relational integrity
+    const semesterMap = {};
+    const quarterMap = {};
+    const categoryMap = {}; 
+    const chapterMap = {};
+    const lessonMap = {};
+
+    // --- STEP 2: Recreate Semesters and Quarters ---
+    const newSemesterIds = [];
+    const newQuarterIds = [];
+
+    for (const sem of rawSemesters) {
+      const { _id: oldSemId, quarters: nestedQuarters, ...semBody } = sem;
+      
+      const newSem = await Semester.create({
+        ...semBody,
+        course: newCourse._id,
+        createdby: userId,
+        isArchived: false
+      });
+      
+      semesterMap[oldSemId] = newSem._id;
+      newSemesterIds.push(newSem._id);
+
+      // Handle Quarters: School version uses data.quarters, Vault uses sem.quarters
+      const sourceQuarters = nestedQuarters || (data.quarters ? data.quarters.filter(q => q.semester === oldSemId) : []);
+
+      if (sourceQuarters.length > 0) {
+        for (const qtr of sourceQuarters) {
+          const { _id: oldQtrId, ...qtrBody } = qtr;
+          const newQtr = await Quarter.create({
+            ...qtrBody,
+            semester: newSem._id,
+            isArchived: false
+          });
+          quarterMap[oldQtrId] = newQtr._id;
+          newQuarterIds.push(newQtr._id);
+        }
+      }
+    }
+
+    // Update course with reconstructed references
+    await CourseSch.findByIdAndUpdate(newCourse._id, {
+      semester: newSemesterIds,
+      quarter: newQuarterIds
+    });
+
+    // --- STEP 3: Assessment Categories ---
+    if (assessmentCategories && assessmentCategories.length > 0) {
+      for (const cat of assessmentCategories) {
+        const { _id: oldCatId, ...catBody } = cat;
+        const newCat = await AssessmentCategory.create({
+          ...catBody,
+          course: newCourse._id,
+          createdBy: userId
+        });
+        categoryMap[oldCatId] = newCat._id;
+      }
+    }
+
+    // --- STEP 4: Chapters & Lessons (Strip Concepts) ---
+    for (const chap of rawCurriculum) {
+      const { _id: oldChapId, lessons, ...chapBody } = chap;
+      const newQuarterId = quarterMap[chapBody.quarter?._id || chapBody.quarter] || null;
+
+      const newChapter = await Chapter.create({
+        ...chapBody,
+        course: newCourse._id,
+        createdby: userId,
+        quarter: newQuarterId 
+      });
+
+      chapterMap[oldChapId] = newChapter._id;
+
+      if (lessons && lessons.length > 0) {
+        for (const lesson of lessons) {
+          const { _id: oldLessonId, ...lessonBody } = lesson;
+          await Lesson.create({
+            ...lessonBody,
+            chapter: newChapter._id,
+            createdby: userId
+          });
+        }
+      }
+    }
+
+    // --- STEP 5: Assessments (Strip Concepts) ---
+    for (const asmt of rawAssessments) {
+      const { _id: oldAsmtId, questions, ...asmtBody } = asmt;
+      
+      // Filter out the 'concept' field from questions as requested
+      const cleanedQuestions = questions?.map(({ _id, concept, ...q }) => ({
+          ...q,
+          files: q.files?.map(({ _id: fId, ...f }) => f) || []
+      })) || [];
+
+      await Assessment.create({
+        ...asmtBody,
+        course: newCourse._id,
+        createdby: userId,
+        category: categoryMap[asmtBody.category?._id || asmtBody.category] || null,
+        chapter: chapterMap[asmtBody.chapter?._id || asmtBody.chapter] || null,
+        questions: cleanedQuestions
+      });
+    }
+
+    res.status(201).json({ success: true, courseId: newCourse._id });
+
+  } catch (error) {
+    console.error("Import Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+export const getFullCourseData = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    // 1. Fetch Course Data with nested Semesters and Quarters using Aggregation
+    const courseAggregation = await CourseSch.aggregate([
+      {
+        $match: { _id: new mongoose.Types.ObjectId(courseId) },
+      },
+      // Join Category
+      {
+        $lookup: {
+          from: "categories",
+          localField: "category",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
+      // Join Subcategory
+      {
+        $lookup: {
+          from: "subcategories",
+          localField: "subcategory",
+          foreignField: "_id",
+          as: "subcategory",
+        },
+      },
+      { $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true } },
+      // Join Semesters AND their nested Quarters
+      {
+        $lookup: {
+          from: "semesters",
+          let: { courseId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$course", "$$courseId"] },
+                    { $eq: ["$isArchived", false] },
+                  ],
+                },
+              },
+            },
+            {
+              $lookup: {
+                from: "quarters",
+                localField: "_id",
+                foreignField: "semester",
+                as: "quarters",
+              },
+            },
+            { $sort: { startDate: 1 } },
+          ],
+          as: "semesterData", // Using a different key to avoid conflicts with existing fields
+        },
+      },
+      // Join Creator info
+      {
+        $lookup: {
+          from: "users",
+          localField: "createdby",
+          foreignField: "_id",
+          as: "createdby",
+          pipeline: [{ $project: { firstName: 1, lastName: 1, email: 1 } }],
+        },
+      },
+      { $unwind: { path: "$createdby", preserveNullAndEmptyArrays: true } },
+    ]);
+
+    const course = courseAggregation[0];
+
+    if (!course) {
+      return res.status(404).json({ success: false, message: "Course not found" });
+    }
+
+    // 2. Fetch Curriculum (Chapters + Lessons)
+    const chapters = await Chapter.find({ course: courseId }).sort({ createdAt: 1 }).lean();
+    const curriculum = await Promise.all(
+      chapters.map(async (chapter) => {
+        const lessons = await Lesson.find({ chapter: chapter._id }).sort({ createdAt: 1 }).lean();
+        return { ...chapter, lessons };
+      })
+    );
+
+    // 3. Fetch Metadata (Categories, Assessments, Discussions)
+    const assessmentCategories = await AssessmentCategory.find({ course: courseId }).lean();
+    const assessments = await Assessment.find({ course: courseId }).populate("category").lean();
+    const discussions = await Discussion.find({ course: courseId }).populate("category").lean();
+
+    // 4. Final Data Assembly
+    const fullCourseData = {
+      ...course,
+      semesters: course.semesterData, // Map aggregated data to the expected key
+      curriculum,
+      assessmentCategories,
+      assessments,
+      discussions,
+    };
+
+    // Clean up temporary aggregation keys if necessary
+    delete fullCourseData.semesterData;
+
+    res.status(200).json({
+      success: true,
+      data: fullCourseData,
+    });
+  } catch (error) {
+    console.error("Export Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to gather course data",
+      error: error.message,
+    });
+  }
+};
+
+// export const getFullCourseData = async (req, res) => {
+//   try {
+//     const { courseId } = req.params;
+
+//     // 1. Fetch Core Course Details (Metadata, Requirements, Teaching Points)
+//     const course = await CourseSch.findById(courseId)
+//       .populate("category subcategory", "title")
+//       .select("-__v")
+//       .lean();
+
+//     if (!course) return res.status(404).json({ message: "Course not found" });
+
+//     // 2. Fetch Structure (Semesters & Quarters)
+//     const semesters = await Semester.find({ course: courseId }).select("-__v").lean();
+//     const quarters = await Quarter.find({ 
+//       semester: { $in: semesters.map(s => s._id) } 
+//     }).select("-__v").lean();
+
+//     // 3. Fetch Content (Chapters & Lessons)
+//     // We include all descriptions, PDF links, and Video links
+//     const chapters = await Chapter.find({ course: courseId }).select("-__v").lean();
+//     const lessons = await Lesson.find({ 
+//       chapter: { $in: chapters.map(c => c._id) } 
+//     }).select("-__v").lean();
+
+//     // 4. Fetch Assessments (The most valuable data)
+//     // We get every question, every MCQ option, and the correct answers
+//     const assessments = await Assessment.find({ 
+//       course: courseId 
+//     }).populate("category", "name").select("-__v").lean();
+
+//     // 5. Build the instructional tree
+//     const exportData = {
+//       exportDate: new Date().toISOString(),
+//       courseInfo: {
+//         title: course.courseTitle,
+//         description: course.courseDescription,
+//         language: course.language,
+//         requirements: course.requirements,
+//         teachingPoints: course.teachingPoints,
+//         price: course.price,
+//         gradingSystem: course.gradingSystem
+//       },
+//       curriculum: chapters.map(chap => ({
+//         chapterTitle: chap.title,
+//         chapterDescription: chap.description,
+//         lessons: lessons
+//           .filter(l => l.chapter.toString() === chap._id.toString())
+//           .map(l => ({
+//             title: l.title,
+//             description: l.description,
+//             content: {
+//               pdfs: l.pdfFiles,
+//               video: l.youtubeLinks,
+//               links: l.otherLink
+//             }
+//           })),
+//         assessments: assessments
+//           .filter(a => a.chapter?.toString() === chap._id.toString())
+//           .map(a => ({
+//             title: a.title,
+//             type: a.type,
+//             questions: a.questions // This includes the valuable Q&A and MCQ options
+//           }))
+//       })),
+//       // Add Semester structure if it exists
+//       schedule: semesters.map(sem => ({
+//         semesterName: sem.title,
+//         dates: { start: sem.startDate, end: sem.endDate },
+//         quarters: quarters.filter(q => q.semester.toString() === sem._id.toString())
+//       }))
+//     };
+
+//     res.status(200).json(exportData);
+//   } catch (error) {
+//     res.status(500).json({ message: "Failed to compile course data", error: error.message });
+//   }
+// };
+
 
 export const toggleGradingSystem = async (req, res) => {
   try {
