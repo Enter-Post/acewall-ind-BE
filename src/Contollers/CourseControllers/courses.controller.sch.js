@@ -46,7 +46,7 @@ export const importCourseFromJSON = async (req, res) => {
       createdby: userId,
       // Mandatory Learning Vault Defaults
       semesterbased: true,        // Always true
-      price: 2,                   // Always 2$
+      price: 0,                   // Always 2$
       published: false, 
       isVerified: "pending",      // Learning vault uses "pending"/"approved"
       semester: [],               // Will populate after creation

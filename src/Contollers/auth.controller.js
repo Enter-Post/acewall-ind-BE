@@ -16,30 +16,28 @@ export const initiateSignup = async (req, res) => {
     firstName,
     middleName,
     lastName,
-    // pronouns,
-    // gender,
     role,
     email,
-    phone,
     homeAddress,
     mailingAddress,
     password,
   } = req.body;
 
   try {
+    // 1. Removed 'phone' from the required fields check
     if (
       !firstName ||
       !lastName ||
       !email ||
       !password ||
-      !role ||
-      !phone
+      !role
     ) {
       return res
         .status(400)
         .json({ message: "All required fields must be filled." });
     }
-    console.log(("working here 1"))
+
+    console.log("working here 1");
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res
@@ -58,13 +56,14 @@ export const initiateSignup = async (req, res) => {
 
       return otp;
     }
+
     const hashedPassword = await bcrypt.hash(password, 11);
     const otp = generateOTP();
     const hashedOTP = await bcrypt.hash(otp, 10);
-    const phoneNumUpdated = `+${phone.replace(/\D+/g, "")}`;
 
-    console.log(("working here 2"))
+    // 2. Removed phone number formatting logic (phoneNumUpdated)
 
+    console.log("working here 2");
 
     await OTP.findOneAndUpdate(
       { email },
@@ -75,11 +74,9 @@ export const initiateSignup = async (req, res) => {
           firstName,
           middleName,
           lastName,
-          // pronoun: pronouns,
-          // gender,
           role,
           email,
-          phone: phoneNumUpdated,
+          // 3. Removed 'phone' from the userData object
           homeAddress,
           mailingAddress,
           password: hashedPassword,
@@ -88,22 +85,20 @@ export const initiateSignup = async (req, res) => {
       { upsert: true }
     );
 
-    console.log(("working here 3"))
+    console.log("working here 3");
 
-
-    // Send OTP via email (or SMS)
+    // Send OTP via email
     const transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST,
       port: Number(process.env.MAIL_PORT),
-      secure: Number(process.env.MAIL_PORT) === 465, // true for 465, false for 587
+      secure: Number(process.env.MAIL_PORT) === 465,
       auth: {
         user: process.env.MAIL_USER,
         pass: process.env.MAIL_PASS,
       },
     });
 
-    console.log(("working here 4"))
-
+    console.log("working here 4");
 
     await transporter.sendMail({
       from: `"OTP Verification" <${process.env.MAIL_USER}>`,
@@ -113,23 +108,19 @@ export const initiateSignup = async (req, res) => {
   <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
     <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
       
-      <!-- Logo -->
       <div style="text-align: center; padding: 20px; background: #ffffff;">
         <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
              alt="Acewall Scholars Logo" 
              style="height: 60px; margin: 0 auto;" />
       </div>
 
-      <!-- Header -->
       <div style="background: #28a745; padding: 20px; text-align: center;">
         <h1 style="color: #ffffff; margin: 0; font-size: 20px;">OTP Verification</h1>
       </div>
 
-      <!-- Body -->
       <div style="padding: 20px; color: #333; text-align: center;">
-    <p style="font-size: 16px;">
-          Hello ,
-        </p>        <p style="font-size: 16px;">Use the following One-Time Password (OTP) to complete your verification:</p>
+        <p style="font-size: 16px;">Hello,</p>
+        <p style="font-size: 16px;">Use the following One-Time Password (OTP) to complete your verification:</p>
         
         <div style="margin: 20px auto; display: inline-block; background: #28a745; color: #ffffff; font-size: 24px; font-weight: bold; padding: 15px 30px; border-radius: 6px; letter-spacing: 4px;">
           ${otp}
@@ -140,7 +131,6 @@ export const initiateSignup = async (req, res) => {
         </p>
       </div>
 
-      <!-- Footer -->
       <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
         <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
         <p style="margin: 0;">If you have any query contact us on same email</p>
@@ -150,9 +140,7 @@ export const initiateSignup = async (req, res) => {
   `,
     });
 
-    console.log(("working here 5"))
-
-
+    console.log("working here 5");
 
     res.status(201).json({ message: "OTP sent to your email." });
   } catch (error) {
@@ -160,6 +148,7 @@ export const initiateSignup = async (req, res) => {
     res.status(500).json({ message: "Internal server error." });
   }
 };
+
 
 export const resendOTP = async (req, res) => {
   const { email } = req.body;
@@ -269,64 +258,63 @@ export const verifyEmailOtp = async (req, res) => {
   const { email, otp } = req.body;
 
   try {
+    // 1. Find the OTP record
     const otpEntry = await OTP.findOne({ email });
-    if (!otpEntry) return res.status(400).json({ message: "OTP not found or already used." });
+    if (!otpEntry) {
+      return res.status(400).json({ message: "OTP not found or already used." });
+    }
 
+    // 2. Check validity and expiration
     const isExpired = Date.now() > otpEntry.expiresAt;
     const isValid = await bcrypt.compare(otp, otpEntry.otp);
-
-    console.log(isExpired, "isExpired");
-    console.log(isValid, "isValid");
 
     if (!isValid || isExpired) {
       return res.status(400).json({ message: "Invalid or expired OTP." });
     }
 
-    // ✅ mark email as verified in OTP entry
-    otpEntry.isVerified = true;
-    await otpEntry.save();
+    // 3. Extract user data stored during the initiateSignup phase
+    const {
+      firstName,
+      middleName,
+      lastName,
+      role,
+      email: userEmail,
+      homeAddress,
+      mailingAddress,
+      password,
+    } = otpEntry.userData;
 
-    // 📲 Generate phone OTP manually
-    function generateOTP(length = 6) {
-      const digits = "0123456789";
-      let otp = "";
-      const bytes = crypto.randomBytes(length);
+    // 4. Create the final User account
+    const newUser = new User({
+      firstName,
+      middleName,
+      lastName,
+      role,
+      email: userEmail,
+      homeAddress,
+      mailingAddress,
+      password, // This is already hashed from initiateSignup
+      isVerified: true, // Mark the user as verified
+    });
 
-      for (let i = 0; i < length; i++) {
-        otp += digits[bytes[i] % digits.length];
-      }
+    await newUser.save();
 
-      return otp;
-    }
+    // 5. Delete the OTP record so it can't be reused
+    await OTP.deleteOne({ email });
 
-    const phoneOtp = generateOTP();
+    // 6. Return the user data (excluding password) for the frontend session
+    const userResponse = newUser.toObject();
+    delete userResponse.password;
 
-    const hashedOTP = await bcrypt.hash(phoneOtp, 10);
-
-    // Save to DB with expiry (5 min)
-    otpEntry.phoneOtp = hashedOTP
-    otpEntry.expiresAt = Date.now() + 10 * 60 * 1000;
-    await otpEntry.save();
-
-    const userData = otpEntry.userData;
-
-    // 🚀 Send SMS using purchased number
-    try {
-      await twilioClient.messages.create({
-        body: `Your Acewall Scholars phone verification code is: ${phoneOtp}`,
-        from: process.env.TWILIO_PHONE_NUMBER, // purchased Twilio number
-        to: userData.phone,
-      });
-    } catch (error) {
-      console.error("Error sending phone OTP via Twilio:", error.message);
-      return res.status(500).json({ message: "Failed to send OTP your phone." });
-    }
-
-
-    res.json({ message: "Email verified. Phone OTP sent." });
+    res.status(200).json({
+      success: true,
+      message: "Email verified successfully. Registration complete!",
+      user: userResponse,
+    });
+    
   } catch (error) {
     console.error("verifyEmailOtp error:", error.message);
-    res.status(500).json({ message: "Internal server error." });
+    res.status(500).json({ message: "Internal server error during verification." });
   }
 };
 
@@ -674,7 +662,7 @@ export const verifyOTPForgotPassword = async (req, res) => {
     res.status(500).json({ message: "Internal server error." });
   }
 };
-
+ 
 export const resetPassword = async (req, res) => {
   const { email, newPassword } = req.body;
 
