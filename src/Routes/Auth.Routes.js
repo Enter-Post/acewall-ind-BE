@@ -32,6 +32,7 @@ import {
 } from "../Contollers/auth.controller.js";
 import { isUser } from "../middlewares/Auth.Middleware.js";
 import { upload } from "../lib/multer.config.js";
+import { deleteUser } from "../Contollers/UserDelete.controller.js";
 // import { checkRole, isAllowed } from "../Middlewares/admins.Middleware.js";
 const router = express.Router();
 
@@ -75,4 +76,7 @@ router.patch("/verify-document/:userId/:documentId", verifyTeacherDocument);
 
 router.post("/previewSignIn", isUser, previewSignIn)
 router.post("/previewSignOut", isUser, previewSignOut)
+
+
+router.delete("/deleteUserwithData", isUser, deleteUser)
 export default router;
