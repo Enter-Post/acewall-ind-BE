@@ -1,5 +1,35 @@
 import jwt from "jsonwebtoken";
 
+export const generateJitsiToken = (user, roomName, isTeacher) => {
+  const JITSI_APP_ID = "my-lms-app"; // You'll configure this on your Jitsi server later
+  const JITSI_SECRET = process.env.JITSI_APP_SECRET; // A different secret from your LMS secret
+
+  const payload = {
+    iss: JITSI_APP_ID,
+    aud: JITSI_APP_ID,
+    sub: "meet.yourdomain.com", // Your Jitsi domain
+    room: roomName,
+    exp: Math.floor(Date.now() / 1000) + (60 * 60), // Valid for 1 hour
+    context: {
+      user: {
+        id: user._id,
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        avatar: user.profileImg,
+        moderator: isTeacher ? "true" : "false" // Gives teacher host controls
+      },
+      features: {
+        recording: isTeacher, // Only teacher can record
+        livestreaming: isTeacher
+      }
+    }
+  };
+
+  return jwt.sign(payload, JITSI_SECRET);
+};
+
+
+
 export const generateToken = (user, role, req, res) => {
   // ----------------- Detect portal -----------------
   let host = "";

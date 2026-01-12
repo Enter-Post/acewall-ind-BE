@@ -28,8 +28,8 @@ const UserSchema = new mongoose.Schema(
       required: true,
     },
     email: { type: String, required: true, unique: true },
-    phone: { type: String, required: true },
-    homeAddress: { type: String, },
+    phone: { type: String },
+    homeAddress: { type: String },
     mailingAddress: { type: String },
     password: { type: String, required: true },
 

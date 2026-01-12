@@ -1,11 +1,27 @@
 import mongoose from "mongoose";
 
-const PostLikes = new mongoose.Schema({
-    likedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    isLiked: { type: Boolean, default: true },
-    post: { type: mongoose.Schema.Types.ObjectId, ref: "SocialPost" },
-}, { timestamps: true })
+const PostLikesSchema = new mongoose.Schema({
+    likedBy: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "User", 
+        required: true 
+    },
+    // Changed from Boolean to String to store 'like', 'love', 'haha', etc.
+    type: { 
+        type: String, 
+        enum: ["like", "love", "haha", "wow", "sad"], 
+        default: "like" 
+    },
+    post: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "SocialPost", 
+        required: true 
+    },
+}, { timestamps: true });
 
-const PostLike = mongoose.model("PostLike", PostLikes)
+// Ensure a user can only have ONE reaction per post
+PostLikesSchema.index({ likedBy: 1, post: 1 }, { unique: true });
 
-export default PostLike
+const PostLike = mongoose.model("PostLike", PostLikesSchema);
+
+export default PostLike;
