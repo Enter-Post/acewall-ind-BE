@@ -4,6 +4,7 @@ import stripe from "../config/stripe.js";
 import CourseSch from "../Models/courses.model.sch.js";
 import Enrollment from "../Models/Enrollement.model.js";
 import Purchase from "../Models/purchase.model.js"; // Assuming you have this model
+import User from "../Models/user.model.js";
 
 // Create Mobile-Only Checkout Session
 export const createMobileCheckoutSession = async (req, res) => {
@@ -31,7 +32,7 @@ export const createMobileCheckoutSession = async (req, res) => {
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             mode: "payment",
-            
+
             line_items: [
                 {
                     price_data: {
@@ -59,10 +60,10 @@ export const createMobileCheckoutSession = async (req, res) => {
             cancel_url: cancelURL,
         });
 
-res.status(200).json({
-  success: true,
-  url: session.url,
-});
+        res.status(200).json({
+            success: true,
+            url: session.url,
+        });
 
     } catch (err) {
         console.error("Mobile Stripe Checkout Error:", err);
@@ -125,7 +126,6 @@ export const createCheckoutSession = async (req, res) => {
         res.status(200).json({ success: true, url: session.url });
     } catch (err) {
         console.error("Stripe Checkout Error:", err);
-
         res.status(500).json({ error: "Failed to create checkout session", details: err.message });
     }
 };
@@ -134,44 +134,124 @@ export const createCheckoutSession = async (req, res) => {
 export const handleStripeWebhook = async (req, res) => {
     const sig = req.headers["stripe-signature"];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
- 
+
     let event;
-  
+
     try {
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-    
-      switch (event.type) {
-        case "checkout.session.completed":
-          const session = event.data.object;
-  
-          const { studentId, courseId, teacherId, teacherEarning, platformFee } = session.metadata;
-  
-          const purchase = await Purchase.create({
-            student: studentId,
-            course: courseId,
-            teacher: teacherId,
-            status: "completed",
-            stripeSessionId: session.id,
-            amount: session.amount_total / 100,
-  currency: session.currency,
-  platformFee: Number(platformFee) / 100, // ✅ convert to dollars
-  teacherEarning: Number(teacherEarning) / 100, // ✅ convert to dollars
-            paymentMethod: "stripe",
-          });
-  
-  
-          const enrollment = await Enrollment.create({
-            student: studentId,
-            course: courseId,
-          }); 
-          break;
-  
-        default:
-      }
-  
-      res.status(200).json({ received: true });
+        event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+
+        switch (event.type) {
+            case "checkout.session.completed":
+                const session = event.data.object;
+
+                const { studentId, courseId, teacherId, teacherEarning, platformFee } = session.metadata;
+
+                const purchase = await Purchase.create({
+                    student: studentId,
+                    course: courseId,
+                    teacher: teacherId,
+                    status: "completed",
+                    stripeSessionId: session.id,
+                    amount: session.amount_total / 100,
+                    currency: session.currency,
+                    platformFee: Number(platformFee) / 100, // ✅ convert to dollars
+                    teacherEarning: Number(teacherEarning) / 100, // ✅ convert to dollars
+                    paymentMethod: "stripe",
+                });
+
+
+                const enrollment = await Enrollment.create({
+                    student: studentId,
+                    course: courseId,
+                });
+                break;
+
+            default:
+        }
+
+        res.status(200).json({ received: true });
     } catch (err) {
-      res.status(400).send(`Webhook Error: ${err.message}`);
+        res.status(400).send(`Webhook Error: ${err.message}`);
     }
-  };
+};
+
+export const stripeOnboarding = async (req, res) => {
+    try {
+        const teacher = req.user;
+
+        if (!teacher.stripeAccountId) {
+            return res.status(400).json({ error: "No Stripe account ID found for this user." });
+        }
+
+        const link = await stripe.accountLinks.create({
+            account: teacher.stripeAccountId,
+            refresh_url: `${process.env.CLIENT_URL}/teacher/onboarding-failed`,
+            return_url: `${process.env.CLIENT_URL}/teacher/onboarding-success`,
+            type: "account_onboarding",
+        });
+
+        res.json({ url: link.url });
+
+    } catch (error) {
+        console.error("Error in stripeOnboarding:", error);
+        res.status(500).json({
+            error: "Failed to create onboarding link",
+            details: error.message
+        });
+    }
+}
+
+export const checkOnboarding = async (req, res) => {
+    try {
+        const teacher = req.user;
+
+        console.log(teacher, "teacher")
+
+        if (!teacher.stripeAccountId) {
+            return res.json({
+                onboarded: false,
+                reason: "Stripe account not created",
+            });
+        }
+
+        const account = await stripe.accounts.retrieve(
+            teacher.stripeAccountId
+        );
+
+        return res.json({
+            onboarded: account.payouts_enabled,
+            chargesEnabled: account.charges_enabled,
+            detailsSubmitted: account.details_submitted,
+        });
+
+    } catch (error) {
+        console.error("Stripe onboarding check error:", error);
+
+        return res.status(400).json({
+            error: "Stripe account access error",
+            hint: "Account not owned by this platform or key mismatch",
+        });
+    }
+};
+
+export const getStripeLoginLink = async (req, res) => {
+  try {
+    const teacher = req.user;
+
+    if (!teacher.stripeAccountId) {
+      return res.status(400).json({
+        error: "Stripe account not connected",
+      });
+    }
+
+    const link = await stripe.accounts.createLoginLink(
+      teacher.stripeAccountId
+    );
+
+    res.json({ url: link.url });
+
+  } catch (err) {
+    res.status(500).json({ error: "Unable to create login link" });
+  }
+};
 

@@ -39,7 +39,7 @@ export const isUser = async (req, res, next) => {
         error: true,
         message: `No auth token provided for ${portal} portal`,
       });
-    } 
+    }
 
     let decoded;
     try {
@@ -57,6 +57,8 @@ export const isUser = async (req, res, next) => {
         message: "Cross-portal token detected",
       });
     }
+
+    console.log(decoded, "decoded");
 
     req.user = decoded.user;
 

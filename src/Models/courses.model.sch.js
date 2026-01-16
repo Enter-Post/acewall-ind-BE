@@ -47,7 +47,6 @@ const SchCourseSchema = new mongoose.Schema(
         ref: "Quarter",
       },
     ],
-
     remarks: { type: String, maxlength: 500, default: null },
     isAppliedReverified: {
       status: { type: Boolean, default: false },
@@ -66,7 +65,11 @@ const SchCourseSchema = new mongoose.Schema(
       default: 0,
       min: 0
     },
-    gradingSystem: { type: String, enum: ["normalGrading", "StandardGrading"], default: "normalGrading" }
+    gradingSystem: { type: String, enum: ["normalGrading", "StandardGrading"], default: "normalGrading" },
+    paymentType: { type: String, enum: ["SUBSCRIPTION", "ONETIME", "FREE"] },
+    freeTrialMonths: { type: Number, enum: [1, 2, 3], default: 0 },
+    stripePriceId: { type: String },
+
   },
   { timestamps: true }
 );

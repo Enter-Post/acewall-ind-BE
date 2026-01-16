@@ -37,7 +37,7 @@ const UserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-
+    stripeAccountId: { type: String, defualt: null },
     documents: {
       universityTranscripts: [
         {

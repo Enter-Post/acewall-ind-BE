@@ -26,6 +26,9 @@ const EnrollmentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    stripeSessionId: { type: String },
+    subscriptionId: { type: String },
+    status: { type: String, enum: ["ACTIVE", "PAST_DUE", "CANCELLED"] }
   },
   { timestamps: true }
 );
