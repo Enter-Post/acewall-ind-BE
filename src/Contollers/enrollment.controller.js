@@ -6,6 +6,38 @@ import Submission from "../Models/submission.model.js";
 import Assessment from "../Models/Assessment.model.js";
 import Lesson from "../Models/lesson.model.sch.js";
 
+
+export const getMyEnrolledCourses = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const userRole = req.user.role; 
+
+        let courses = [];
+
+        if (userRole === "teacher" || userRole === "admin") {
+            // Teachers see courses they OWN/CREATED
+            courses = await CourseSch.find({ createdby: userId })
+                .select('courseTitle courseCode thumbnail')
+                .lean();
+        } else {
+            // Students see courses they are ENROLLED in
+            const enrollments = await Enrollment.find({ student: userId })
+                .populate('course', 'courseTitle courseCode thumbnail')
+                .lean();
+            
+            courses = enrollments
+                .filter(e => e.course) // Security check in case course was deleted
+                .map(e => e.course);
+        }
+
+        res.status(200).json(courses);
+    } catch (error) {
+        console.error("Error in getMyEnrolledCourses:", error);
+        res.status(500).json({ message: "Error fetching courses" });
+    }
+};
+
+
 export const enrollmentforTeacher = async (req, res) => {
   try {
     const { teacherId, courseId } = req.body;
