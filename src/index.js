@@ -37,7 +37,7 @@ import teacherPaymentRoutes from "./Routes/TeacherPayment.Routes.js";
 import gpaRoutes from "./Routes/GPA.Routes.js";
 import contactRoutes from "./Routes/Contact.Routes.js";
 import stripeRoutes from "./Routes/Stripe.Routes.js";
-import { handleStripeWebhook } from "./Contollers/stripe.controller.js";
+import { handleStripeWebhook, handleStripeWebhookConnect } from "./Contollers/stripe.controller.js";
 import postRoutes from "./Routes/PostRoutes/Post.Routes.js";
 import likesRoutes from "./Routes/PostRoutes/PostLikes.Routes.js";
 import postCommentRoutes from "./Routes/PostRoutes/PostComment.Routes.js";
@@ -66,7 +66,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }),
     console.log("🔑 Webhook secret configured:", !!process.env.STRIPE_WEBHOOK_SECRET);
     next();
   },
-  handleStripeWebhook
+  handleStripeWebhookConnect
 );
 
 // Add test route for webhook

@@ -58,8 +58,6 @@ export const isUser = async (req, res, next) => {
       });
     }
 
-    console.log(decoded, "decoded");
-
     req.user = decoded.user;
 
     next();
