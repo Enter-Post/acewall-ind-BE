@@ -43,6 +43,7 @@ import likesRoutes from "./Routes/PostRoutes/PostLikes.Routes.js";
 import postCommentRoutes from "./Routes/PostRoutes/PostComment.Routes.js";
 import StandardGradingRoutes from "./Routes/StandardGrading.Routes.js";
 import aiChatRoutes from "./Routes/AIChat.Routes.js";
+import couponRoutes from "./Routes/coupenCode.Routes.js"
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -137,7 +138,7 @@ app.use("/api/posts", postRoutes);
 app.use("/api/postlike", likesRoutes);
 app.use("/api/postComment", postCommentRoutes);
 app.use("/api/aichat", aiChatRoutes)
-
+app.use("/api/coupon", couponRoutes)
 
 
 

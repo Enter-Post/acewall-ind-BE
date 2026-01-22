@@ -472,7 +472,6 @@ export const createCourseSch = async (req, res) => {
       courseData.stripeProductId = product.id;
       courseData.stripePriceId = stripePrice.id;
     }
-
     // 4. Save Course to Database
     const course = new CourseSch(courseData);
     await course.save();
