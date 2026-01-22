@@ -39,7 +39,7 @@ export const isUser = async (req, res, next) => {
         error: true,
         message: `No auth token provided for ${portal} portal`,
       });
-    } 
+    }
 
     let decoded;
     try {

@@ -13,6 +13,7 @@ import nodemailer from "nodemailer";
 import Semester from "../../Models/semester.model.js";
 import Quarter from "../../Models/quarter.model.js";
 import Discussion from "../../Models/discussion.model.js";
+import stripe from "../../config/stripe.js";
 
 
 export const importCourseFromJSON = async (req, res) => {
@@ -23,19 +24,19 @@ export const importCourseFromJSON = async (req, res) => {
     // --- STEP 0: NORMALIZE DATA DIFFERENCES ---
     // School data has 'quarters' array, Learning Vault export has 'semesters[i].quarters'
     // We handle both to ensure the import is robust.
-    let rawSemesters = data.semesters || data.semester || []; 
+    let rawSemesters = data.semesters || data.semester || [];
     const rawCurriculum = data.curriculum || [];
     const rawAssessments = data.assessments || [];
     const rawDiscussions = data.discussions || [];
 
     // --- STEP 1: Create the Course with Mandatory Defaults ---
-    const { 
-      _id: oldCourseId, 
+    const {
+      _id: oldCourseId,
       curriculum, assessments, discussions, assessmentCategories,
       semesters, semester, quarter, quarters, // Remove all variations of sem/qtr
-      category, subcategory, 
-      createdAt, updatedAt, __v, createdby, 
-      ...courseBody 
+      category, subcategory,
+      createdAt, updatedAt, __v, createdby,
+      ...courseBody
     } = data;
 
     const newCourse = await CourseSch.create({
@@ -47,7 +48,7 @@ export const importCourseFromJSON = async (req, res) => {
       // Mandatory Learning Vault Defaults
       semesterbased: true,        // Always true
       price: 0,                   // Always 2$
-      published: false, 
+      published: false,
       isVerified: "pending",      // Learning vault uses "pending"/"approved"
       semester: [],               // Will populate after creation
       quarter: [],                // Will populate after creation
@@ -56,7 +57,7 @@ export const importCourseFromJSON = async (req, res) => {
     // ID Maps for relational integrity
     const semesterMap = {};
     const quarterMap = {};
-    const categoryMap = {}; 
+    const categoryMap = {};
     const chapterMap = {};
     const lessonMap = {};
 
@@ -66,14 +67,14 @@ export const importCourseFromJSON = async (req, res) => {
 
     for (const sem of rawSemesters) {
       const { _id: oldSemId, quarters: nestedQuarters, ...semBody } = sem;
-      
+
       const newSem = await Semester.create({
         ...semBody,
         course: newCourse._id,
         createdby: userId,
         isArchived: false
       });
-      
+
       semesterMap[oldSemId] = newSem._id;
       newSemesterIds.push(newSem._id);
 
@@ -122,7 +123,7 @@ export const importCourseFromJSON = async (req, res) => {
         ...chapBody,
         course: newCourse._id,
         createdby: userId,
-        quarter: newQuarterId 
+        quarter: newQuarterId
       });
 
       chapterMap[oldChapId] = newChapter._id;
@@ -142,11 +143,11 @@ export const importCourseFromJSON = async (req, res) => {
     // --- STEP 5: Assessments (Strip Concepts) ---
     for (const asmt of rawAssessments) {
       const { _id: oldAsmtId, questions, ...asmtBody } = asmt;
-      
+
       // Filter out the 'concept' field from questions as requested
       const cleanedQuestions = questions?.map(({ _id, concept, ...q }) => ({
-          ...q,
-          files: q.files?.map(({ _id: fId, ...f }) => f) || []
+        ...q,
+        files: q.files?.map(({ _id: fId, ...f }) => f) || []
       })) || [];
 
       await Assessment.create({
@@ -407,31 +408,28 @@ export const createCourseSch = async (req, res) => {
     requirements,
     published,
     price,
-    // courseType,
+    paymentType,
+    freeTrialMonths
   } = req.body;
 
   const files = req.files;
 
   try {
-    // ✅ Upload thumbnail
+    // 1. Handle Thumbnail Upload
     let thumbnail = { url: "", filename: "" };
-    if (files.thumbnail && files.thumbnail[0]) {
-      const uploadResult = await uploadToCloudinary(
-        files.thumbnail[0].buffer,
-        "course_thumbnails"
-      );
+    if (files?.thumbnail && files.thumbnail[0]) {
+      const uploadResult = await uploadToCloudinary(files.thumbnail[0].buffer, "course_thumbnails");
       thumbnail = {
         url: uploadResult.secure_url,
         filename: files.thumbnail[0].originalname,
       };
     }
 
-    // ✅ Parse JSON fields
-    const parsedTeachingPoints = JSON.parse(teachingPoints);
-    const parsedRequirements = JSON.parse(requirements);
+    // 2. Prepare Base Course Data
+    const parsedTeachingPoints = teachingPoints ? JSON.parse(teachingPoints) : [];
+    const parsedRequirements = requirements ? JSON.parse(requirements) : [];
 
-    // ✅ Create course
-    const course = await CourseSch.create({
+    const courseData = {
       courseTitle,
       category,
       subcategory,
@@ -442,16 +440,48 @@ export const createCourseSch = async (req, res) => {
       teachingPoints: parsedTeachingPoints,
       requirements: parsedRequirements,
       createdby,
-      price,
       published,
-      price,
-      // courseType,
-      // documents,
-    });
+      paymentType,
+    };
+
+    // 3. Conditional Stripe and Pricing Logic
+    if (paymentType !== "FREE") {
+      // Create Stripe Product
+      const product = await stripe.products.create({
+        name: courseTitle,
+        description: courseDescription,
+      });
+
+      // Prepare Stripe Price configuration
+      const priceInCents = Math.round(parseFloat(price) * 100);
+      const stripePriceConfig = {
+        product: product.id,
+        unit_amount: priceInCents,
+        currency: 'usd',
+      };
+
+      if (paymentType === "SUBSCRIPTION") {
+        stripePriceConfig.recurring = { interval: "day" };
+        courseData.freeTrialMonths = Number(freeTrialMonths || 0);
+      }
+
+      const stripePrice = await stripe.prices.create(stripePriceConfig);
+
+      // Map Stripe/Price info to course data
+      courseData.price = parseFloat(price);
+      courseData.stripeProductId = product.id;
+      courseData.stripePriceId = stripePrice.id;
+    }
+    // 4. Save Course to Database
+    const course = new CourseSch(courseData);
+    await course.save();
+
+    // 5. Auto-enroll creator
     await Enrollment.create({ student: createdby, course: course._id });
+
     res.status(201).json({ course, message: "Course created successfully" });
   } catch (error) {
-    console.log("error in createCourseSch", error);
+    console.error("Error in createCourseSch:", error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -892,6 +922,8 @@ export const getunPurchasedCourseByIdSch = async (req, res) => {
           requirements: 1,
           chapters: 1,
           price: 1,
+          paymentType: 1,
+          freeTrialMonths: 1,
         },
       },
     ]);

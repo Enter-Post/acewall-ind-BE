@@ -47,7 +47,6 @@ const SchCourseSchema = new mongoose.Schema(
         ref: "Quarter",
       },
     ],
-
     remarks: { type: String, maxlength: 500, default: null },
     isAppliedReverified: {
       status: { type: Boolean, default: false },
@@ -62,70 +61,16 @@ const SchCourseSchema = new mongoose.Schema(
     },
     price: {
       type: Number,
-      required: false,
       default: 0,
-      min: 0
     },
-    gradingSystem: { type: String, enum: ["normalGrading", "StandardGrading"], default: "normalGrading" }
+    gradingSystem: { type: String, enum: ["normalGrading", "StandardGrading"], default: "normalGrading" },
+    paymentType: { type: String, enum: ["SUBSCRIPTION", "ONETIME", "FREE"] },
+    freeTrialMonths: { type: Number },
+    stripePriceId: { type: String },
+    stripeProductId: { type: String },
   },
   { timestamps: true }
 );
-
-// Custom validation for documents
-SchCourseSchema.pre("validate", function (next) {
-
-  // const docs = this.documents || {};
-  // const type = this.courseType;
-
-  // Helper to check if a document is present (any field filled)
-  // function isDocPresent(doc) {
-  //   return doc && (doc.url || doc.publicId || doc.filename);
-  // }
-
-  // Helper to check if all fields are present for a document
-  // function isDocComplete(doc) {
-  //   return doc && doc.url && doc.publicId && doc.filename;
-  // }
-
-  // If any document is present, all its fields must be present
-  // for (const key of ["governmentId", "resume", "certificate", "transcript"]) {
-  //   if (isDocPresent(docs[key]) && !isDocComplete(docs[key])) {
-  //     return next(
-  //       new Error(
-  //         `All fields (url, publicId, filename) are required for ${key} if any field is provided.`
-  //       )
-  //     );
-  //   }
-  // }
-
-  // For credit course: all documents required
-  // if (type === "credit") {
-  //   for (const key of ["governmentId", "resume", "certificate", "transcript"]) {
-  //     if (!isDocComplete(docs[key])) {
-  //       return next(
-  //         new Error(
-  //           `All documents (governmentId, resume, certificate, transcript) are required for credit courses.`
-  //         )
-  //       );
-  //     }
-  //   }
-  // }
-
-  // For non-credit course: only resume and certificate required
-  // if (type === "non-credit") {
-  //   for (const key of ["resume", "certificate"]) {
-  //     if (!isDocComplete(docs[key])) {
-  //       return next(
-  //         new Error(
-  //           `Resume and certificate documents are required for non-credit courses.`
-  //         )
-  //       );
-  //     }
-  //   }
-  // }
-
-  next();
-});
 
 const CourseSch = mongoose.model("CourseSch", SchCourseSchema);
 export default CourseSch;

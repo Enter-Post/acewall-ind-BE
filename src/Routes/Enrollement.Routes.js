@@ -4,6 +4,7 @@ import {
   chapterDetailsStdPre,
   enrollment,
   enrollmentforTeacher,
+  getMyEnrolledCourses,
   isEnrolled,
   studenCourses,
   studentCourseDetails,
@@ -14,6 +15,8 @@ import { isUser } from "../middlewares/Auth.Middleware.js";
 import { isEnrolledMiddleware } from "../middlewares/isEnrolled.middleware.js";
 
 const router = express.Router();
+
+router.get("/my-courses", isUser, getMyEnrolledCourses);
 
 router.post("/create/:courseId", isUser, enrollment);
 router.get("/isEnrolled/:courseId", isUser, isEnrolled);

@@ -10,6 +10,7 @@ import { v2 as cloudinary } from "cloudinary";
 import Enrollment from "../Models/Enrollement.model.js";
 import mongoose from "mongoose";
 import twilio from "twilio";
+import stripe from "../config/stripe.js";
 
 export const initiateSignup = async (req, res) => {
   const {
@@ -299,6 +300,19 @@ export const verifyEmailOtp = async (req, res) => {
 
     await newUser.save();
 
+    if (otpEntry.userData.role === "teacher") {
+      const account = await stripe.accounts.create({
+        type: "express",
+        email: otpEntry.userData.email,
+        capabilities: {
+          transfers: { requested: true },
+        },
+      });
+
+      newUser.stripeAccountId = account.id;
+      await newUser.save();
+    }
+
     // 5. Delete the OTP record so it can't be reused
     await OTP.deleteOne({ email });
 
@@ -311,7 +325,7 @@ export const verifyEmailOtp = async (req, res) => {
       message: "Email verified successfully. Registration complete!",
       user: userResponse,
     });
-    
+
   } catch (error) {
     console.error("verifyEmailOtp error:", error.message);
     res.status(500).json({ message: "Internal server error during verification." });
@@ -330,14 +344,10 @@ export const verifyPhoneOtp = async (req, res) => {
     const isExpired = Date.now() > otpEntry.expiresAt;
     const isValid = await bcrypt.compare(otp, otpEntry.phoneOtp);
 
-    console.log(isExpired, "isExpired")
-    console.log(isValid, "isValid")
-
     if (!isValid || isExpired) {
       return res.status(400).json({ message: "Invalid or expired phone OTP." });
     }
 
-    // ✅ Create real user only now
     const newUser = new User({ ...otpEntry.userData });
     await newUser.save();
 
@@ -491,6 +501,8 @@ export const login = async (req, res) => {
     }
 
     const user = await User.findOne({ email });
+
+    console.log(user, "user in the login")
     if (!user) {
       return res.status(400).json({
         error: true,
@@ -662,7 +674,7 @@ export const verifyOTPForgotPassword = async (req, res) => {
     res.status(500).json({ message: "Internal server error." });
   }
 };
- 
+
 export const resetPassword = async (req, res) => {
   const { email, newPassword } = req.body;
 

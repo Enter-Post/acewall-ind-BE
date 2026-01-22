@@ -5,7 +5,7 @@ const purchaseSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
-  }, 
+  },
   course: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "CourseSch",
@@ -21,13 +21,19 @@ const purchaseSchema = new mongoose.Schema({
     enum: ["pending", "completed", "failed", "refunded"],
     default: "pending",
   },
-  stripePaymentIntentId: {
+  paymentIntentId: {
     type: String,
     required: false,
+  },
+  stripeCustomerId: {
+    type: String,
   },
   stripeSessionId: {
     type: String,
     unique: true,
+  },
+  subscriptionId: {
+    type: String,
   },
   amount: {
     type: Number,
@@ -41,14 +47,13 @@ const purchaseSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
-  teacherEarning: {
-    type: Number,
-    required: true,
-  },
   paymentMethod: {
     type: String,
     default: "stripe",
   },
+  paymentType: {
+    type: String,
+  }
 }, { timestamps: true });
 
 const Purchase = mongoose.model("Purchase", purchaseSchema);

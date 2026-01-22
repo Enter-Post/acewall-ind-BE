@@ -31,7 +31,6 @@ export const generateJitsiToken = (user, roomName, isTeacher) => {
 
 
 export const generateToken = (user, role, req, res) => {
-  // ----------------- Detect portal -----------------
   let host = "";
   const origin = req.get("origin");
 
@@ -46,6 +45,8 @@ export const generateToken = (user, role, req, res) => {
     host = req.hostname;
   }
 
+  console.log(user, "user in the generate token")
+
   const portal = host && host.startsWith("admin.") ? "admin" : "client";
 
   // ----------------- Cookie name based on portal -----------------
@@ -55,6 +56,7 @@ export const generateToken = (user, role, req, res) => {
   const safeUser = {
     _id: user._id,
     email: user.email,
+    stripeAccountId: user.stripeAccountId,
     name: user.name,
     role: role || user.role,
     firstName: user.firstName,
@@ -66,6 +68,8 @@ export const generateToken = (user, role, req, res) => {
     pronoun: user.pronoun,
     profileImg: user.profileImg,
   };
+
+  console.log(safeUser, "safeUser")
 
   // ----------------- Sign JWT -----------------
   const token = jwt.sign(
