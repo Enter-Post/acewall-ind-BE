@@ -295,12 +295,12 @@ export const createCheckoutSessionConnect = async (req, res) => {
 
     // FREE COURSE
     if (course.paymentType === "FREE") {
-      await Enrollment.create({ student: studentId, course: courseId });
+      await Enrollment.create({ student: studentId, course: courseId, status: "ACTIVE", enrollmentType: "FREE" });
       return res.json({ success: true, free: true });
     }
 
-const amount = course.price * 100; // cents
-const platformFee = Math.round(amount * 0.20); // 20%
+    const amount = course.price * 100; // cents
+    const platformFee = Math.round(amount * 0.20); // 20%
 
     // ONE-TIME PAYMENT
     if (course.paymentType === "ONETIME") {
@@ -376,7 +376,7 @@ const platformFee = Math.round(amount * 0.20); // 20%
 
 export const handleStripeWebhookConnect = async (req, res) => {
   const sig = req.headers["stripe-signature"];
-  
+
   let event;
 
   try {
@@ -458,6 +458,8 @@ export const handleStripeWebhookConnect = async (req, res) => {
                 student: studentId,
                 course: courseId,
                 subscriptionId: session.subscription,
+                status: "ACTIVE",
+                enrollmentType: "SUBSCRIPTION"
               });
             }
           }
@@ -478,6 +480,8 @@ export const handleStripeWebhookConnect = async (req, res) => {
             await Enrollment.create({
               student: studentId,
               course: courseId,
+              status: "ACTIVE",
+              enrollmentType: "ONETIME"
             });
           }
         }
@@ -493,10 +497,33 @@ export const handleStripeWebhookConnect = async (req, res) => {
       case "invoice.paid": {
         const invoice = event.data.object;
 
-        // Optional:
-        // - extend access
-        // - mark invoice as paid
-        // - revenue tracking
+        if (invoice.subscription) {
+          await Enrollment.updateOne(
+            { subscriptionId: invoice.subscription },
+            { $set: { status: "ACTIVE" } }
+          );
+        }
+
+        break;
+      }
+
+      case "customer.subscription.updated": {
+        const subscription = event.data.object;
+
+        let status = "ACTIVE";
+
+        if (["past_due", "unpaid"].includes(subscription.status)) {
+          status = "PAST_DUE";
+        }
+
+        if (["canceled", "incomplete_expired"].includes(subscription.status)) {
+          status = "CANCELLED";
+        }
+
+        await Enrollment.updateOne(
+          { subscriptionId: subscription.id },
+          { $set: { status } }
+        );
 
         break;
       }
@@ -509,12 +536,10 @@ export const handleStripeWebhookConnect = async (req, res) => {
       case "invoice.payment_failed": {
         const invoice = event.data.object;
 
-        const subscriptionId = invoice.subscription;
-
-        if (subscriptionId) {
+        if (invoice.subscription) {
           await Enrollment.updateOne(
-            { subscriptionId },
-            { $set: { suspended: true } }
+            { subscriptionId: invoice.subscription },
+            { $set: { status: "PAST_DUE" } }
           );
         }
 
@@ -547,3 +572,20 @@ export const handleStripeWebhookConnect = async (req, res) => {
   }
 };
 
+
+export const endTrial = async (req, res) => {
+  const { subscriptionId } = req.body;
+
+  try {
+    const subscription = await stripe.subscriptions.update(subscriptionId, {
+      trial_end: "now",
+    });
+
+    console.log(subscription, "✅ Trial ended immediately for subscription:", subscriptionId);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ Ending trial error:", err);
+    res.status(500).json({ error: "Ending trial failed" });
+  }
+}

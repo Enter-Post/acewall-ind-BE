@@ -130,6 +130,9 @@ export const unEnrollment = async (req, res) => {
 export const studentCourseDetails = async (req, res) => {
   const { enrollmentId } = req.params;
 
+
+  console.log("calling studentCourseDetails api");
+
   try {
     const enrolledData = await Enrollment.aggregate([
       {
@@ -235,12 +238,29 @@ export const studentCourseDetails = async (req, res) => {
                 },
                 chapters: 1,
                 finalAssessments: 1,
+                subscriptionId: 1,
               },
             },
           ],
         },
       },
       { $unwind: "$courseDetails" },
+      {
+        $project: {
+          enrollmentId: "$_id",
+          student: 1,
+          course: 1,
+          enrolledAt: 1,
+          progress: 1,
+          completed: 1,
+          enrollmentType: 1,
+          status: 1,
+          stripeSessionId: 1,
+          subscriptionId: 1,
+          courseDetails: 1,
+        },
+      },
+
     ]);
 
     if (!enrolledData || enrolledData.length === 0) {
