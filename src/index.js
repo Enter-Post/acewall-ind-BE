@@ -44,6 +44,7 @@ import postCommentRoutes from "./Routes/PostRoutes/PostComment.Routes.js";
 import StandardGradingRoutes from "./Routes/StandardGrading.Routes.js";
 import aiChatRoutes from "./Routes/AIChat.Routes.js";
 import couponRoutes from "./Routes/coupenCode.Routes.js"
+import wishlistRoutes from "./Routes/Wishlist.Routes.js"
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -59,12 +60,12 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.post("/api/stripe/webhook", express.raw({ type: "application/json" }),
   (req, res, next) => {
-    console.log("🚀 WEBHOOK RECEIVED!", new Date().toISOString());
-    console.log("📝 Method:", req.method);
-    console.log("📝 URL:", req.url);
-    console.log("📦 Body length:", req.body?.length || 0);
-    console.log("🔐 Stripe signature present:", !!req.headers['stripe-signature']);
-    console.log("🔑 Webhook secret configured:", !!process.env.STRIPE_WEBHOOK_SECRET);
+    // console.log("🚀 WEBHOOK RECEIVED!", new Date().toISOString());
+    // console.log("📝 Method:", req.method);
+    // console.log("📝 URL:", req.url);
+    // console.log("📦 Body length:", req.body?.length || 0);
+    // console.log("🔐 Stripe signature present:", !!req.headers['stripe-signature']);
+    // console.log("🔑 Webhook secret configured:", !!process.env.STRIPE_WEBHOOK_SECRET);
     next();
   },
   handleStripeWebhookConnect
@@ -139,6 +140,7 @@ app.use("/api/postlike", likesRoutes);
 app.use("/api/postComment", postCommentRoutes);
 app.use("/api/aichat", aiChatRoutes)
 app.use("/api/coupon", couponRoutes)
+app.use("/api/wishlist", wishlistRoutes)
 
 
 

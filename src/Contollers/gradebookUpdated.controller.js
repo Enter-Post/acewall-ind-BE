@@ -49,11 +49,21 @@ export const getStudentGradebooksFormatted = async (req, res) => {
   try {
     const studentId = req.user._id;
 
+    console.log("this is working")
+
     const gradingScale = await GradingScale.findOne({});
     const gpaScale = await GPA.findOne({});
     const standardScale = await StandardGrading.findOne({});
 
+    console.log(studentId, "studentId")
+    console.log(gradingScale, "gradingScale")
+    console.log(gpaScale, "gpaScale")
+    console.log(standardScale, "standardScale")
+
     const gradebooks = await Gradebook.find({ studentId });
+
+    console.log(gradebooks, "gradebooks")
+
 
     if (!gradebooks || gradebooks.length === 0) {
       return res.json({
@@ -269,7 +279,7 @@ export const getStudentCourseAnalytics = async (req, res) => {
     }
 
     // --- SYNCHRONIZED CALCULATION LOGIC ---
-    
+
     // 1. TRUE Overall Average (Sum of Points / Sum of Max)
     const totalEarned = allItems.reduce((acc, item) => acc + (item.studentPoints || 0), 0);
     const totalPossible = allItems.reduce((acc, item) => acc + (item.maxPoints || 0), 0);
@@ -279,8 +289,8 @@ export const getStudentCourseAnalytics = async (req, res) => {
     const recentWindow = 5;
     const trendItems = allItems.slice(-recentWindow);
     const recentAvg = trendItems.reduce(
-        (acc, item) => acc + ((item.studentPoints / (item.maxPoints || 1)) * 100),
-        0
+      (acc, item) => acc + ((item.studentPoints / (item.maxPoints || 1)) * 100),
+      0
     ) / trendItems.length;
 
     const trendDiff = recentAvg - currentOverallAvg;
@@ -303,7 +313,7 @@ export const getStudentCourseAnalytics = async (req, res) => {
       count: categories[cat].count,
     })).sort((a, b) => b.average - a.average); // Best to Worst
 
-    const weakest = categoryPerformance[categoryPerformance.length - 1]; 
+    const weakest = categoryPerformance[categoryPerformance.length - 1];
     const best = categoryPerformance[0];
 
     return res.json({
@@ -322,10 +332,10 @@ export const getStudentCourseAnalytics = async (req, res) => {
         projectedFinalScore: Math.min(100, projectedScore).toFixed(1),
         sampleSize: trendItems.length,
         weakestCategory: weakest ? {
-              name: weakest.category,
-              average: weakest.average.toFixed(1),
-              gap: (best.average - weakest.average).toFixed(1),
-            } : null,
+          name: weakest.category,
+          average: weakest.average.toFixed(1),
+          gap: (best.average - weakest.average).toFixed(1),
+        } : null,
       },
       charts: {
         lineChart: allItems.map((item, i) => ({
@@ -407,19 +417,19 @@ export const getGradebooksOfCourseFormatted = async (req, res) => {
           const semesterGrade =
             gradingType === "normalGrading"
               ? {
-                  grade: semPercent,
-                  letterGrade: getLetterFromScale(semPercent, gradingScale),
-                }
+                grade: semPercent,
+                letterGrade: getLetterFromScale(semPercent, gradingScale),
+              }
               : (() => {
-                  const sg = getStandardGrade(semPercent, standardScale);
-                  return {
-                    standardGrade: {
-                      grade: semPercent,
-                      points: sg.points ?? 0,
-                      remarks: sg.remarks ?? "",
-                    },
-                  };
-                })();
+                const sg = getStandardGrade(semPercent, standardScale);
+                return {
+                  standardGrade: {
+                    grade: semPercent,
+                    points: sg.points ?? 0,
+                    remarks: sg.remarks ?? "",
+                  },
+                };
+              })();
 
           return {
             semesterId: sem.semesterId,
@@ -432,20 +442,20 @@ export const getGradebooksOfCourseFormatted = async (req, res) => {
               const quarterGrade =
                 gradingType === "normalGrading"
                   ? {
-                      grade: qPercent,
-                      gpa: getGPAFromScale(qPercent, gpaScale),
-                      letterGrade: getLetterFromScale(qPercent, gradingScale),
-                    }
+                    grade: qPercent,
+                    gpa: getGPAFromScale(qPercent, gpaScale),
+                    letterGrade: getLetterFromScale(qPercent, gradingScale),
+                  }
                   : (() => {
-                      const sg = getStandardGrade(qPercent, standardScale);
-                      return {
-                        standardGrade: {
-                          grade: qPercent,
-                          points: sg.points ?? 0,
-                          remarks: sg.remarks ?? "",
-                        },
-                      };
-                    })();
+                    const sg = getStandardGrade(qPercent, standardScale);
+                    return {
+                      standardGrade: {
+                        grade: qPercent,
+                        points: sg.points ?? 0,
+                        remarks: sg.remarks ?? "",
+                      },
+                    };
+                  })();
 
               return {
                 quarterId: qt.quarterId,
@@ -581,19 +591,19 @@ export const getGradebooksOfStudentCourseFormatted = async (req, res) => {
         const semesterGrade =
           gradingType === "normalGrading"
             ? {
-                grade: semPercent,
-                letterGrade: getLetterFromScale(semPercent, gradingScale),
-              }
+              grade: semPercent,
+              letterGrade: getLetterFromScale(semPercent, gradingScale),
+            }
             : (() => {
-                const sg = getStandardGrade(semPercent, standardScale);
-                return {
-                  standardGrade: {
-                    grade: semPercent,
-                    points: sg.points ?? 0,
-                    remarks: sg.remarks ?? "",
-                  },
-                };
-              })();
+              const sg = getStandardGrade(semPercent, standardScale);
+              return {
+                standardGrade: {
+                  grade: semPercent,
+                  points: sg.points ?? 0,
+                  remarks: sg.remarks ?? "",
+                },
+              };
+            })();
 
         return {
           semesterId: sem.semesterId,
@@ -606,20 +616,20 @@ export const getGradebooksOfStudentCourseFormatted = async (req, res) => {
             const quarterGrade =
               gradingType === "normalGrading"
                 ? {
-                    grade: qPercent,
-                    gpa: getGPAFromScale(qPercent, gpaScale),
-                    letterGrade: getLetterFromScale(qPercent, gradingScale),
-                  }
+                  grade: qPercent,
+                  gpa: getGPAFromScale(qPercent, gpaScale),
+                  letterGrade: getLetterFromScale(qPercent, gradingScale),
+                }
                 : (() => {
-                    const sg = getStandardGrade(qPercent, standardScale);
-                    return {
-                      standardGrade: {
-                        grade: qPercent,
-                        points: sg.points ?? 0,
-                        remarks: sg.remarks ?? "",
-                      },
-                    };
-                  })();
+                  const sg = getStandardGrade(qPercent, standardScale);
+                  return {
+                    standardGrade: {
+                      grade: qPercent,
+                      points: sg.points ?? 0,
+                      remarks: sg.remarks ?? "",
+                    },
+                  };
+                })();
 
             const assessments = (qt.items || []).map((item) => ({
               assessmentId: item.itemId,
@@ -697,98 +707,98 @@ export const getGradebooksOfStudentCourseFormatted = async (req, res) => {
 };
 
 export const getTeacherStudentAnalytics = async (req, res) => {
-    try {
-        const { courseId, studentId } = req.params;
+  try {
+    const { courseId, studentId } = req.params;
 
-        const course = await CourseSch.findById(courseId).lean().select("courseTitle");
-        const gradebook = await Gradebook.findOne({ courseId, studentId }).lean();
+    const course = await CourseSch.findById(courseId).lean().select("courseTitle");
+    const gradebook = await Gradebook.findOne({ courseId, studentId }).lean();
 
-        if (!gradebook || !course) {
-            return res.status(404).json({ message: "Data not found." });
-        }
-
-        let allItems = [];
-        if (gradebook.courseItems?.length > 0) {
-            allItems = [...gradebook.courseItems];
-        } else if (gradebook.semesters) {
-            gradebook.semesters.forEach(sem => {
-                sem.quarters?.forEach(q => { if (q.items) allItems.push(...q.items); });
-            });
-        }
-
-        if (allItems.length === 0) {
-            return res.json({ message: "No graded items found.", summary: { currentPercentage: 0 }, charts: { lineChart: [], categoryPerformance: [] } });
-        }
-
-        // --- SYNCHRONIZED CALCULATION LOGIC (IDENTICAL TO STUDENT) ---
-
-        // 1. TRUE Overall Average
-        const totalEarned = allItems.reduce((acc, item) => acc + (item.studentPoints || 0), 0);
-        const totalPossible = allItems.reduce((acc, item) => acc + (item.maxPoints || 0), 0);
-        const currentOverallAvg = totalPossible > 0 ? (totalEarned / totalPossible) * 100 : 0;
-
-        // 2. Trend & Momentum Logic (Last 5 submissions)
-        const recentWindow = 5;
-        const trendItems = allItems.slice(-recentWindow);
-        const recentAvg = trendItems.reduce(
-            (acc, item) => acc + ((item.studentPoints / (item.maxPoints || 1)) * 100),
-            0
-        ) / trendItems.length;
-
-        const trendDiff = recentAvg - currentOverallAvg;
-        const projectedScore = recentAvg * 0.6 + currentOverallAvg * 0.4;
-
-        // 3. Category Mastery
-        const categories = {};
-        allItems.forEach(item => {
-            const cat = item.categoryName || "Assessment";
-            if (!categories[cat]) categories[cat] = { totalObtained: 0, totalMax: 0, count: 0 };
-            categories[cat].totalObtained += (item.studentPoints || 0);
-            categories[cat].totalMax += (item.maxPoints || 0);
-            categories[cat].count += 1;
-        });
-
-        const categoryPerformance = Object.keys(categories).map(cat => ({
-            category: cat,
-            average: (categories[cat].totalObtained / (categories[cat].totalMax || 1)) * 100,
-            count: categories[cat].count
-        })).sort((a, b) => b.average - a.average);
-
-        const weakest = categoryPerformance[categoryPerformance.length - 1];
-        const best = categoryPerformance[0];
-
-        res.json({
-            studentId,
-            courseName: course.courseTitle,
-            summary: {
-                currentPercentage: currentOverallAvg.toFixed(1),
-                totalAssessments: allItems.length,
-                pointsEarned: totalEarned,
-                pointsPossible: totalPossible
-            },
-            insights: {
-                trendStatus: trendDiff >= 0 ? "increasing" : "decreasing",
-                percentageChange: Math.abs(trendDiff).toFixed(1),
-                recentAverage: recentAvg.toFixed(1),
-                overallAverage: currentOverallAvg.toFixed(1),
-                projectedFinalScore: Math.min(100, projectedScore).toFixed(1),
-                sampleSize: trendItems.length,
-                weakestCategory: weakest ? {
-                    name: weakest.category,
-                    average: weakest.average.toFixed(1),
-                    gap: (best.average - weakest.average).toFixed(1)
-                } : null
-            },
-            charts: {
-                lineChart: allItems.map((item, i) => ({
-                    name: item.title || `Item ${i + 1}`,
-                    score: ((item.studentPoints / (item.maxPoints || 1)) * 100).toFixed(1)
-                })),
-                categoryPerformance
-            }
-        });
-
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    if (!gradebook || !course) {
+      return res.status(404).json({ message: "Data not found." });
     }
+
+    let allItems = [];
+    if (gradebook.courseItems?.length > 0) {
+      allItems = [...gradebook.courseItems];
+    } else if (gradebook.semesters) {
+      gradebook.semesters.forEach(sem => {
+        sem.quarters?.forEach(q => { if (q.items) allItems.push(...q.items); });
+      });
+    }
+
+    if (allItems.length === 0) {
+      return res.json({ message: "No graded items found.", summary: { currentPercentage: 0 }, charts: { lineChart: [], categoryPerformance: [] } });
+    }
+
+    // --- SYNCHRONIZED CALCULATION LOGIC (IDENTICAL TO STUDENT) ---
+
+    // 1. TRUE Overall Average
+    const totalEarned = allItems.reduce((acc, item) => acc + (item.studentPoints || 0), 0);
+    const totalPossible = allItems.reduce((acc, item) => acc + (item.maxPoints || 0), 0);
+    const currentOverallAvg = totalPossible > 0 ? (totalEarned / totalPossible) * 100 : 0;
+
+    // 2. Trend & Momentum Logic (Last 5 submissions)
+    const recentWindow = 5;
+    const trendItems = allItems.slice(-recentWindow);
+    const recentAvg = trendItems.reduce(
+      (acc, item) => acc + ((item.studentPoints / (item.maxPoints || 1)) * 100),
+      0
+    ) / trendItems.length;
+
+    const trendDiff = recentAvg - currentOverallAvg;
+    const projectedScore = recentAvg * 0.6 + currentOverallAvg * 0.4;
+
+    // 3. Category Mastery
+    const categories = {};
+    allItems.forEach(item => {
+      const cat = item.categoryName || "Assessment";
+      if (!categories[cat]) categories[cat] = { totalObtained: 0, totalMax: 0, count: 0 };
+      categories[cat].totalObtained += (item.studentPoints || 0);
+      categories[cat].totalMax += (item.maxPoints || 0);
+      categories[cat].count += 1;
+    });
+
+    const categoryPerformance = Object.keys(categories).map(cat => ({
+      category: cat,
+      average: (categories[cat].totalObtained / (categories[cat].totalMax || 1)) * 100,
+      count: categories[cat].count
+    })).sort((a, b) => b.average - a.average);
+
+    const weakest = categoryPerformance[categoryPerformance.length - 1];
+    const best = categoryPerformance[0];
+
+    res.json({
+      studentId,
+      courseName: course.courseTitle,
+      summary: {
+        currentPercentage: currentOverallAvg.toFixed(1),
+        totalAssessments: allItems.length,
+        pointsEarned: totalEarned,
+        pointsPossible: totalPossible
+      },
+      insights: {
+        trendStatus: trendDiff >= 0 ? "increasing" : "decreasing",
+        percentageChange: Math.abs(trendDiff).toFixed(1),
+        recentAverage: recentAvg.toFixed(1),
+        overallAverage: currentOverallAvg.toFixed(1),
+        projectedFinalScore: Math.min(100, projectedScore).toFixed(1),
+        sampleSize: trendItems.length,
+        weakestCategory: weakest ? {
+          name: weakest.category,
+          average: weakest.average.toFixed(1),
+          gap: (best.average - weakest.average).toFixed(1)
+        } : null
+      },
+      charts: {
+        lineChart: allItems.map((item, i) => ({
+          name: item.title || `Item ${i + 1}`,
+          score: ((item.studentPoints / (item.maxPoints || 1)) * 100).toFixed(1)
+        })),
+        categoryPerformance
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };

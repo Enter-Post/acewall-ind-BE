@@ -300,18 +300,16 @@ export const verifyEmailOtp = async (req, res) => {
 
     await newUser.save();
 
-    if (otpEntry.userData.role === "teacher") {
-      const account = await stripe.accounts.create({
-        type: "express",
-        email: otpEntry.userData.email,
-        capabilities: {
-          transfers: { requested: true },
-        },
-      });
+    const account = await stripe.accounts.create({
+      type: "express",
+      email: otpEntry.userData.email,
+      capabilities: {
+        transfers: { requested: true },
+      },
+    });
 
-      newUser.stripeAccountId = account.id;
-      await newUser.save();
-    }
+    newUser.stripeAccountId = account.id;
+    await newUser.save();
 
     // 5. Delete the OTP record so it can't be reused
     await OTP.deleteOne({ email });
