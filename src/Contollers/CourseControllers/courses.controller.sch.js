@@ -461,7 +461,7 @@ export const createCourseSch = async (req, res) => {
       };
 
       if (paymentType === "SUBSCRIPTION") {
-        stripePriceConfig.recurring = { interval: "day" };
+        stripePriceConfig.recurring = { interval: "month" };
         courseData.freeTrialMonths = Number(freeTrialMonths || 0);
       }
 

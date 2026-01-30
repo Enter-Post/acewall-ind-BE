@@ -11,7 +11,7 @@ const io = new Server(server, {
   cors: {
     origin: [
       'https://acewall.vercel.app',
-       'https://acewallscholars.vercel.app',
+      'https://acewallscholars.vercel.app',
       'https://acewall-admin.vercel.app',
       'http://localhost:5173',
       'http://localhost:5174',
@@ -32,7 +32,7 @@ export const getRecieverSocketId = (userId) => {
 };
 
 io.on("connection", (socket) => {
-  console.log(`User connected: ${socket.id}`);
+  // console.log(`User connected: ${socket.id}`);
 
   const userId = socket.handshake.query.userId;
 
@@ -70,10 +70,5 @@ io.on("connection", (socket) => {
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });
 });
-
-// For debugging
-setInterval(() => {
-  console.log("Current online users:", Object.keys(userSocketMap).length);
-}, 60000); // Log every minute
 
 export { app, server, io };

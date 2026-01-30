@@ -19,4 +19,7 @@ router.get("/getStripeLoginLink", isUser, getStripeLoginLink)
 
 router.post("/create-checkout-session-connect", isUser, createCheckoutSessionConnect)
 
+/////for test only
+// router.post("/advance-test-clock", advanceTestClock)
+
 export default router;

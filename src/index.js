@@ -59,12 +59,12 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.post("/api/stripe/webhook", express.raw({ type: "application/json" }),
   (req, res, next) => {
-    console.log("🚀 WEBHOOK RECEIVED!", new Date().toISOString());
-    console.log("📝 Method:", req.method);
-    console.log("📝 URL:", req.url);
-    console.log("📦 Body length:", req.body?.length || 0);
-    console.log("🔐 Stripe signature present:", !!req.headers['stripe-signature']);
-    console.log("🔑 Webhook secret configured:", !!process.env.STRIPE_WEBHOOK_SECRET);
+    // console.log("🚀 WEBHOOK RECEIVED!", new Date().toISOString());
+    // console.log("📝 Method:", req.method);
+    // console.log("📝 URL:", req.url);
+    // console.log("📦 Body length:", req.body?.length || 0);
+    // console.log("🔐 Stripe signature present:", !!req.headers['stripe-signature']);
+    // console.log("🔑 Webhook secret configured:", !!process.env.STRIPE_WEBHOOK_SECRET);
     next();
   },
   handleStripeWebhookConnect
