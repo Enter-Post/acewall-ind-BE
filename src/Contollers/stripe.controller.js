@@ -673,10 +673,12 @@ export const handleStripeWebhookConnect = async (req, res) => {
         // ================================
         let receiptUrl = null;
         let subscriptionInvoiceId = null;
+        let invoicePdf = null;
+        let status = null;
 
         if (paymentType === "ONETIME" && session.payment_intent) {
-          // ✅ ONE-TIME PAYMENT: Get receipt from payment intent
           try {
+            status = "paid";
             const paymentIntent = await stripe.paymentIntents.retrieve(
               session.payment_intent,
               { expand: ["latest_charge"] }
@@ -694,14 +696,18 @@ export const handleStripeWebhookConnect = async (req, res) => {
             console.error("⚠️ Error retrieving payment intent:", error.message);
           }
         } else if (paymentType === "SUBSCRIPTION" && session.subscription) {
-          // ✅ SUBSCRIPTION: Get receipt from subscription's latest invoice
           try {
             const subscription = await stripe.subscriptions.retrieve(
               session.subscription,
               { expand: ["latest_invoice"] }
             );
 
-            console.log(subscription, "subscription")
+            const invoice = subscription.latest_invoice;
+
+            if (invoice) {
+              receiptUrl = invoice.hosted_invoice_url;
+              invoicePdf = invoice.invoice_pdf;
+            }
 
             console.log("📋 Subscription details:", {
               status: subscription.status,
@@ -710,11 +716,12 @@ export const handleStripeWebhookConnect = async (req, res) => {
             });
 
             if (subscription.latest_invoice) {
-              const latestInvoice = typeof subscription.latest_invoice === 'object'
+              const latestInvoice = typeof subscription.latest_invoice === 'string'
                 ? await stripe.invoices.retrieve(subscription.latest_invoice)
                 : subscription.latest_invoice;
 
-              console.log(latestInvoice, "latestInvoice checking")
+              receiptUrl = latestInvoice.hosted_invoice_url;
+              invoicePdf = latestInvoice.invoice_pdf;
 
               // Store the subscription's invoice ID
               subscriptionInvoiceId = latestInvoice.id;
@@ -722,28 +729,16 @@ export const handleStripeWebhookConnect = async (req, res) => {
               console.log("📋 Latest invoice:", {
                 id: latestInvoice.id,
                 status: latestInvoice.status,
-                paid: latestInvoice.paid,
                 hasCharge: !!latestInvoice.charge,
                 amountPaid: latestInvoice.amount_paid / 100
               });
-
-              const charge = await stripe.charges.retrieve(latestInvoice.charge);
-                receiptUrl = charge.receipt_url;
-                console.log("✅ Subscription receipt captured at checkout:", receiptUrl);
-
-              // Only get receipt if invoice was actually paid (not $0 trial invoice)
-              // if (latestInvoice.paid && latestInvoice.charge && latestInvoice.amount_paid > 0) {
-              //   const charge = await stripe.charges.retrieve(latestInvoice.charge);
-              //   receiptUrl = charge.receipt_url;
-              //   console.log("✅ Subscription receipt captured at checkout:", receiptUrl);
-              // } else {
-              //   console.log("ℹ️ No charge yet (trial period or $0 invoice). Receipt will be captured on first payment.");
-              // }
             }
           } catch (error) {
             console.error("⚠️ Error retrieving subscription details:", error.message);
           }
         }
+
+        console.log(session.amount_total, "session.amount_totallllllll")
 
         // ================================
         // CREATE OR UPDATE PURCHASE
@@ -759,7 +754,6 @@ export const handleStripeWebhookConnect = async (req, res) => {
             stripeCustomerId: session.customer,
             amount: session.amount_total ? session.amount_total / 100 : 0,
             currency: session.currency,
-            status: paymentType === "SUBSCRIPTION" && session.subscription ? "trial" : "paid",
             paymentMethod: "stripe",
             paymentType,
             // Use subscription invoice ID for subscriptions, manual invoice for one-time
@@ -1057,6 +1051,7 @@ export const handleStripeWebhookConnect = async (req, res) => {
         break;
       }
 
+
       /**
        * ================================
        * SUBSCRIPTION UPDATED
@@ -1088,6 +1083,8 @@ export const handleStripeWebhookConnect = async (req, res) => {
 
         break;
       }
+
+        return
 
       /**
        * ================================
@@ -1151,20 +1148,17 @@ export const handleStripeWebhookConnect = async (req, res) => {
   }
 };
 
-
-export const endTrial = async (req, res) => {
-  const { subscriptionId } = req.body;
-
+export const getpurchases = async (req, res) => {
   try {
-    const subscription = await stripe.subscriptions.update(subscriptionId, {
-      trial_end: "now",
-    });
+    const userId  = req.user._id;
 
-    console.log(subscription, "✅ Trial ended immediately for subscription:", subscriptionId);
+    const purchases = await Purchase.find({ student: userId })
+      .populate("course", "courseTitle thumbnail price") // Adjust fields based on your Course schema
+      .populate("teacher", "name email")
+      .sort({ createdAt: -1 });
 
-    res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Ending trial error:", err);
-    res.status(500).json({ error: "Ending trial failed" });
+    res.status(200).json({ success: true, data: purchases });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 }
