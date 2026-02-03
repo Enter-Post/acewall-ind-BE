@@ -12,7 +12,17 @@ import mongoose from "mongoose";
 import twilio from "twilio";
 import stripe from "../config/stripe.js";
 
-export const initiateSignup = async (req, res) => {
+// Import error classes
+import {
+  ValidationError,
+  AuthenticationError,
+  NotFoundError,
+  ConflictError,
+  ExternalServiceError,
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+
+export const initiateSignup = asyncHandler(async (req, res, next) => {
   const {
     firstName,
     middleName,
@@ -24,27 +34,22 @@ export const initiateSignup = async (req, res) => {
     password,
   } = req.body;
 
-  try {
-    // 1. Removed 'phone' from the required fields check
-    if (
-      !firstName ||
-      !lastName ||
-      !email ||
-      !password ||
-      !role
-    ) {
-      return res
-        .status(400)
-        .json({ message: "All required fields must be filled." });
-    }
+  // 1. Removed 'phone' from the required fields check
+  if (
+    !firstName ||
+    !lastName ||
+    !email ||
+    !password ||
+    !role
+  ) {
+    throw new ValidationError("All required fields must be filled.", "VAL_001");
+  }
 
-    console.log("working here 1");
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res
-        .status(400)
-        .json({ message: "User with this email already exists." });
-    }
+  console.log("working here 1");
+  const existingUser = await User.findOne({ email });
+  if (existingUser) {
+    throw new ConflictError("User with this email already exists.", "AUTH_005");
+  }
 
     function generateOTP(length = 6) {
       const digits = "0123456789";
@@ -143,29 +148,25 @@ export const initiateSignup = async (req, res) => {
 
     console.log("working here 5");
 
-    res.status(201).json({ message: "OTP sent to your email." });
-  } catch (error) {
-    console.error("Signup initiation error:", error.message);
-    res.status(500).json({ message: "Internal server error." });
-  }
-};
+    res.status(201).json({ success: true, message: "OTP sent to your email." });
+});
 
 
-export const resendOTP = async (req, res) => {
+export const resendOTP = asyncHandler(async (req, res, next) => {
   const { email } = req.body;
 
-  try {
-    if (!email) {
-      return res.status(400).json({ message: "Email is required." });
-    }
+  if (!email) {
+    throw new ValidationError("Email is required.", "VAL_001");
+  }
 
-    const otpRecord = await OTP.findOne({ email });
+  const otpRecord = await OTP.findOne({ email });
 
-    if (!otpRecord) {
-      return res.status(404).json({
-        message: "No OTP record found for this email. Please sign up again.",
-      });
-    }
+  if (!otpRecord) {
+    throw new NotFoundError(
+      "No OTP record found for this email. Please sign up again.",
+      "AUTH_006"
+    );
+  }
 
     function generateOTP(length = 6) {
       const digits = "0123456789";
@@ -243,35 +244,30 @@ export const resendOTP = async (req, res) => {
     });
 
 
-    res.status(200).json({ message: "New OTP has been sent to your email." });
-  } catch (error) {
-    console.error("Resend OTP error:", error.message);
-    res.status(500).json({ message: "Internal server error." });
-  }
-};
+    res.status(200).json({ success: true, message: "New OTP has been sent to your email." });
+});
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_ACCOUNT_TOKEN
 );
 
-export const verifyEmailOtp = async (req, res) => {
+export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
   const { email, otp } = req.body;
 
-  try {
-    // 1. Find the OTP record
-    const otpEntry = await OTP.findOne({ email });
-    if (!otpEntry) {
-      return res.status(400).json({ message: "OTP not found or already used." });
-    }
+  // 1. Find the OTP record
+  const otpEntry = await OTP.findOne({ email });
+  if (!otpEntry) {
+    throw new ValidationError("OTP not found or already used.", "AUTH_006");
+  }
 
-    // 2. Check validity and expiration
-    const isExpired = Date.now() > otpEntry.expiresAt;
-    const isValid = await bcrypt.compare(otp, otpEntry.otp);
+  // 2. Check validity and expiration
+  const isExpired = Date.now() > otpEntry.expiresAt;
+  const isValid = await bcrypt.compare(otp, otpEntry.otp);
 
-    if (!isValid || isExpired) {
-      return res.status(400).json({ message: "Invalid or expired OTP." });
-    }
+  if (!isValid || isExpired) {
+    throw new ValidationError("Invalid or expired OTP.", "AUTH_006");
+  }
 
     // 3. Extract user data stored during the initiateSignup phase
     const {
@@ -323,12 +319,7 @@ export const verifyEmailOtp = async (req, res) => {
       message: "Email verified successfully. Registration complete!",
       user: userResponse,
     });
-
-  } catch (error) {
-    console.error("verifyEmailOtp error:", error.message);
-    res.status(500).json({ message: "Internal server error during verification." });
-  }
-};
+});
 
 export const verifyPhoneOtp = async (req, res) => {
   const { email, otp } = req.body;
@@ -489,59 +480,46 @@ export const resendPhoneOTP = async (req, res) => {
   }
 }
 
-export const login = async (req, res) => {
+export const login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
-  try {
-    if (!email || !password) {
-      return res.status(400).json({
-        message: "All fields must be filled",
-      });
-    }
-
-    const user = await User.findOne({ email });
-
-    console.log(user, "user in the login")
-    if (!user) {
-      return res.status(400).json({
-        error: true,
-        message: "Invalid Credentials",
-      });
-    }
-
-    const isAuthorized = await bcrypt.compare(password, user.password);
-    if (!isAuthorized) {
-      return res.status(401).json({
-        error: true,
-        message: "Invalid Credentials",
-      });
-    }
-
-    // ✅ Pass both req and res here
-    const token = generateToken(user, user.role, req, res);
-
-    return res.status(200).json({
-      message: "Login Successful",
-      token, // optional, since cookie is already set
-    });
-  } catch (error) {
-    console.error("error in login==>", error.message);
-    return res.status(500).json({
-      message: "Something went wrong, sorry for inconvenience",
-    });
+  
+  if (!email || !password) {
+    throw new ValidationError("All fields must be filled", "VAL_001");
   }
-};
 
-export const forgetPassword = async (req, res) => {
+  const user = await User.findOne({ email });
+
+  console.log(user, "user in the login")
+  if (!user) {
+    throw new AuthenticationError("Invalid credentials", "AUTH_001");
+  }
+
+  const isAuthorized = await bcrypt.compare(password, user.password);
+  if (!isAuthorized) {
+    throw new AuthenticationError("Invalid credentials", "AUTH_001");
+  }
+
+  // ✅ Pass both req and res here
+  const token = generateToken(user, user.role, req, res);
+
+  return res.status(200).json({
+    success: true,
+    message: "Login Successful",
+    token, // optional, since cookie is already set
+  });
+});
+
+export const forgetPassword = asyncHandler(async (req, res, next) => {
   const { email } = req.body;
 
-  try {
-    const isExist = await User.findOne({ email });
+  const isExist = await User.findOne({ email });
 
-    if (!isExist) {
-      return res.status(404).json({
-        message: "User with this email does not exist",
-      });
-    }
+  if (!isExist) {
+    throw new NotFoundError(
+      "User with this email does not exist",
+      "AUTH_007"
+    );
+  }
 
     function generateOTP(length = 6) {
       const digits = "0123456789";
@@ -628,85 +606,68 @@ export const forgetPassword = async (req, res) => {
 
 
     return res.status(200).json({
+      success: true,
       message: "OTP sent successfully",
     });
-  } catch (err) {
-    console.log("error in forget Passoword", err);
-    return res.status(500).json({
-      message: "Internal Server Error",
-    });
-  }
-};
+});
 
-export const verifyOTPForgotPassword = async (req, res) => {
+export const verifyOTPForgotPassword = asyncHandler(async (req, res, next) => {
   const { email, otp } = req.body;
 
-  try {
-    const otpEntry = await OTP.findOne({ email });
+  const otpEntry = await OTP.findOne({ email });
 
-    if (!otpEntry) {
-      return res
-        .status(400)
-        .json({ message: "OTP not found or already used." });
-    }
-
-    const isExpired = Date.now() > otpEntry.expiresAt;
-    const isValid = await bcrypt.compare(otp, otpEntry.otp);
-
-    if (!isValid || isExpired) {
-      return res.status(400).json({ message: "Invalid or expired OTP." });
-    }
-
-    await OTP.updateOne(
-      { email },
-      {
-        $set: {
-          isVerified: true,
-        },
-      }
-    );
-
-    return res.status(200).json({ message: "OTP verified successfully." });
-  } catch (error) {
-    console.error("OTP verification error:", error.message);
-    res.status(500).json({ message: "Internal server error." });
+  if (!otpEntry) {
+    throw new ValidationError("OTP not found or already used.", "AUTH_006");
   }
-};
 
-export const resetPassword = async (req, res) => {
+  const isExpired = Date.now() > otpEntry.expiresAt;
+  const isValid = await bcrypt.compare(otp, otpEntry.otp);
+
+  if (!isValid || isExpired) {
+    throw new ValidationError("Invalid or expired OTP.", "AUTH_006");
+  }
+
+  await OTP.updateOne(
+    { email },
+    {
+      $set: {
+        isVerified: true,
+      },
+    }
+  );
+
+  return res.status(200).json({ success: true, message: "OTP verified successfully." });
+});
+
+export const resetPassword = asyncHandler(async (req, res, next) => {
   const { email, newPassword } = req.body;
 
   console.log(email, newPassword);
 
-  try {
-    // Check if OTP was verified
-    const otpEntry = await OTP.findOne({ email });
+  // Check if OTP was verified
+  const otpEntry = await OTP.findOne({ email });
 
-    if (!otpEntry || !otpEntry.isVerified) {
-      return res.status(400).json({
-        message: "OTP not verified or session expired",
-      });
-    }
-
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    // Update user password
-    await User.updateOne({ email }, { password: hashedPassword });
-
-    // Clean up the OTP record
-    await OTP.deleteOne({ email });
-
-    return res.status(200).json({
-      message: "Password updated successfully",
-    });
-  } catch (error) {
-    console.error("Update password error:", error.message);
-    return res.status(500).json({
-      message: "Internal Server Error",
-    });
+  if (!otpEntry || !otpEntry.isVerified) {
+    throw new ValidationError(
+      "OTP not verified or session expired",
+      "AUTH_006"
+    );
   }
-};
+
+  // Hash the new password
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+  // Update user password
+  await User.updateOne({ email }, { password: hashedPassword });
+
+  // Clean up the OTP record
+  await OTP.deleteOne({ email });
+
+  return res.status(200).json({
+    success: true,
+    message: "Password updated successfully",
+  });
+});
 
 export const logout = async (req, res) => {
   try {

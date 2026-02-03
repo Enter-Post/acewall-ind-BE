@@ -49,6 +49,9 @@ import wishlistRoutes from "./Routes/Wishlist.Routes.js"
 import path from "path";
 import { fileURLToPath } from "url";
 
+// Error handling middleware
+import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.middleware.js";
+
 dotenv.config();
 
 const PORT = process.env.PORT || 5050;
@@ -142,10 +145,24 @@ app.use("/api/aichat", aiChatRoutes)
 app.use("/api/coupon", couponRoutes)
 app.use("/api/wishlist", wishlistRoutes)
 
+// 404 handler for undefined routes (must be after all routes)
+app.use(notFoundHandler);
+
+// Global error handler (must be last middleware)
+app.use(errorHandler);
 
 
-server.listen(PORT, () => {
-  connectDB();
+
+server.listen(PORT, async () => {
   console.log(`This app is running on localhost ${PORT}`);
   console.log(`🔗 Webhook endpoint: https://acewell-production.up.railway.app/api/stripe/webhook`);
+  
+  // Connect to database with error handling
+  try {
+    await connectDB();
+  } catch (error) {
+    console.error("❌ Failed to connect to database on startup");
+    console.error("⚠️  Server is running but database operations will fail");
+    console.error("💡 Please check your internet connection and MongoDB URI");
+  }
 });
