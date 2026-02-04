@@ -51,66 +51,66 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
     throw new ConflictError("User with this email already exists.", "AUTH_005");
   }
 
-    function generateOTP(length = 6) {
-      const digits = "0123456789";
-      let otp = "";
-      const bytes = crypto.randomBytes(length);
+  function generateOTP(length = 6) {
+    const digits = "0123456789";
+    let otp = "";
+    const bytes = crypto.randomBytes(length);
 
-      for (let i = 0; i < length; i++) {
-        otp += digits[bytes[i] % digits.length];
-      }
-
-      return otp;
+    for (let i = 0; i < length; i++) {
+      otp += digits[bytes[i] % digits.length];
     }
 
-    const hashedPassword = await bcrypt.hash(password, 11);
-    const otp = generateOTP();
-    const hashedOTP = await bcrypt.hash(otp, 10);
+    return otp;
+  }
 
-    // 2. Removed phone number formatting logic (phoneNumUpdated)
+  const hashedPassword = await bcrypt.hash(password, 11);
+  const otp = generateOTP();
+  const hashedOTP = await bcrypt.hash(otp, 10);
 
-    console.log("working here 2");
+  // 2. Removed phone number formatting logic (phoneNumUpdated)
 
-    await OTP.findOneAndUpdate(
-      { email },
-      {
-        otp: hashedOTP,
-        expiresAt: Date.now() + 10 * 60 * 1000,
-        userData: {
-          firstName,
-          middleName,
-          lastName,
-          role,
-          email,
-          // 3. Removed 'phone' from the userData object
-          homeAddress,
-          mailingAddress,
-          password: hashedPassword,
-        },
+  console.log("working here 2");
+
+  await OTP.findOneAndUpdate(
+    { email },
+    {
+      otp: hashedOTP,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      userData: {
+        firstName,
+        middleName,
+        lastName,
+        role,
+        email,
+        // 3. Removed 'phone' from the userData object
+        homeAddress,
+        mailingAddress,
+        password: hashedPassword,
       },
-      { upsert: true }
-    );
+    },
+    { upsert: true }
+  );
 
-    console.log("working here 3");
+  console.log("working here 3");
 
-    // Send OTP via email
-    const transporter = nodemailer.createTransport({
-      host: process.env.MAIL_HOST,
-      port: Number(process.env.MAIL_PORT),
-      secure: Number(process.env.MAIL_PORT) === 465,
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
+  // Send OTP via email
+  const transporter = nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: Number(process.env.MAIL_PORT),
+    secure: Number(process.env.MAIL_PORT) === 465,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
 
-    console.log("working here 4");
+  console.log("working here 4");
 
-    await transporter.sendMail({
-      from: `"OTP Verification" <${process.env.MAIL_USER}>`,
-      to: email,
-      subject: "Your OTP Code - Acewall Scholars",
-      html: `
+  await transporter.sendMail({
+    from: `"OTP Verification" <${process.env.MAIL_USER}>`,
+    to: email,
+    subject: "Your OTP Code - Acewall Scholars",
+    html: `
   <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
     <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
       
@@ -144,11 +144,11 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
     </div>
   </div>
   `,
-    });
+  });
 
-    console.log("working here 5");
+  console.log("working here 5");
 
-    res.status(201).json({ success: true, message: "OTP sent to your email." });
+  res.status(201).json({ success: true, message: "OTP sent to your email." });
 });
 
 
@@ -168,41 +168,41 @@ export const resendOTP = asyncHandler(async (req, res, next) => {
     );
   }
 
-    function generateOTP(length = 6) {
-      const digits = "0123456789";
-      let otp = "";
-      const bytes = crypto.randomBytes(length);
+  function generateOTP(length = 6) {
+    const digits = "0123456789";
+    let otp = "";
+    const bytes = crypto.randomBytes(length);
 
-      for (let i = 0; i < length; i++) {
-        otp += digits[bytes[i] % digits.length];
-      }
-
-      return otp;
+    for (let i = 0; i < length; i++) {
+      otp += digits[bytes[i] % digits.length];
     }
 
-    const otp = generateOTP();
-    const hashedOTP = await bcrypt.hash(otp, 10);
+    return otp;
+  }
 
-    otpRecord.otp = hashedOTP;
-    otpRecord.expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-    await otpRecord.save();
+  const otp = generateOTP();
+  const hashedOTP = await bcrypt.hash(otp, 10);
 
-    // Resend email
-    const transporter = nodemailer.createTransport({
-      host: process.env.MAIL_HOST,
-      port: Number(process.env.MAIL_PORT),
-      secure: Number(process.env.MAIL_PORT) === 465,
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
+  otpRecord.otp = hashedOTP;
+  otpRecord.expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  await otpRecord.save();
 
-    await transporter.sendMail({
-      from: `"OTP Verification" <${process.env.MAIL_USER}>`,
-      to: email,
-      subject: "Your New OTP Code - Acewall Scholars",
-      html: `
+  // Resend email
+  const transporter = nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: Number(process.env.MAIL_PORT),
+    secure: Number(process.env.MAIL_PORT) === 465,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
+
+  await transporter.sendMail({
+    from: `"OTP Verification" <${process.env.MAIL_USER}>`,
+    to: email,
+    subject: "Your New OTP Code - Acewall Scholars",
+    html: `
   <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
     <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
       
@@ -241,10 +241,10 @@ export const resendOTP = asyncHandler(async (req, res, next) => {
     </div>
   </div>
   `,
-    });
+  });
 
 
-    res.status(200).json({ success: true, message: "New OTP has been sent to your email." });
+  res.status(200).json({ success: true, message: "New OTP has been sent to your email." });
 });
 
 const twilioClient = twilio(
@@ -269,56 +269,56 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
     throw new ValidationError("Invalid or expired OTP.", "AUTH_006");
   }
 
-    // 3. Extract user data stored during the initiateSignup phase
-    const {
-      firstName,
-      middleName,
-      lastName,
-      role,
-      email: userEmail,
-      homeAddress,
-      mailingAddress,
-      password,
-    } = otpEntry.userData;
+  // 3. Extract user data stored during the initiateSignup phase
+  const {
+    firstName,
+    middleName,
+    lastName,
+    role,
+    email: userEmail,
+    homeAddress,
+    mailingAddress,
+    password,
+  } = otpEntry.userData;
 
-    // 4. Create the final User account
-    const newUser = new User({
-      firstName,
-      middleName,
-      lastName,
-      role,
-      email: userEmail,
-      homeAddress,
-      mailingAddress,
-      password, // This is already hashed from initiateSignup
-      isVerified: true, // Mark the user as verified
-    });
+  // 4. Create the final User account
+  const newUser = new User({
+    firstName,
+    middleName,
+    lastName,
+    role,
+    email: userEmail,
+    homeAddress,
+    mailingAddress,
+    password, // This is already hashed from initiateSignup
+    isVerified: true, // Mark the user as verified
+  });
 
-    await newUser.save();
+  await newUser.save();
 
-    const account = await stripe.accounts.create({
-      type: "express",
-      email: otpEntry.userData.email,
-      capabilities: {
-        transfers: { requested: true },
-      },
-    });
+  const account = await stripe.accounts.create({
+    type: "express",
+    email: otpEntry.userData.email,
+    capabilities: {
+      transfers: { requested: true },
+    },
+  });
 
-    newUser.stripeAccountId = account.id;
-    await newUser.save();
+  newUser.stripeAccountId = account.id;
+  await newUser.save();
 
-    // 5. Delete the OTP record so it can't be reused
-    await OTP.deleteOne({ email });
+  // 5. Delete the OTP record so it can't be reused
+  await OTP.deleteOne({ email });
 
-    // 6. Return the user data (excluding password) for the frontend session
-    const userResponse = newUser.toObject();
-    delete userResponse.password;
+  // 6. Return the user data (excluding password) for the frontend session
+  const userResponse = newUser.toObject();
+  delete userResponse.password;
 
-    res.status(200).json({
-      success: true,
-      message: "Email verified successfully. Registration complete!",
-      user: userResponse,
-    });
+  res.status(200).json({
+    success: true,
+    message: "Email verified successfully. Registration complete!",
+    user: userResponse,
+  });
 });
 
 export const verifyPhoneOtp = asyncHandler(async (req, res) => {
@@ -329,36 +329,36 @@ export const verifyPhoneOtp = asyncHandler(async (req, res) => {
     throw new ValidationError("Email not verified yet.", "AUTH_008");
   }
 
-    const isExpired = Date.now() > otpEntry.expiresAt;
-    const isValid = await bcrypt.compare(otp, otpEntry.phoneOtp);
+  const isExpired = Date.now() > otpEntry.expiresAt;
+  const isValid = await bcrypt.compare(otp, otpEntry.phoneOtp);
 
-    if (!isValid || isExpired) {
-      return res.status(400).json({ message: "Invalid or expired phone OTP." });
-    }
+  if (!isValid || isExpired) {
+    return res.status(400).json({ message: "Invalid or expired phone OTP." });
+  }
 
-    const newUser = new User({ ...otpEntry.userData });
-    await newUser.save();
+  const newUser = new User({ ...otpEntry.userData });
+  await newUser.save();
 
-    // Delete OTP entry since it's used
-    await OTP.deleteOne({ email });
+  // Delete OTP entry since it's used
+  await OTP.deleteOne({ email });
 
-    // 🔔 Send welcome email if teacher
-    if (newUser.role === "teacher" && process.env.MAIL_USER) {
-      const transporter = nodemailer.createTransport({
-        host: process.env.MAIL_HOST,
-        port: Number(process.env.MAIL_PORT),
-        secure: Number(process.env.MAIL_PORT) === 465,
-        auth: {
-          user: process.env.MAIL_USER,
-          pass: process.env.MAIL_PASS,
-        },
-      });
+  // 🔔 Send welcome email if teacher
+  if (newUser.role === "teacher" && process.env.MAIL_USER) {
+    const transporter = nodemailer.createTransport({
+      host: process.env.MAIL_HOST,
+      port: Number(process.env.MAIL_PORT),
+      secure: Number(process.env.MAIL_PORT) === 465,
+      auth: {
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
+      },
+    });
 
-      const mailOptions = {
-        from: `"${process.env.MAIL_FROM_NAME || "Acewall Scholars"}" <${process.env.MAIL_USER}>`,
-        to: newUser.email,
-        subject: `Welcome to Acewall Scholars as an Instructor`,
-        html: `
+    const mailOptions = {
+      from: `"${process.env.MAIL_FROM_NAME || "Acewall Scholars"}" <${process.env.MAIL_USER}>`,
+      to: newUser.email,
+      subject: `Welcome to Acewall Scholars as an Instructor`,
+      html: `
     <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
       <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
         
@@ -407,22 +407,22 @@ export const verifyPhoneOtp = asyncHandler(async (req, res) => {
       </div>
     </div>
     `,
-      };
+    };
 
-      await transporter.sendMail(mailOptions);
-    }
-
-
+    await transporter.sendMail(mailOptions);
+  }
 
 
-    // ✅ issue token
-    generateToken(newUser, newUser.role, req, res);
 
-    return res.status(201).json({ 
-      success: true,
-      message: "User created successfully.", 
-      data: newUser 
-    });
+
+  // ✅ issue token
+  generateToken(newUser, newUser.role, req, res);
+
+  return res.status(201).json({
+    success: true,
+    message: "User created successfully.",
+    data: newUser
+  });
 });
 
 export const resendPhoneOTP = asyncHandler(async (req, res) => {
@@ -432,54 +432,54 @@ export const resendPhoneOTP = asyncHandler(async (req, res) => {
     throw new ValidationError("Email is required.", "VAL_001");
   }
 
-    const otpRecord = await OTP.findOne({ email });
+  const otpRecord = await OTP.findOne({ email });
 
-    if (!otpRecord) {
-      return res.status(404).json({
-        message: "No OTP record found for this email. Please sign up again.",
-      });
+  if (!otpRecord) {
+    return res.status(404).json({
+      message: "No OTP record found for this email. Please sign up again.",
+    });
+  }
+
+  function generateOTP(length = 6) {
+    const digits = "0123456789";
+    let otp = "";
+    const bytes = crypto.randomBytes(length);
+
+    for (let i = 0; i < length; i++) {
+      otp += digits[bytes[i] % digits.length];
     }
 
-    function generateOTP(length = 6) {
-      const digits = "0123456789";
-      let otp = "";
-      const bytes = crypto.randomBytes(length);
+    return otp;
+  }
 
-      for (let i = 0; i < length; i++) {
-        otp += digits[bytes[i] % digits.length];
-      }
+  const phoneOtp = generateOTP();
+  const hashedOTP = await bcrypt.hash(phoneOtp, 10);
 
-      return otp;
-    }
+  otpRecord.phoneOtp = hashedOTP;
+  otpRecord.expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  await otpRecord.save();
 
-    const phoneOtp = generateOTP();
-    const hashedOTP = await bcrypt.hash(phoneOtp, 10);
+  // Resend email
+  const userData = otpRecord.userData;
 
-    otpRecord.phoneOtp = hashedOTP;
-    otpRecord.expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-    await otpRecord.save();
+  console.log(userData, "userData")
 
-    // Resend email
-    const userData = otpRecord.userData;
+  // 🚀 Send SMS using purchased number
+  await twilioClient.messages.create({
+    body: `Your Acewall Scholars phone verification code is: ${phoneOtp}`,
+    from: process.env.TWILIO_PHONE_NUMBER, // purchased Twilio number
+    to: userData.phone,
+  });
 
-    console.log(userData, "userData")
-
-    // 🚀 Send SMS using purchased number
-    await twilioClient.messages.create({
-      body: `Your Acewall Scholars phone verification code is: ${phoneOtp}`,
-      from: process.env.TWILIO_PHONE_NUMBER, // purchased Twilio number
-      to: userData.phone,
-    });
-
-    return res.status(200).json({ 
-      success: true,
-      message: "New OTP has been sent to your phone number." 
-    });
+  return res.status(200).json({
+    success: true,
+    message: "New OTP has been sent to your phone number."
+  });
 });
 
 export const login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
-  
+
   if (!email || !password) {
     throw new ValidationError("All fields must be filled", "VAL_001");
   }
@@ -502,6 +502,7 @@ export const login = asyncHandler(async (req, res, next) => {
   return res.status(200).json({
     success: true,
     message: "Login Successful",
+    user,
     token, // optional, since cookie is already set
   });
 });
@@ -518,49 +519,49 @@ export const forgetPassword = asyncHandler(async (req, res, next) => {
     );
   }
 
-    function generateOTP(length = 6) {
-      const digits = "0123456789";
-      let otp = "";
-      const bytes = crypto.randomBytes(length);
+  function generateOTP(length = 6) {
+    const digits = "0123456789";
+    let otp = "";
+    const bytes = crypto.randomBytes(length);
 
-      for (let i = 0; i < length; i++) {
-        otp += digits[bytes[i] % digits.length];
-      }
-
-      return otp;
+    for (let i = 0; i < length; i++) {
+      otp += digits[bytes[i] % digits.length];
     }
 
-    const otp = generateOTP();
+    return otp;
+  }
 
-    const hashedOTP = await bcrypt.hash(otp, 10);
+  const otp = generateOTP();
 
-    await OTP.findOneAndUpdate(
-      { email },
-      {
-        otp: hashedOTP,
-        expiresAt: Date.now() + 10 * 60 * 1000,
-        userData: {
-          email,
-        },
+  const hashedOTP = await bcrypt.hash(otp, 10);
+
+  await OTP.findOneAndUpdate(
+    { email },
+    {
+      otp: hashedOTP,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      userData: {
+        email,
       },
-      { upsert: true }
-    );
+    },
+    { upsert: true }
+  );
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.MAIL_HOST,
-      port: Number(process.env.MAIL_PORT),
-      secure: Number(process.env.MAIL_PORT) === 465, // true for 465, false for 587
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
+  const transporter = nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: Number(process.env.MAIL_PORT),
+    secure: Number(process.env.MAIL_PORT) === 465, // true for 465, false for 587
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
 
-    await transporter.sendMail({
-      from: `"OTP Verification" <${process.env.MAIL_USER}>`,
-      to: email,
-      subject: "Your OTP Code - Acewall Scholars",
-      html: `
+  await transporter.sendMail({
+    from: `"OTP Verification" <${process.env.MAIL_USER}>`,
+    to: email,
+    subject: "Your OTP Code - Acewall Scholars",
+    html: `
   <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
     <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
       
@@ -599,13 +600,13 @@ export const forgetPassword = asyncHandler(async (req, res, next) => {
     </div>
   </div>
   `,
-    });
+  });
 
 
-    return res.status(200).json({
-      success: true,
-      message: "OTP sent successfully",
-    });
+  return res.status(200).json({
+    success: true,
+    message: "OTP sent successfully",
+  });
 });
 
 export const verifyOTPForgotPassword = asyncHandler(async (req, res, next) => {
@@ -669,34 +670,34 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
 export const logout = asyncHandler(async (req, res) => {
   // Detect portal like in generateToken/isUser
   let host = "";
-    const origin = req.get("origin");
+  const origin = req.get("origin");
 
-    if (origin) {
-      try {
-        host = new URL(origin).hostname;
-      } catch (err) {
-        console.error("Invalid origin header:", origin);
-      }
+  if (origin) {
+    try {
+      host = new URL(origin).hostname;
+    } catch (err) {
+      console.error("Invalid origin header:", origin);
     }
-    if (!host && req.hostname) {
-      host = req.hostname;
-    }
+  }
+  if (!host && req.hostname) {
+    host = req.hostname;
+  }
 
-    const portal = host && host.startsWith("admin.") ? "admin" : "client";
-    const cookieName = portal === "admin" ? "ind_admin_jwt" : "ind_client_jwt";
+  const portal = host && host.startsWith("admin.") ? "admin" : "client";
+  const cookieName = portal === "admin" ? "ind_admin_jwt" : "ind_client_jwt";
 
-    // Clear the cookie
-    res.clearCookie(cookieName, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      path: "/", // Must match original cookie path
-    });
+  // Clear the cookie
+  res.clearCookie(cookieName, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    path: "/", // Must match original cookie path
+  });
 
-    return res.status(200).json({
-      success: true,
-      message: `User logged out successfully from ${portal} portal`,
-    });
+  return res.status(200).json({
+    success: true,
+    message: `User logged out successfully from ${portal} portal`,
+  });
 });
 
 export const allUser = asyncHandler(async (req, res) => {
@@ -710,9 +711,9 @@ export const allUser = asyncHandler(async (req, res) => {
 });
 
 export const checkAuth = asyncHandler(async (req, res) => {
-  return res.status(200).json({ 
+  return res.status(200).json({
     success: true,
-    data: req.user 
+    data: req.user
   });
 });
 
@@ -729,10 +730,10 @@ export const updateUser = asyncHandler(async (req, res) => {
     { new: true, runValidators: true }
   );
 
-  return res.status(200).json({ 
+  return res.status(200).json({
     success: true,
-    message: "User Updated Successfully", 
-    data: updatedUser 
+    message: "User Updated Successfully",
+    data: updatedUser
   });
 });
 export const checkUser = asyncHandler(async (req, res) => {
@@ -745,14 +746,14 @@ export const checkUser = asyncHandler(async (req, res) => {
   const existingUser = await User.findOne({ email });
 
   if (existingUser) {
-    return res.status(409).json({ 
+    return res.status(409).json({
       success: false,
-      message: "User already exists" 
+      message: "User already exists"
     });
   } else {
-    return res.status(200).json({ 
+    return res.status(200).json({
       success: true,
-      message: "User does not exist" 
+      message: "User does not exist"
     });
   }
 });
@@ -760,162 +761,162 @@ export const checkUser = asyncHandler(async (req, res) => {
 export const allTeacher = asyncHandler(async (req, res) => {
   const { name, email } = req.query;
 
-    // Build query based on available filters
-    let query = { role: "teacher" };
+  // Build query based on available filters
+  let query = { role: "teacher" };
 
-    // Filter by name (firstName or lastName)
-    if (name) {
-      const nameRegex = new RegExp(name, "i"); // Case-insensitive search
-      query.$or = [
-        { firstName: { $regex: nameRegex } },
-        { lastName: { $regex: nameRegex } }
-      ];
-    }
+  // Filter by name (firstName or lastName)
+  if (name) {
+    const nameRegex = new RegExp(name, "i"); // Case-insensitive search
+    query.$or = [
+      { firstName: { $regex: nameRegex } },
+      { lastName: { $regex: nameRegex } }
+    ];
+  }
 
-    // Filter by email
-    if (email) {
-      const emailRegex = new RegExp(email, "i"); // Case-insensitive search
-      query.email = { $regex: emailRegex };
-    }
+  // Filter by email
+  if (email) {
+    const emailRegex = new RegExp(email, "i"); // Case-insensitive search
+    query.email = { $regex: emailRegex };
+  }
 
-    // Fetch teachers with the constructed query
-    const teachers = await User.find(query).select(
-      "firstName lastName email createdAt profileImg _id isVarified"
-    );
+  // Fetch teachers with the constructed query
+  const teachers = await User.find(query).select(
+    "firstName lastName email createdAt profileImg _id isVarified"
+  );
 
-    const formattedTeachers = await Promise.all(
-      teachers.map(async (teacher) => {
-        const courseCount = await CourseSch.countDocuments({
-          createdby: teacher._id,
-        });
+  const formattedTeachers = await Promise.all(
+    teachers.map(async (teacher) => {
+      const courseCount = await CourseSch.countDocuments({
+        createdby: teacher._id,
+      });
 
-        return {
-          name: `${teacher.firstName} ${teacher.lastName}`,
-          email: teacher.email,
-          joiningDate: teacher.createdAt,
-          courses: courseCount,
-          profileImg: teacher.profileImg,
-          id: teacher._id,
-          isVarified: teacher.isVarified, // ✅ Include this
-        };
-      })
-    );
+      return {
+        name: `${teacher.firstName} ${teacher.lastName}`,
+        email: teacher.email,
+        joiningDate: teacher.createdAt,
+        courses: courseCount,
+        profileImg: teacher.profileImg,
+        id: teacher._id,
+        isVarified: teacher.isVarified, // ✅ Include this
+      };
+    })
+  );
 
-    return res.status(200).json({
-      success: true,
-      data: formattedTeachers
-    });
+  return res.status(200).json({
+    success: true,
+    data: formattedTeachers
+  });
 });
 
 export const allStudent = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 6;
-    const skip = (page - 1) * limit;
-    const search = req.query.search || ""; // get search term
+  const limit = parseInt(req.query.limit) || 6;
+  const skip = (page - 1) * limit;
+  const search = req.query.search || ""; // get search term
 
-    // Base query
-    const query = { role: "student" };
+  // Base query
+  const query = { role: "student" };
 
-    // If search provided, add filter (case-insensitive)
-    if (search) {
-      query.$or = [
-        { firstName: { $regex: search, $options: "i" } },
-        { lastName: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-      ];
+  // If search provided, add filter (case-insensitive)
+  if (search) {
+    query.$or = [
+      { firstName: { $regex: search, $options: "i" } },
+      { lastName: { $regex: search, $options: "i" } },
+      { email: { $regex: search, $options: "i" } },
+    ];
+  }
+
+  const totalStudents = await User.countDocuments(query);
+
+  const students = await User.find(query)
+    .sort({ createdAt: -1 })
+    .select("firstName lastName email createdAt courses profileImg _id")
+    .skip(skip)
+    .limit(limit);
+
+  const formattedStudents = students.map((student) => ({
+    name: `${student.firstName} ${student.lastName}`,
+    email: student.email,
+    joiningDate: student.createdAt,
+    numberOfCourses: student.courses?.length || 0,
+    profileImg: student.profileImg,
+    id: student._id,
+  }));
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      total: totalStudents,
+      currentPage: page,
+      totalPages: Math.ceil(totalStudents / limit),
+      students: formattedStudents,
     }
-
-    const totalStudents = await User.countDocuments(query);
-
-    const students = await User.find(query)
-      .sort({ createdAt: -1 })
-      .select("firstName lastName email createdAt courses profileImg _id")
-      .skip(skip)
-      .limit(limit);
-
-    const formattedStudents = students.map((student) => ({
-      name: `${student.firstName} ${student.lastName}`,
-      email: student.email,
-      joiningDate: student.createdAt,
-      numberOfCourses: student.courses?.length || 0,
-      profileImg: student.profileImg,
-      id: student._id,
-    }));
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        total: totalStudents,
-        currentPage: page,
-        totalPages: Math.ceil(totalStudents / limit),
-        students: formattedStudents,
-      }
-    });
+  });
 });
 
 export const getStudentById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-    // Get student/user info
-    const user = await User.findById(id).select(
-      "firstName middleName lastName email profileImg createdAt"
-    );
-    if (!user) {
-      throw new NotFoundError("Student not found.", "AUTH_009");
-    }
+  // Get student/user info
+  const user = await User.findById(id).select(
+    "firstName middleName lastName email profileImg createdAt"
+  );
+  if (!user) {
+    throw new NotFoundError("Student not found.", "AUTH_009");
+  }
 
-    // Use aggregation to get enrollments with course and teacher info
-    const enrollments = await Enrollment.aggregate([
-      { $match: { student: new mongoose.Types.ObjectId(id) } },
+  // Use aggregation to get enrollments with course and teacher info
+  const enrollments = await Enrollment.aggregate([
+    { $match: { student: new mongoose.Types.ObjectId(id) } },
 
-      // Lookup course
-      {
-        $lookup: {
-          from: "coursesches", // collection name (check actual collection if pluralized)
-          localField: "course",
-          foreignField: "_id",
-          as: "course",
-        },
+    // Lookup course
+    {
+      $lookup: {
+        from: "coursesches", // collection name (check actual collection if pluralized)
+        localField: "course",
+        foreignField: "_id",
+        as: "course",
       },
-      { $unwind: "$course" },
+    },
+    { $unwind: "$course" },
 
-      // Lookup teacher info from createdby field in course
-      {
-        $lookup: {
-          from: "users", // collection name for teachers
-          localField: "course.createdby",
-          foreignField: "_id",
-          as: "course.createdby",
-        },
+    // Lookup teacher info from createdby field in course
+    {
+      $lookup: {
+        from: "users", // collection name for teachers
+        localField: "course.createdby",
+        foreignField: "_id",
+        as: "course.createdby",
       },
-      { $unwind: "$course.createdby" },
+    },
+    { $unwind: "$course.createdby" },
 
-      // Optionally project only necessary fields
-      {
-        $project: {
-          _id: 1,
-          course: {
-            courseTitle: 1,
-            courseDescription: 1,
-            createdby: {
-              firstName: 1,
-              lastName: 1,
-              email: 1,
-            },
+    // Optionally project only necessary fields
+    {
+      $project: {
+        _id: 1,
+        course: {
+          courseTitle: 1,
+          courseDescription: 1,
+          createdby: {
+            firstName: 1,
+            lastName: 1,
+            email: 1,
           },
-          // exclude student field
         },
+        // exclude student field
       },
-    ]);
+    },
+  ]);
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        user,
-        enrollments,
-      },
-      message: "Student and enrollments fetched successfully",
-    });
+  return res.status(200).json({
+    success: true,
+    data: {
+      user,
+      enrollments,
+    },
+    message: "Student and enrollments fetched successfully",
+  });
 });
 
 export const getTeacherById = asyncHandler(async (req, res) => {
@@ -927,15 +928,15 @@ export const getTeacherById = asyncHandler(async (req, res) => {
     throw new NotFoundError("Teacher not found.", "AUTH_010");
   }
 
-    const courses = await CourseSch.aggregate([
-      { $match: { createdby: new mongoose.Types.ObjectId(id) } },
-      { $project: { courseTitle: 1, courseDescription: 1, _id: 1 } },
-    ]);
+  const courses = await CourseSch.aggregate([
+    { $match: { createdby: new mongoose.Types.ObjectId(id) } },
+    { $project: { courseTitle: 1, courseDescription: 1, _id: 1 } },
+  ]);
 
-    return res.status(200).json({ 
-      success: true,
-      data: { teacher, courses } 
-    });
+  return res.status(200).json({
+    success: true,
+    data: { teacher, courses }
+  });
 });
 
 export const getUserInfo = asyncHandler(async (req, res) => {
@@ -944,12 +945,13 @@ export const getUserInfo = asyncHandler(async (req, res) => {
   if (!user) {
     throw new NotFoundError("User not found", "AUTH_011");
   }
-  return res.status(200).json({ 
+  return res.status(200).json({
     success: true,
-    message: "User found successfully", 
-    data: user 
+    message: "User found successfully",
+    data: user
   });
 });
+
 export const updateProfileImg = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const file = req.file;
@@ -959,35 +961,35 @@ export const updateProfileImg = asyncHandler(async (req, res) => {
     throw new NotFoundError("User not found", "AUTH_012");
   }
 
-    // Delete previous image from Cloudinary
-    if (user.profileImg?.publicId) {
-      try {
-        await cloudinary.uploader.destroy(user.profileImg.publicId);
-      } catch (err) {
-        console.warn(
-          "Failed to delete previous image from Cloudinary:",
-          err.message
-        );
-      }
+  // Delete previous image from Cloudinary
+  if (user.profileImg?.publicId) {
+    try {
+      await cloudinary.uploader.destroy(user.profileImg.publicId);
+    } catch (err) {
+      console.warn(
+        "Failed to delete previous image from Cloudinary:",
+        err.message
+      );
     }
+  }
 
-    // Upload new image
-    const result = await uploadToCloudinary(file.buffer, "profile_images");
+  // Upload new image
+  const result = await uploadToCloudinary(file.buffer, "profile_images");
 
-    // Update user's profileImg field
-    user.profileImg = {
-      url: result.secure_url,
-      filename: result.original_filename,
-      publicId: result.public_id,
-    };
+  // Update user's profileImg field
+  user.profileImg = {
+    url: result.secure_url,
+    filename: result.original_filename,
+    publicId: result.public_id,
+  };
 
-    await user.save();
+  await user.save();
 
-    return res.status(200).json({ 
-      success: true,
-      message: "Profile image updated successfully", 
-      data: user 
-    });
+  return res.status(200).json({
+    success: true,
+    message: "Profile image updated successfully",
+    data: user
+  });
 });
 
 export const updatePasswordOTP = asyncHandler(async (req, res) => {
@@ -999,71 +1001,71 @@ export const updatePasswordOTP = asyncHandler(async (req, res) => {
     throw new NotFoundError("User not found", "AUTH_013");
   }
 
-    // Validate old password
-    const isOldPasswordMatch = await bcrypt.compare(oldPassword, user.password);
-    if (!isOldPasswordMatch) {
-      throw new ValidationError("Old password is incorrect", "AUTH_014");
+  // Validate old password
+  const isOldPasswordMatch = await bcrypt.compare(oldPassword, user.password);
+  if (!isOldPasswordMatch) {
+    throw new ValidationError("Old password is incorrect", "AUTH_014");
+  }
+
+  // Reject if newPassword === old password
+  const isSameAsOld = await bcrypt.compare(newPassword, user.password);
+  if (isSameAsOld) {
+    throw new ValidationError("New password must be different from the old password", "AUTH_015");
+  }
+
+  // Check if new and confirm password match
+  if (newPassword !== confirmPassword) {
+    throw new ValidationError("New password and confirm password do not match", "AUTH_016");
+  }
+
+  // Hash new password
+  const newHashedPassword = await bcrypt.hash(newPassword, 11);
+
+  // Generate OTP
+  function generateOTP(length = 6) {
+    const digits = "0123456789";
+    let otp = "";
+    const bytes = crypto.randomBytes(length);
+
+    for (let i = 0; i < length; i++) {
+      otp += digits[bytes[i] % digits.length];
     }
 
-    // Reject if newPassword === old password
-    const isSameAsOld = await bcrypt.compare(newPassword, user.password);
-    if (isSameAsOld) {
-      throw new ValidationError("New password must be different from the old password", "AUTH_015");
-    }
+    return otp;
+  }
 
-    // Check if new and confirm password match
-    if (newPassword !== confirmPassword) {
-      throw new ValidationError("New password and confirm password do not match", "AUTH_016");
-    }
+  const otp = generateOTP();
+  const hashedOTP = await bcrypt.hash(otp, 10);
 
-    // Hash new password
-    const newHashedPassword = await bcrypt.hash(newPassword, 11);
-
-    // Generate OTP
-    function generateOTP(length = 6) {
-      const digits = "0123456789";
-      let otp = "";
-      const bytes = crypto.randomBytes(length);
-
-      for (let i = 0; i < length; i++) {
-        otp += digits[bytes[i] % digits.length];
-      }
-
-      return otp;
-    }
-
-    const otp = generateOTP();
-    const hashedOTP = await bcrypt.hash(otp, 10);
-
-    // Save OTP and password update request
-    await OTP.findOneAndUpdate(
-      { email: user.email },
-      {
-        otp: hashedOTP,
-        expiresAt: Date.now() + 10 * 60 * 1000,
-        userData: {
-          newPassword: newHashedPassword,
-        },
+  // Save OTP and password update request
+  await OTP.findOneAndUpdate(
+    { email: user.email },
+    {
+      otp: hashedOTP,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      userData: {
+        newPassword: newHashedPassword,
       },
-      { upsert: true }
-    );
+    },
+    { upsert: true }
+  );
 
-    // Send OTP via email
-    const transporter = nodemailer.createTransport({
-      host: process.env.MAIL_HOST,
-      port: Number(process.env.MAIL_PORT),
-      secure: Number(process.env.MAIL_PORT) === 465,
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
+  // Send OTP via email
+  const transporter = nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: Number(process.env.MAIL_PORT),
+    secure: Number(process.env.MAIL_PORT) === 465,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
 
-    await transporter.sendMail({
-      from: `"OTP Verification" <${process.env.MAIL_USER}>`,
-      to: user.email,
-      subject: "Your OTP Code - Acewall Scholars",
-      html: `
+  await transporter.sendMail({
+    from: `"OTP Verification" <${process.env.MAIL_USER}>`,
+    to: user.email,
+    subject: "Your OTP Code - Acewall Scholars",
+    html: `
   <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
     <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
       
@@ -1103,13 +1105,13 @@ export const updatePasswordOTP = asyncHandler(async (req, res) => {
     </div>
   </div>
   `,
-    });
+  });
 
 
-    return res.status(200).json({ 
-      success: true,
-      message: "OTP sent successfully" 
-    });
+  return res.status(200).json({
+    success: true,
+    message: "OTP sent successfully"
+  });
 });
 
 export const updatePassword = asyncHandler(async (req, res) => {
@@ -1120,30 +1122,30 @@ export const updatePassword = asyncHandler(async (req, res) => {
     throw new ValidationError("OTP not found or already used.", "AUTH_017");
   }
 
-    const isExpired = Date.now() > otpEntry.expiresAt;
-    const isValid = await bcrypt.compare(otp, otpEntry.otp);
+  const isExpired = Date.now() > otpEntry.expiresAt;
+  const isValid = await bcrypt.compare(otp, otpEntry.otp);
 
-    if (!isValid || isExpired) {
-      return res.status(400).json({ message: "Invalid or expired OTP." });
+  if (!isValid || isExpired) {
+    return res.status(400).json({ message: "Invalid or expired OTP." });
+  }
+
+  await OTP.updateOne(
+    { email },
+    {
+      $set: {
+        isVerified: true,
+      },
     }
+  );
 
-    await OTP.updateOne(
-      { email },
-      {
-        $set: {
-          isVerified: true,
-        },
-      }
-    );
+  const { newPassword } = otpEntry.userData;
 
-    const { newPassword } = otpEntry.userData;
+  await User.updateOne({ email }, { password: newPassword });
 
-    await User.updateOne({ email }, { password: newPassword });
-
-    return res.status(200).json({ 
-      success: true,
-      message: "Password updated successfully" 
-    });
+  return res.status(200).json({
+    success: true,
+    message: "Password updated successfully"
+  });
 });
 
 export const updateEmailOTP = asyncHandler(async (req, res) => {
@@ -1155,59 +1157,59 @@ export const updateEmailOTP = asyncHandler(async (req, res) => {
     throw new NotFoundError("User not found", "AUTH_019");
   }
 
-    const isExist = await User.findOne({ email: newEmail });
-    if (isExist) {
-      throw new ConflictError("Email already exists", "AUTH_020");
+  const isExist = await User.findOne({ email: newEmail });
+  if (isExist) {
+    throw new ConflictError("Email already exists", "AUTH_020");
+  }
+
+  function generateOTP(length = 6) {
+    const digits = "0123456789";
+    let otp = "";
+    const bytes = crypto.randomBytes(length);
+
+    for (let i = 0; i < length; i++) {
+      otp += digits[bytes[i] % digits.length];
     }
 
-    function generateOTP(length = 6) {
-      const digits = "0123456789";
-      let otp = "";
-      const bytes = crypto.randomBytes(length);
+    return otp;
+  }
 
-      for (let i = 0; i < length; i++) {
-        otp += digits[bytes[i] % digits.length];
-      }
+  const otp = generateOTP();
+  const hashedOTP = await bcrypt.hash(otp, 10);
 
-      return otp;
-    }
-
-    const otp = generateOTP();
-    const hashedOTP = await bcrypt.hash(otp, 10);
-
-    await OTP.findOneAndUpdate(
-      { email: user.email },
-      {
-        otp: hashedOTP,
-        expiresAt: Date.now() + 10 * 60 * 1000,
-        userData: {
-          newEmail: newEmail,
-        },
+  await OTP.findOneAndUpdate(
+    { email: user.email },
+    {
+      otp: hashedOTP,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      userData: {
+        newEmail: newEmail,
       },
-      { upsert: true }
-    );
+    },
+    { upsert: true }
+  );
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.MAIL_HOST,
-      port: Number(process.env.MAIL_PORT),
-      secure: Number(process.env.MAIL_PORT) === 465,
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
+  const transporter = nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: Number(process.env.MAIL_PORT),
+    secure: Number(process.env.MAIL_PORT) === 465,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
 
-    await transporter.sendMail({
-      from: `"OTP Verification" <${process.env.MAIL_USER}>`,
-      to: user.email,
-      subject: "Your OTP Code",
-      text: `Your OTP code is ${otp}. It will expire in 10 minutes.`,
-    });
+  await transporter.sendMail({
+    from: `"OTP Verification" <${process.env.MAIL_USER}>`,
+    to: user.email,
+    subject: "Your OTP Code",
+    text: `Your OTP code is ${otp}. It will expire in 10 minutes.`,
+  });
 
-    return res.status(200).json({ 
-      success: true,
-      message: "OTP sent successfully to previous email" 
-    });
+  return res.status(200).json({
+    success: true,
+    message: "OTP sent successfully to previous email"
+  });
 });
 
 export const updateEmail = asyncHandler(async (req, res) => {
@@ -1215,40 +1217,40 @@ export const updateEmail = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const user = await User.findById(userId).select("-email");
 
-    const otpEntry = await OTP.findOne({ email });
+  const otpEntry = await OTP.findOne({ email });
 
-    if (!otpEntry) {
-      return res
-        .status(400)
-        .json({ message: "OTP not found or already used." });
+  if (!otpEntry) {
+    return res
+      .status(400)
+      .json({ message: "OTP not found or already used." });
+  }
+
+  const isExpired = Date.now() > otpEntry.expiresAt;
+  const isValid = await bcrypt.compare(otp, otpEntry.otp);
+
+  if (!isValid || isExpired) {
+    return res.status(400).json({ message: "Invalid or expired OTP." });
+  }
+
+  await OTP.updateOne(
+    { email },
+    {
+      $set: {
+        isVerified: true,
+      },
     }
+  );
 
-    const isExpired = Date.now() > otpEntry.expiresAt;
-    const isValid = await bcrypt.compare(otp, otpEntry.otp);
+  const { newEmail } = otpEntry.userData;
 
-    if (!isValid || isExpired) {
-      return res.status(400).json({ message: "Invalid or expired OTP." });
-    }
+  const newUser = await User.findOneAndUpdate({ email: email }, { email: newEmail }, { new: true });
 
-    await OTP.updateOne(
-      { email },
-      {
-        $set: {
-          isVerified: true,
-        },
-      }
-    );
+  generateToken(newUser, newUser.role, req, res)
 
-    const { newEmail } = otpEntry.userData;
-
-    const newUser = await User.findOneAndUpdate({ email: email }, { email: newEmail }, { new: true });
-
-    generateToken(newUser, newUser.role, req, res)
-
-    return res.status(200).json({ 
-      success: true,
-      message: "Email updated successfully" 
-    });
+  return res.status(200).json({
+    success: true,
+    message: "Email updated successfully"
+  });
 });
 
 export const updatePhoneOTP = asyncHandler(async (req, res) => {
@@ -1262,46 +1264,46 @@ export const updatePhoneOTP = asyncHandler(async (req, res) => {
     throw new NotFoundError("User not found", "AUTH_023");
   }
 
-    function generateOTP(length = 6) {
-      const digits = "0123456789";
-      let otp = "";
-      const bytes = crypto.randomBytes(length);
+  function generateOTP(length = 6) {
+    const digits = "0123456789";
+    let otp = "";
+    const bytes = crypto.randomBytes(length);
 
-      for (let i = 0; i < length; i++) {
-        otp += digits[bytes[i] % digits.length];
-      }
-
-      return otp;
+    for (let i = 0; i < length; i++) {
+      otp += digits[bytes[i] % digits.length];
     }
 
-    const phoneOtp = generateOTP();
-    const hashedOTP = await bcrypt.hash(phoneOtp, 10);
+    return otp;
+  }
 
-    const phoneNumUpdated = `+${newPhone.replace(/\D+/g, "")}`;
+  const phoneOtp = generateOTP();
+  const hashedOTP = await bcrypt.hash(phoneOtp, 10);
 
-    await OTP.findOneAndUpdate(
-      { email: user.email },
-      {
-        phoneOtp: hashedOTP,
-        expiresAt: Date.now() + 10 * 60 * 1000,
-        userData: {
-          phone: phoneNumUpdated,
-        },
+  const phoneNumUpdated = `+${newPhone.replace(/\D+/g, "")}`;
+
+  await OTP.findOneAndUpdate(
+    { email: user.email },
+    {
+      phoneOtp: hashedOTP,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      userData: {
+        phone: phoneNumUpdated,
       },
-      { upsert: true }
-    );
+    },
+    { upsert: true }
+  );
 
-    // 🚀 Send SMS using purchased number
-    await twilioClient.messages.create({
-      body: `Your Acewall Scholars phone verification code is: ${phoneOtp}`,
-      from: process.env.TWILIO_PHONE_NUMBER, // purchased Twilio number
-      to: phoneNumUpdated,
-    });
+  // 🚀 Send SMS using purchased number
+  await twilioClient.messages.create({
+    body: `Your Acewall Scholars phone verification code is: ${phoneOtp}`,
+    from: process.env.TWILIO_PHONE_NUMBER, // purchased Twilio number
+    to: phoneNumUpdated,
+  });
 
-    return res.status(200).json({ 
-      success: true,
-      message: "OTP sent successfully to new phone number" 
-    });
+  return res.status(200).json({
+    success: true,
+    message: "OTP sent successfully to new phone number"
+  });
 });
 
 export const updatePhone = asyncHandler(async (req, res) => {
@@ -1314,32 +1316,32 @@ export const updatePhone = asyncHandler(async (req, res) => {
     throw new ValidationError("OTP not found or already used.", "AUTH_024");
   }
 
-    const isExpired = Date.now() > otpEntry.expiresAt;
-    const isValid = await bcrypt.compare(otp, otpEntry.phoneOtp);
+  const isExpired = Date.now() > otpEntry.expiresAt;
+  const isValid = await bcrypt.compare(otp, otpEntry.phoneOtp);
 
-    if (!isValid || isExpired) {
-      throw new ValidationError("Invalid or expired OTP.", "AUTH_025");
+  if (!isValid || isExpired) {
+    throw new ValidationError("Invalid or expired OTP.", "AUTH_025");
+  }
+
+  await OTP.updateOne(
+    { email },
+    {
+      $set: {
+        isVerified: true,
+      },
     }
+  );
 
-    await OTP.updateOne(
-      { email },
-      {
-        $set: {
-          isVerified: true,
-        },
-      }
-    );
+  const { phone } = otpEntry.userData;
 
-    const { phone } = otpEntry.userData;
+  console.log(otpEntry.userData, "otpEntry.userData")
 
-    console.log(otpEntry.userData, "otpEntry.userData")
+  await User.findOneAndUpdate({ email: email }, { phone });
 
-    await User.findOneAndUpdate({ email: email }, { phone });
-
-    return res.status(200).json({ 
-      success: true,
-      message: "Phone number updated successfully" 
-    });
+  return res.status(200).json({
+    success: true,
+    message: "Phone number updated successfully"
+  });
 });
 
 export const uploadTeacherDocument = asyncHandler(async (req, res) => {
@@ -1351,64 +1353,64 @@ export const uploadTeacherDocument = asyncHandler(async (req, res) => {
     throw new ValidationError("Category and file are required", "VAL_002");
   }
 
-    const user = await User.findById(userId);
-    if (!user || user.role !== "teacher") {
-      return res.status(403).json({ message: "Unauthorized or not a teacher" });
-    }
+  const user = await User.findById(userId);
+  if (!user || user.role !== "teacher") {
+    return res.status(403).json({ message: "Unauthorized or not a teacher" });
+  }
 
-    // Document category limits
-    const documentCategories = {
-      universityTranscripts: 4,
-      teacherLicenses: 4,
-      ids: 2,
-      resume: 2,
-      portfolio: 1,
-    };
+  // Document category limits
+  const documentCategories = {
+    universityTranscripts: 4,
+    teacherLicenses: 4,
+    ids: 2,
+    resume: 2,
+    portfolio: 1,
+  };
 
-    if (!documentCategories.hasOwnProperty(category)) {
-      throw new ValidationError("Invalid document category", "VAL_003");
-    }
+  if (!documentCategories.hasOwnProperty(category)) {
+    throw new ValidationError("Invalid document category", "VAL_003");
+  }
 
-    // Ensure document storage structure exists
-    if (!user.documents) user.documents = {};
-    if (!Array.isArray(user.documents[category])) {
-      user.documents[category] = [];
-    }
+  // Ensure document storage structure exists
+  if (!user.documents) user.documents = {};
+  if (!Array.isArray(user.documents[category])) {
+    user.documents[category] = [];
+  }
 
-    // Check limit
-    if (user.documents[category].length >= documentCategories[category]) {
-      throw new ValidationError(
-        `Maximum upload limit reached for ${category}`,
-        "VAL_004"
-      );
-    }
+  // Check limit
+  if (user.documents[category].length >= documentCategories[category]) {
+    throw new ValidationError(
+      `Maximum upload limit reached for ${category}`,
+      "VAL_004"
+    );
+  }
 
-    // Upload file
-    const uploaded = await uploadToCloudinary(file.buffer, "teacher_documents");
+  // Upload file
+  const uploaded = await uploadToCloudinary(file.buffer, "teacher_documents");
 
-    // Format category name (e.g., universityTranscripts => University Transcripts)
-    const formattedCategoryName = category
+  // Format category name (e.g., universityTranscripts => University Transcripts)
+  const formattedCategoryName = category
 
-      .replace(/([a-z])([A-Z])/g, "$1 $2")
-      .replace(/^./, (str) => str.toUpperCase());
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (str) => str.toUpperCase());
 
-    const index = user.documents[category].length + 1;
+  const index = user.documents[category].length + 1;
 
-    const document = {
-      name: `${formattedCategoryName} ${index}`,
-      url: uploaded.secure_url,
-      filename: uploaded.public_id,
-      uploadedAt: new Date(),
-    };
+  const document = {
+    name: `${formattedCategoryName} ${index}`,
+    url: uploaded.secure_url,
+    filename: uploaded.public_id,
+    uploadedAt: new Date(),
+  };
 
-    user.documents[category].push(document);
-    await user.save();
+  user.documents[category].push(document);
+  await user.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Document uploaded successfully",
-      data: user.documents,
-    });
+  return res.status(200).json({
+    success: true,
+    message: "Document uploaded successfully",
+    data: user.documents,
+  });
 });
 
 
@@ -1429,48 +1431,48 @@ export const deleteTeacherDocument = asyncHandler(async (req, res) => {
     throw new AuthenticationError("Unauthorized or not a teacher", "AUTH_027");
   }
 
-    // Find and remove document from nested categories
-    let deleted = false;
-    for (const category in user.documents) {
-      const index = user.documents[category].findIndex(
-        (doc) => doc._id.toString() === documentId
-      );
-      if (index !== -1) {
-        const [docToDelete] = user.documents[category].splice(index, 1);
+  // Find and remove document from nested categories
+  let deleted = false;
+  for (const category in user.documents) {
+    const index = user.documents[category].findIndex(
+      (doc) => doc._id.toString() === documentId
+    );
+    if (index !== -1) {
+      const [docToDelete] = user.documents[category].splice(index, 1);
 
-        // Delete from Cloudinary
-        await cloudinary.uploader.destroy(docToDelete.filename);
+      // Delete from Cloudinary
+      await cloudinary.uploader.destroy(docToDelete.filename);
 
-        // Re-index document names
-        const label = {
-          universityTranscripts: "University Transcripts",
-          teacherLicenses: "Teacher Licenses",
-          ids: "Identification Documents",
-          resume: "Resume",
-          portfolio: "Portfolio"
-        }[category] || category;
+      // Re-index document names
+      const label = {
+        universityTranscripts: "University Transcripts",
+        teacherLicenses: "Teacher Licenses",
+        ids: "Identification Documents",
+        resume: "Resume",
+        portfolio: "Portfolio"
+      }[category] || category;
 
-        user.documents[category] = user.documents[category].map((doc, i) => ({
-          ...doc,
-          name: `${label} ${i + 1}`,
-        }));
+      user.documents[category] = user.documents[category].map((doc, i) => ({
+        ...doc,
+        name: `${label} ${i + 1}`,
+      }));
 
-        deleted = true;
-        break;
-      }
+      deleted = true;
+      break;
     }
+  }
 
-    if (!deleted) {
-      throw new NotFoundError("Document not found", "AUTH_028");
-    }
+  if (!deleted) {
+    throw new NotFoundError("Document not found", "AUTH_028");
+  }
 
-    await user.save();
+  await user.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Document deleted and reindexed successfully",
-      data: user.documents,
-    });
+  return res.status(200).json({
+    success: true,
+    message: "Document deleted and reindexed successfully",
+    data: user.documents,
+  });
 });
 
 
@@ -1492,73 +1494,73 @@ export const verifyTeacherDocument = asyncHandler(async (req, res) => {
     throw new NotFoundError("User not found.", "AUTH_029");
   }
 
-    // Documents are stored per category, so we need to find the document by its _id in any category array
-    let foundDoc = null;
-    let foundCategory = null;
+  // Documents are stored per category, so we need to find the document by its _id in any category array
+  let foundDoc = null;
+  let foundCategory = null;
 
-    for (const [category, docs] of Object.entries(user.documents || {})) {
-      const doc = docs.find((d) => d._id.toString() === documentId);
-      if (doc) {
-        foundDoc = doc;
-        foundCategory = category;
-        break;
-      }
+  for (const [category, docs] of Object.entries(user.documents || {})) {
+    const doc = docs.find((d) => d._id.toString() === documentId);
+    if (doc) {
+      foundDoc = doc;
+      foundCategory = category;
+      break;
     }
+  }
 
-    if (!foundDoc) {
-      throw new NotFoundError("Document not found.", "AUTH_030");
-    }
+  if (!foundDoc) {
+    throw new NotFoundError("Document not found.", "AUTH_030");
+  }
 
-    // Update document verification status
-    foundDoc.verificationStatus = status;
+  // Update document verification status
+  foundDoc.verificationStatus = status;
 
-    // Check if all documents across all categories are verified
-    const allDocs = Object.values(user.documents || {}).flat();
-    const allVerified = allDocs.length > 0 && allDocs.every(d => d.verificationStatus === "verified");
+  // Check if all documents across all categories are verified
+  const allDocs = Object.values(user.documents || {}).flat();
+  const allVerified = allDocs.length > 0 && allDocs.every(d => d.verificationStatus === "verified");
 
-    user.isVarified = allVerified; // keep your existing naming if you want
+  user.isVarified = allVerified; // keep your existing naming if you want
 
-    await user.save();
+  await user.save();
 
-    // Prepare email transporter (single instance)
-    const transporter = nodemailer.createTransport({
-      host: process.env.MAIL_HOST,
-      port: Number(process.env.MAIL_PORT),
-      secure: Number(process.env.MAIL_PORT) === 465,
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
+  // Prepare email transporter (single instance)
+  const transporter = nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: Number(process.env.MAIL_PORT),
+    secure: Number(process.env.MAIL_PORT) === 465,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
 
-    // Send email if user is fully verified
-    if (user.isVarified && status === "verified") {
-      try {
-        await transporter.sendMail({
-          from: `"Admin Team" <${process.env.MAIL_USER}>`,
-          to: user.email,
-          subject: "You Are Now Verified!",
-          html: `
+  // Send email if user is fully verified
+  if (user.isVarified && status === "verified") {
+    try {
+      await transporter.sendMail({
+        from: `"Admin Team" <${process.env.MAIL_USER}>`,
+        to: user.email,
+        subject: "You Are Now Verified!",
+        html: `
             <h2>Congratulations, ${user.firstName}!</h2>
             <p>Your documents have been successfully verified by the admin team.</p>
             <p>You are now a verified teacher on our platform and can start your journey.</p>
             <br/>
             <p>Best regards,<br/>Team LMS</p>
           `,
-        });
-      } catch (mailError) {
-        console.error("Error sending verification email:", mailError);
-      }
+      });
+    } catch (mailError) {
+      console.error("Error sending verification email:", mailError);
     }
+  }
 
-    // Send email if any document is rejected
-    if (status === "not_verified") {
-      try {
-        await transporter.sendMail({
-          from: `"Admin Team" <${process.env.MAIL_USER}>`,
-          to: user.email,
-          subject: "Document Rejected - Acewall Scholars",
-          html: `
+  // Send email if any document is rejected
+  if (status === "not_verified") {
+    try {
+      await transporter.sendMail({
+        from: `"Admin Team" <${process.env.MAIL_USER}>`,
+        to: user.email,
+        subject: "Document Rejected - Acewall Scholars",
+        html: `
       <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
         <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
           
@@ -1600,22 +1602,22 @@ export const verifyTeacherDocument = asyncHandler(async (req, res) => {
         </div>
       </div>
       `,
-        });
-      } catch (mailError) {
-        console.error("Error sending rejection email:", mailError);
-      }
+      });
+    } catch (mailError) {
+      console.error("Error sending rejection email:", mailError);
     }
+  }
 
 
-    return res.status(200).json({
-      success: true,
-      message: `Document ${status === "verified" ? "verified" : "rejected"} successfully.`,
-      data: {
-        isVarified: user.isVarified,
-        document: foundDoc,
-        documents: user.documents,
-      }
-    });
+  return res.status(200).json({
+    success: true,
+    message: `Document ${status === "verified" ? "verified" : "rejected"} successfully.`,
+    data: {
+      isVarified: user.isVarified,
+      document: foundDoc,
+      documents: user.documents,
+    }
+  });
 });
 
 
@@ -1630,27 +1632,27 @@ export const previewSignIn = asyncHandler(async (req, res) => {
     throw new AuthenticationError("No user found", "AUTH_031");
   }
 
-    // Clear old cookie
-    res.clearCookie("ind_client_jwt", {
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      path: "/",
-    });
+  // Clear old cookie
+  res.clearCookie("ind_client_jwt", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict",
+    path: "/",
+  });
 
-    const prevRole = "teacherAsStudent";
+  const prevRole = "teacherAsStudent";
 
-    // Generate new token with new role
-    generateToken(user, prevRole, req, res);
+  // Generate new token with new role
+  generateToken(user, prevRole, req, res);
 
-    // Return the updated user object
-    const updatedUser = { ...user, role: prevRole };
+  // Return the updated user object
+  const updatedUser = { ...user, role: prevRole };
 
-    return res.status(200).json({
-      success: true,
-      message: "Preview Signin Successful",
-      data: updatedUser,
-    });
+  return res.status(200).json({
+    success: true,
+    message: "Preview Signin Successful",
+    data: updatedUser,
+  });
 });
 
 export const previewSignOut = asyncHandler(async (req, res) => {
@@ -1659,24 +1661,24 @@ export const previewSignOut = asyncHandler(async (req, res) => {
     throw new AuthenticationError("No user found", "AUTH_032");
   }
 
-    // Clear old cookie
-    res.clearCookie("ind_client_jwt", {
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      path: "/",
-    });
+  // Clear old cookie
+  res.clearCookie("ind_client_jwt", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict",
+    path: "/",
+  });
 
-    const teacherUser = await User.findById(req.user._id);
-    if (!teacherUser) {
-      throw new NotFoundError("User not found", "AUTH_033");
-    }
+  const teacherUser = await User.findById(req.user._id);
+  if (!teacherUser) {
+    throw new NotFoundError("User not found", "AUTH_033");
+  }
 
-    // Generate new token with new role
-    generateToken(teacherUser, teacherUser.role, req, res);
+  // Generate new token with new role
+  generateToken(teacherUser, teacherUser.role, req, res);
 
-    return res.status(200).json({
-      success: true,
-      message: "Preview Signout Successful",
-    });
+  return res.status(200).json({
+    success: true,
+    message: "Preview Signout Successful",
+  });
 });
