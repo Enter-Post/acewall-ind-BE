@@ -18,6 +18,7 @@ import { ValidationError, NotFoundError } from "../../Utiles/errors.js";
 import { asyncHandler } from "../../middlewares/errorHandler.middleware.js";
 
 
+
 export const importCourseFromJSON = asyncHandler(async (req, res) => {
   const data = req.body;
   const userId = req.user._id;
@@ -269,6 +270,57 @@ export const getFullCourseData = asyncHandler(async (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+
+export const getCoursesWithMeetings = async (req, res) => {
+  try {
+    // 1. Fetch all meetings to count them per course
+    // Use .lean() for performance since we just need the data
+    const meetings = await ZoomMeeting.find({}, "course").lean();
+
+    // 2. Calculate meeting counts per course
+    const meetingCounts = {};
+    meetings.forEach((m) => {
+      if (m.course) {
+        const cId = m.course.toString();
+        meetingCounts[cId] = (meetingCounts[cId] || 0) + 1;
+      }
+    });
+
+    const courseIds = Object.keys(meetingCounts);
+
+    if (courseIds.length === 0) {
+      return res
+        .status(200)
+        .json({ courses: [], message: "No courses with meetings found" });
+    }
+
+    // 3. Fetch course details
+    // Use .lean() so we can easily attach the 'meetingCount' property
+    const courses = await CourseSch.find({ _id: { $in: courseIds } })
+      .populate("createdby", "firstName lastName email")
+      .populate("category", "title")
+      .populate("subcategory", "title")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // 4. Attach the counts to the course objects
+    const coursesWithCounts = courses.map((course) => ({
+      ...course,
+      meetingCount: meetingCounts[course._id.toString()] || 0,
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: coursesWithCounts.length,
+      courses: coursesWithCounts,
+      message: "Courses with meetings fetched successfully",
+    });
+  } catch (error) {
+    console.error("Error fetching courses with meetings:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 // export const getFullCourseData = async (req, res) => {
 //   try {
