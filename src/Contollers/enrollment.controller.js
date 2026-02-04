@@ -8,33 +8,33 @@ import Lesson from "../Models/lesson.model.sch.js";
 
 
 export const getMyEnrolledCourses = async (req, res) => {
-    try {
-        const userId = req.user._id;
-        const userRole = req.user.role; 
+  try {
+    const userId = req.user._id;
+    const userRole = req.user.role;
 
-        let courses = [];
+    let courses = [];
 
-        if (userRole === "teacher" || userRole === "admin") {
-            // Teachers see courses they OWN/CREATED
-            courses = await CourseSch.find({ createdby: userId })
-                .select('courseTitle courseCode thumbnail')
-                .lean();
-        } else {
-            // Students see courses they are ENROLLED in
-            const enrollments = await Enrollment.find({ student: userId })
-                .populate('course', 'courseTitle courseCode thumbnail')
-                .lean();
-            
-            courses = enrollments
-                .filter(e => e.course) // Security check in case course was deleted
-                .map(e => e.course);
-        }
+    if (userRole === "teacher" || userRole === "admin") {
+      // Teachers see courses they OWN/CREATED
+      courses = await CourseSch.find({ createdby: userId })
+        .select('courseTitle courseCode thumbnail')
+        .lean();
+    } else {
+      // Students see courses they are ENROLLED in
+      const enrollments = await Enrollment.find({ student: userId })
+        .populate('course', 'courseTitle courseCode thumbnail')
+        .lean();
 
-        res.status(200).json(courses);
-    } catch (error) {
-        console.error("Error in getMyEnrolledCourses:", error);
-        res.status(500).json({ message: "Error fetching courses" });
+      courses = enrollments
+        .filter(e => e.course) // Security check in case course was deleted
+        .map(e => e.course);
     }
+
+    res.status(200).json(courses);
+  } catch (error) {
+    console.error("Error in getMyEnrolledCourses:", error);
+    res.status(500).json({ message: "Error fetching courses" });
+  }
 };
 
 
@@ -89,6 +89,7 @@ export const isEnrolled = async (req, res) => {
     const exists = await Enrollment.findOne({
       student: userId,
       course: courseId,
+      status: { $ne: "CANCELLED" },
     });
 
     res.status(200).json({ enrolled: !!exists });
@@ -161,9 +162,6 @@ export const unEnrollment = async (req, res) => {
 
 export const studentCourseDetails = async (req, res) => {
   const { enrollmentId } = req.params;
-
-
-  console.log("calling studentCourseDetails api");
 
   try {
     const enrolledData = await Enrollment.aggregate([
@@ -290,6 +288,7 @@ export const studentCourseDetails = async (req, res) => {
           stripeSessionId: 1,
           subscriptionId: 1,
           courseDetails: 1,
+          trial: 1,
         },
       },
 

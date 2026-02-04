@@ -288,7 +288,6 @@ export const getFullCourseData = async (req, res) => {
   }
 };
 
-
 export const getCoursesWithMeetings = async (req, res) => {
   try {
     // 1. Fetch all meetings to count them per course
@@ -418,7 +417,6 @@ export const getCoursesWithMeetings = async (req, res) => {
 //   }
 // };
 
-
 export const toggleGradingSystem = async (req, res) => {
   try {
     const { courseId } = req.params;
@@ -529,7 +527,7 @@ export const createCourseSch = async (req, res) => {
     await course.save();
 
     // 5. Auto-enroll creator
-    await Enrollment.create({ student: createdby, course: course._id });
+    await Enrollment.create({ student: createdby, course: course._id, enrollmentType: "TEACHERENROLLMENT", status: "ACTIVE" });
 
     res.status(201).json({ course, message: "Course created successfully" });
   } catch (error) {

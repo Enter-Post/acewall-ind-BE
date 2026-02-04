@@ -266,6 +266,15 @@ export const createCheckoutSessionConnect = async (req, res) => {
       return res.status(404).json({ error: "Course not found" });
     }
 
+    const alreadyEnrolled = await Enrollment.findOne({
+      student: studentId,
+      course: courseId,
+    });
+
+    if (alreadyEnrolled && alreadyEnrolled.status !== "CANCELLED") {
+      return res.status(400).json({ error: "Already enrolled in this course" });
+    }
+
     const user = course.createdby;
 
     const teacher = await User.findById(user);
@@ -280,9 +289,13 @@ export const createCheckoutSessionConnect = async (req, res) => {
 
     const trialDays = course.freeTrialMonths
 
-    // Add trial only if > 0
-    if (trialDays > 0) {
-      subscriptionData.trial_period_days = trialDays * 30; // Convert months to days
+    if (
+      !alreadyEnrolled ||
+      alreadyEnrolled.status !== "CANCELLED"
+    ) {
+      if (trialDays > 0) {
+        subscriptionData.trial_period_days = trialDays * 30;
+      }
     }
 
     if (!user) {
@@ -378,216 +391,6 @@ export const createCheckoutSessionConnect = async (req, res) => {
   }
 };
 
-
-// export const createCheckoutSessionConnect = async (req, res) => {
-//   const { courseId, studentId } = req.body;
-
-//   try {
-//     // 1. Fetch course + teacher
-//     const course = await CourseSch.findById(courseId).populate("createdby");
-//     if (!course) {
-//       return res.status(404).json({ error: "Course not found" });
-//     }
-
-//     const teacher = await User.findById(course.createdby);
-//     if (!teacher) {
-//       return res.status(404).json({ error: "Teacher not found" });
-//     }
-
-//     if (!teacher.stripeAccountId) {
-//       return res.status(400).json({
-//         needsOnboarding: true,
-//         error: "Teacher payout not enabled",
-//       });
-//     }
-
-//     // 2. FREE COURSE
-//     if (course.paymentType === "FREE") {
-//       await Enrollment.create({
-//         student: studentId,
-//         course: courseId,
-//         status: "ACTIVE",
-//         enrollmentType: "FREE",
-//       });
-
-//       return res.json({ success: true, free: true });
-//     }
-
-//     // 3. Create TEST CLOCK (test mode only)
-//     let testClock = null;
-
-//     if (process.env.NODE_ENV !== "production") {
-//       testClock = await stripe.testHelpers.testClocks.create({
-//         frozen_time: Math.floor(Date.now() / 1000),
-//       });
-//     }
-
-//     // 4. Create STRIPE CUSTOMER (attached to test clock if exists)
-//     const customerData = {
-//       metadata: {
-//         studentId,
-//         courseId,
-//       },
-//     };
-
-//     if (testClock) {
-//       customerData.test_clock = testClock.id;
-//       await TestClock.create({ testClockId: testClock.id });
-//     }
-
-//     const customer = await stripe.customers.create(customerData);
-
-//     // 5. ONE-TIME PAYMENT
-//     if (course.paymentType === "ONETIME") {
-//       const amount = course.price * 100;
-//       const platformFee = Math.round(amount * 0.2);
-
-//       const session = await stripe.checkout.sessions.create({
-//         customer: customer.id,
-//         mode: "payment",
-//         allow_promotion_codes: true,
-
-//         line_items: [
-//           {
-//             price_data: {
-//               currency: "usd",
-//               product_data: {
-//                 name: course.courseTitle,
-//                 description: course.courseDescription,
-//               },
-//               unit_amount: amount,
-//             },
-//             quantity: 1,
-//           },
-//         ],
-
-//         payment_intent_data: {
-//           application_fee_amount: platformFee,
-//           transfer_data: {
-//             destination: teacher.stripeAccountId,
-//           },
-//         },
-
-//         metadata: {
-//           courseId,
-//           studentId,
-//           teacherId: teacher._id.toString(),
-//           paymentType: "ONETIME",
-//         },
-
-//         success_url: `${process.env.CLIENT_URL}/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-//         cancel_url: `${process.env.CLIENT_URL}/student/payment-cancelled`,
-//       });
-
-//       return res.json({
-//         success: true,
-//         url: session.url,
-//         testClockId: testClock?.id || null,
-//       });
-//     }
-
-//     // 6. SUBSCRIPTION PAYMENT
-//     if (course.paymentType === "SUBSCRIPTION") {
-//       const subscriptionData = {
-//         application_fee_percent: 20,
-//         transfer_data: {
-//           destination: teacher.stripeAccountId,
-//         },
-//       };
-
-//       // Trial (convert months → days only if present)
-//       if (course.freeTrialMonths > 0) {
-//         subscriptionData.trial_period_days = course.freeTrialMonths * 30;
-//       }
-
-//       const session = await stripe.checkout.sessions.create({
-//         customer: customer.id,
-//         mode: "subscription",
-//         allow_promotion_codes: true,
-
-//         line_items: [
-//           {
-//             price: course.stripePriceId,
-//             quantity: 1,
-//           },
-//         ],
-
-//         subscription_data: subscriptionData,
-
-//         metadata: {
-//           courseId,
-//           studentId,
-//           teacherId: teacher._id.toString(),
-//           paymentType: "SUBSCRIPTION",
-//         },
-
-//         success_url: `${process.env.CLIENT_URL}/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-//         cancel_url: `${process.env.CLIENT_URL}/student/payment-cancelled`,
-//       });
-
-//       return res.json({
-//         success: true,
-//         url: session.url,
-//         testClockId: testClock?.id || null,
-//       });
-//     }
-
-//     return res.status(400).json({ error: "Invalid payment type" });
-
-//   } catch (err) {
-//     console.error("Stripe Error:", err);
-//     res.status(500).json({ error: err.message });
-//   }
-// };
-
-// export const advanceTestClock = async (req, res) => {
-//   const { testClockId, action } = req.body;
-
-//   try {
-//     if (!testClockId) {
-//       return res.status(400).json({ error: "testClockId is required" });
-//     }
-
-//     // Get the current frozen time of the clock
-//     const testClock = await stripe.testHelpers.testClocks.retrieve(testClockId);
-//     let frozen_time = testClock.frozen_time;
-
-//     // Decide how many seconds to advance
-//     // We simulate "30-day trial" as 30 seconds, "monthly" as 30 seconds
-//     let advanceSeconds;
-
-//     switch (action) {
-//       case "END_TRIAL":
-//         advanceSeconds = 30; // trial ends after 30 seconds
-//         break;
-
-//       case "NEXT_MONTH":
-//         advanceSeconds = 30; // subscription renews after 30 seconds
-//         break;
-
-//       default:
-//         return res.status(400).json({ error: "Invalid action" });
-//     }
-
-//     const newTime = frozen_time + advanceSeconds;
-
-//     // Advance the clock
-//     const advancedClock = await stripe.testHelpers.testClocks.advance(testClockId, {
-//       frozen_time: newTime,
-//     });
-
-//     res.json({
-//       success: true,
-//       message: `Test clock advanced by ${advanceSeconds} seconds (${action})`,
-//       newFrozenTime: newTime,
-//       advancedClock,
-//     });
-//   } catch (error) {
-//     console.error("advanceTestClock error:", error);
-//     res.status(500).json({ error: error.message });
-//   }
-// };
-
 export const handleStripeWebhookConnect = async (req, res) => {
   const sig = req.headers["stripe-signature"];
 
@@ -629,6 +432,8 @@ export const handleStripeWebhookConnect = async (req, res) => {
           studentId,
           sessionId: session.id
         });
+
+        const course = await CourseSch.findById(courseId);
 
         let purchase = await Purchase.findOne({ stripeSessionId: session.id });
 
@@ -673,10 +478,12 @@ export const handleStripeWebhookConnect = async (req, res) => {
         // ================================
         let receiptUrl = null;
         let subscriptionInvoiceId = null;
+        let invoicePdf = null;
+        let status = null;
 
         if (paymentType === "ONETIME" && session.payment_intent) {
-          // ✅ ONE-TIME PAYMENT: Get receipt from payment intent
           try {
+            status = "paid";
             const paymentIntent = await stripe.paymentIntents.retrieve(
               session.payment_intent,
               { expand: ["latest_charge"] }
@@ -694,14 +501,18 @@ export const handleStripeWebhookConnect = async (req, res) => {
             console.error("⚠️ Error retrieving payment intent:", error.message);
           }
         } else if (paymentType === "SUBSCRIPTION" && session.subscription) {
-          // ✅ SUBSCRIPTION: Get receipt from subscription's latest invoice
           try {
             const subscription = await stripe.subscriptions.retrieve(
               session.subscription,
               { expand: ["latest_invoice"] }
             );
 
-            console.log(subscription, "subscription")
+            const invoice = subscription.latest_invoice;
+
+            if (invoice) {
+              receiptUrl = invoice.hosted_invoice_url;
+              invoicePdf = invoice.invoice_pdf;
+            }
 
             console.log("📋 Subscription details:", {
               status: subscription.status,
@@ -710,11 +521,12 @@ export const handleStripeWebhookConnect = async (req, res) => {
             });
 
             if (subscription.latest_invoice) {
-              const latestInvoice = typeof subscription.latest_invoice === 'object'
+              const latestInvoice = typeof subscription.latest_invoice === 'string'
                 ? await stripe.invoices.retrieve(subscription.latest_invoice)
                 : subscription.latest_invoice;
 
-              console.log(latestInvoice, "latestInvoice checking")
+              receiptUrl = latestInvoice.hosted_invoice_url;
+              invoicePdf = latestInvoice.invoice_pdf;
 
               // Store the subscription's invoice ID
               subscriptionInvoiceId = latestInvoice.id;
@@ -722,23 +534,9 @@ export const handleStripeWebhookConnect = async (req, res) => {
               console.log("📋 Latest invoice:", {
                 id: latestInvoice.id,
                 status: latestInvoice.status,
-                paid: latestInvoice.paid,
                 hasCharge: !!latestInvoice.charge,
                 amountPaid: latestInvoice.amount_paid / 100
               });
-
-              const charge = await stripe.charges.retrieve(latestInvoice.charge);
-                receiptUrl = charge.receipt_url;
-                console.log("✅ Subscription receipt captured at checkout:", receiptUrl);
-
-              // Only get receipt if invoice was actually paid (not $0 trial invoice)
-              // if (latestInvoice.paid && latestInvoice.charge && latestInvoice.amount_paid > 0) {
-              //   const charge = await stripe.charges.retrieve(latestInvoice.charge);
-              //   receiptUrl = charge.receipt_url;
-              //   console.log("✅ Subscription receipt captured at checkout:", receiptUrl);
-              // } else {
-              //   console.log("ℹ️ No charge yet (trial period or $0 invoice). Receipt will be captured on first payment.");
-              // }
             }
           } catch (error) {
             console.error("⚠️ Error retrieving subscription details:", error.message);
@@ -759,7 +557,6 @@ export const handleStripeWebhookConnect = async (req, res) => {
             stripeCustomerId: session.customer,
             amount: session.amount_total ? session.amount_total / 100 : 0,
             currency: session.currency,
-            status: paymentType === "SUBSCRIPTION" && session.subscription ? "trial" : "paid",
             paymentMethod: "stripe",
             paymentType,
             // Use subscription invoice ID for subscriptions, manual invoice for one-time
@@ -789,25 +586,49 @@ export const handleStripeWebhookConnect = async (req, res) => {
           const subCourseId = subMetadata.courseId || courseId;
 
           const shouldEnroll = ["active", "trialing"].includes(subscription.status);
+          if (!shouldEnroll) return;
 
-          if (shouldEnroll) {
-            const alreadyEnrolled = await Enrollment.findOne({
+          const isTrial = subscription.status === "trialing" && subscription.trial_end;
+
+          // Check if enrollment exists
+          let enrollment = await Enrollment.findOne({
+            student: subStudentId,
+            course: subCourseId,
+          });
+
+          if (!enrollment) {
+            // FIRST TIME enrollment → create
+            await Enrollment.create({
               student: subStudentId,
               course: subCourseId,
+              subscriptionId: session.subscription,
+              status: isTrial ? "TRIAL" : "ACTIVE",
+              enrollmentType: "SUBSCRIPTION",
+              hasUsedTrial: isTrial ? true : false, // burn trial if given
+              trial: isTrial
+                ? { status: true, endDate: new Date(subscription.trial_end * 1000) }
+                : { status: false },
             });
+            console.log("✅ Subscription enrollment created");
+          } else {
+            // RE-ACTIVATE existing enrollment
+            enrollment.subscriptionId = session.subscription;
+            enrollment.enrollmentType = "SUBSCRIPTION";
+            enrollment.status = isTrial ? "TRIAL" : "ACTIVE";
 
-            if (!alreadyEnrolled) {
-              await Enrollment.create({
-                student: subStudentId,
-                course: subCourseId,
-                subscriptionId: session.subscription,
-                status: subscription.status === "trialing" ? "TRIAL" : "ACTIVE",
-                enrollmentType: "SUBSCRIPTION",
-              });
-              console.log("✅ Subscription enrollment created");
+            // Only set trial if first time trial (never reset)
+            if (isTrial && !enrollment.hasUsedTrial) {
+              enrollment.hasUsedTrial = true;
+              enrollment.trial = {
+                status: true,
+                endDate: new Date(subscription.trial_end * 1000),
+              };
             } else {
-              console.log("ℹ️ Student already enrolled");
+              enrollment.trial = { status: false };
             }
+
+            await enrollment.save();
+            console.log("🔁 Enrollment reactivated");
           }
         }
 
@@ -1057,6 +878,7 @@ export const handleStripeWebhookConnect = async (req, res) => {
         break;
       }
 
+
       /**
        * ================================
        * SUBSCRIPTION UPDATED
@@ -1065,26 +887,53 @@ export const handleStripeWebhookConnect = async (req, res) => {
       case "customer.subscription.updated": {
         const subscription = event.data.object;
 
-        let status = "ACTIVE";
+        let enrollmentStatus = "ACTIVE";
+        let trialStatus = false;
+        let trialEndDate = null;
+
+        if (subscription.status === "trialing") {
+          enrollmentStatus = "TRIAL";
+          trialStatus = true;
+          trialEndDate = subscription.trial_end
+            ? new Date(subscription.trial_end * 1000)
+            : null;
+        }
 
         if (["past_due", "unpaid"].includes(subscription.status)) {
-          status = "PAST_DUE";
+          enrollmentStatus = "PAST_DUE";
         }
 
         if (["canceled", "incomplete_expired"].includes(subscription.status)) {
-          status = "CANCELLED";
+          enrollmentStatus = "CANCELLED";
         }
 
-        console.log("📋 Subscription updated:", {
-          id: subscription.id,
-          status: subscription.status,
-          newEnrollmentStatus: status
-        });
+        if (subscription.status === "active") {
+          enrollmentStatus = "ACTIVE";
+        }
 
-        await Enrollment.updateOne(
-          { subscriptionId: subscription.id },
-          { $set: { status } }
-        );
+        if (subscription.cancel_at_period_end === true) {
+          enrollmentStatus = "APPLIEDFORCANCEL";
+        }
+
+        // Reactivate existing enrollment
+        const enrollment = await Enrollment.findOne({ subscriptionId: subscription.id });
+        if (enrollment) {
+          enrollment.status = enrollmentStatus;
+
+          // Only update trial if never used before
+          if (trialStatus && !enrollment.hasUsedTrial) {
+            enrollment.hasUsedTrial = true;
+            enrollment.trial = {
+              status: true,
+              endDate: trialEndDate,
+            };
+          } else {
+            enrollment.trial = { status: false };
+          }
+
+          await enrollment.save();
+          console.log("🔁 Enrollment updated via subscription webhook");
+        }
 
         break;
       }
@@ -1150,21 +999,39 @@ export const handleStripeWebhookConnect = async (req, res) => {
     res.status(500).json({ error: "Webhook handler failed" });
   }
 };
-
-
-export const endTrial = async (req, res) => {
-  const { subscriptionId } = req.body;
-
+export const getpurchases = async (req, res) => {
   try {
-    const subscription = await stripe.subscriptions.update(subscriptionId, {
-      trial_end: "now",
-    });
+    const userId = req.user._id;
 
-    console.log(subscription, "✅ Trial ended immediately for subscription:", subscriptionId);
+    const purchases = await Purchase.find({ student: userId })
+      .populate("course", "courseTitle thumbnail price") // Adjust fields based on your Course schema
+      .populate("teacher", "name email")
+      .sort({ createdAt: -1 });
 
-    res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Ending trial error:", err);
-    res.status(500).json({ error: "Ending trial failed" });
+    res.status(200).json({ success: true, data: purchases });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 }
+
+
+export const cancelSubscriptionAtPeriodEnd = async (req, res) => {
+  const { subscriptionId, comment } = req.body;
+
+  try {
+    await stripe.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: true,
+      metadata: {
+        cancellation_reason: comment
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: "Subscription will cancel at period end"
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message });
+  }
+};
