@@ -31,9 +31,11 @@ import {
   getUserCoursesforFilter,
   getFullCourseData,
   importCourseFromJSON,
+  getCoursesWithMeetings,
 } from "../../Contollers/CourseControllers/courses.controller.sch.js";
 
 const router = express.Router();
+router.get("/with-meetings",isUser, getCoursesWithMeetings);
 
 router.get("/:courseId/export", getFullCourseData);
 router.post('/import-full-course', isUser, importCourseFromJSON);

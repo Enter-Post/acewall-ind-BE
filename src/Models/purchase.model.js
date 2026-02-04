@@ -54,17 +54,13 @@ const purchaseSchema = new mongoose.Schema(
       type: String,
       default: "usd",
     },
-    platformFee: {
-      type: Number,
-      default: 0,
-    },
     paymentMethod: {
       type: String,
       default: "stripe",
     },
     paymentType: {
       type: String,
-      enum: ["ONETIME", "SUBSCRIPTION", "TESTING"],
+      enum: ["ONETIME", "SUBSCRIPTION"],
       required: true,
     },
 
@@ -88,12 +84,6 @@ const purchaseSchema = new mongoose.Schema(
      * STATUS
      * =====================
      */
-    status: {
-      type: String,
-      enum: ["pending", "paid", "failed", "trial", "refunded", "draft"],
-      default: "pending",
-    },
-
     receiptUrl: {
       type: String,
     },
