@@ -630,6 +630,8 @@ export const handleStripeWebhookConnect = async (req, res) => {
           sessionId: session.id
         });
 
+        const course = await CourseSch.findById(courseId);
+
         let purchase = await Purchase.findOne({ stripeSessionId: session.id });
 
         // ================================
@@ -738,8 +740,6 @@ export const handleStripeWebhookConnect = async (req, res) => {
           }
         }
 
-        console.log(session.amount_total, "session.amount_totallllllll")
-
         // ================================
         // CREATE OR UPDATE PURCHASE
         // ================================
@@ -783,25 +783,49 @@ export const handleStripeWebhookConnect = async (req, res) => {
           const subCourseId = subMetadata.courseId || courseId;
 
           const shouldEnroll = ["active", "trialing"].includes(subscription.status);
+          if (!shouldEnroll) return;
 
-          if (shouldEnroll) {
-            const alreadyEnrolled = await Enrollment.findOne({
+          const isTrial = subscription.status === "trialing" && subscription.trial_end;
+
+          // Check if enrollment exists
+          let enrollment = await Enrollment.findOne({
+            student: subStudentId,
+            course: subCourseId,
+          });
+
+          if (!enrollment) {
+            // FIRST TIME enrollment → create
+            await Enrollment.create({
               student: subStudentId,
               course: subCourseId,
+              subscriptionId: session.subscription,
+              status: isTrial ? "TRIAL" : "ACTIVE",
+              enrollmentType: "SUBSCRIPTION",
+              hasUsedTrial: isTrial ? true : false, // burn trial if given
+              trial: isTrial
+                ? { status: true, endDate: new Date(subscription.trial_end * 1000) }
+                : { status: false },
             });
+            console.log("✅ Subscription enrollment created");
+          } else {
+            // RE-ACTIVATE existing enrollment
+            enrollment.subscriptionId = session.subscription;
+            enrollment.enrollmentType = "SUBSCRIPTION";
+            enrollment.status = isTrial ? "TRIAL" : "ACTIVE";
 
-            if (!alreadyEnrolled) {
-              await Enrollment.create({
-                student: subStudentId,
-                course: subCourseId,
-                subscriptionId: session.subscription,
-                status: subscription.status === "trialing" ? "TRIAL" : "ACTIVE",
-                enrollmentType: "SUBSCRIPTION",
-              });
-              console.log("✅ Subscription enrollment created");
+            // Only set trial if first time trial (never reset)
+            if (isTrial && !enrollment.hasUsedTrial) {
+              enrollment.hasUsedTrial = true;
+              enrollment.trial = {
+                status: true,
+                endDate: new Date(subscription.trial_end * 1000),
+              };
             } else {
-              console.log("ℹ️ Student already enrolled");
+              enrollment.trial = { status: false };
             }
+
+            await enrollment.save();
+            console.log("🔁 Enrollment reactivated");
           }
         }
 
@@ -1060,31 +1084,52 @@ export const handleStripeWebhookConnect = async (req, res) => {
       case "customer.subscription.updated": {
         const subscription = event.data.object;
 
-        let status = "ACTIVE";
+        let enrollmentStatus = "ACTIVE";
+        let trialStatus = false;
+        let trialEndDate = null;
+
+        if (subscription.status === "trialing") {
+          enrollmentStatus = "TRIAL";
+          trialStatus = true;
+          trialEndDate = subscription.trial_end
+            ? new Date(subscription.trial_end * 1000)
+            : null;
+        }
 
         if (["past_due", "unpaid"].includes(subscription.status)) {
-          status = "PAST_DUE";
+          enrollmentStatus = "PAST_DUE";
         }
 
         if (["canceled", "incomplete_expired"].includes(subscription.status)) {
-          status = "CANCELLED";
+          enrollmentStatus = "CANCELLED";
         }
 
-        console.log("📋 Subscription updated:", {
-          id: subscription.id,
-          status: subscription.status,
-          newEnrollmentStatus: status
-        });
+        if (subscription.status === "active") {
+          enrollmentStatus = "ACTIVE";
+        }
 
-        await Enrollment.updateOne(
-          { subscriptionId: subscription.id },
-          { $set: { status } }
-        );
+        // Reactivate existing enrollment
+        const enrollment = await Enrollment.findOne({ subscriptionId: subscription.id });
+        if (enrollment) {
+          enrollment.status = enrollmentStatus;
+
+          // Only update trial if never used before
+          if (trialStatus && !enrollment.hasUsedTrial) {
+            enrollment.hasUsedTrial = true;
+            enrollment.trial = {
+              status: true,
+              endDate: trialEndDate,
+            };
+          } else {
+            enrollment.trial = { status: false };
+          }
+
+          await enrollment.save();
+          console.log("🔁 Enrollment updated via subscription webhook");
+        }
 
         break;
       }
-
-        return
 
       /**
        * ================================
@@ -1150,7 +1195,7 @@ export const handleStripeWebhookConnect = async (req, res) => {
 
 export const getpurchases = async (req, res) => {
   try {
-    const userId  = req.user._id;
+    const userId = req.user._id;
 
     const purchases = await Purchase.find({ student: userId })
       .populate("course", "courseTitle thumbnail price") // Adjust fields based on your Course schema
@@ -1162,3 +1207,29 @@ export const getpurchases = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 }
+
+
+export const cancelSubscriptionAtPeriodEnd = async (req, res) => {
+  const { subscriptionId } = req.body;
+
+  try {
+    const subscription = await stripe.subscriptions.update(
+      subscriptionId,
+      { cancel_at_period_end: true }
+    );
+
+    await Enrollment.updateOne(
+      { subscriptionId },
+      { $set: { status: "APPLIEDFORCANCEL" } }
+    );
+
+    return res.json({
+      success: true,
+      message: "Subscription will cancel at period end",
+      subscription,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message });
+  }
+};

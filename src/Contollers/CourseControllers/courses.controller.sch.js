@@ -287,86 +287,6 @@ export const getFullCourseData = async (req, res) => {
   }
 };
 
-// export const getFullCourseData = async (req, res) => {
-//   try {
-//     const { courseId } = req.params;
-
-//     // 1. Fetch Core Course Details (Metadata, Requirements, Teaching Points)
-//     const course = await CourseSch.findById(courseId)
-//       .populate("category subcategory", "title")
-//       .select("-__v")
-//       .lean();
-
-//     if (!course) return res.status(404).json({ message: "Course not found" });
-
-//     // 2. Fetch Structure (Semesters & Quarters)
-//     const semesters = await Semester.find({ course: courseId }).select("-__v").lean();
-//     const quarters = await Quarter.find({ 
-//       semester: { $in: semesters.map(s => s._id) } 
-//     }).select("-__v").lean();
-
-//     // 3. Fetch Content (Chapters & Lessons)
-//     // We include all descriptions, PDF links, and Video links
-//     const chapters = await Chapter.find({ course: courseId }).select("-__v").lean();
-//     const lessons = await Lesson.find({ 
-//       chapter: { $in: chapters.map(c => c._id) } 
-//     }).select("-__v").lean();
-
-//     // 4. Fetch Assessments (The most valuable data)
-//     // We get every question, every MCQ option, and the correct answers
-//     const assessments = await Assessment.find({ 
-//       course: courseId 
-//     }).populate("category", "name").select("-__v").lean();
-
-//     // 5. Build the instructional tree
-//     const exportData = {
-//       exportDate: new Date().toISOString(),
-//       courseInfo: {
-//         title: course.courseTitle,
-//         description: course.courseDescription,
-//         language: course.language,
-//         requirements: course.requirements,
-//         teachingPoints: course.teachingPoints,
-//         price: course.price,
-//         gradingSystem: course.gradingSystem
-//       },
-//       curriculum: chapters.map(chap => ({
-//         chapterTitle: chap.title,
-//         chapterDescription: chap.description,
-//         lessons: lessons
-//           .filter(l => l.chapter.toString() === chap._id.toString())
-//           .map(l => ({
-//             title: l.title,
-//             description: l.description,
-//             content: {
-//               pdfs: l.pdfFiles,
-//               video: l.youtubeLinks,
-//               links: l.otherLink
-//             }
-//           })),
-//         assessments: assessments
-//           .filter(a => a.chapter?.toString() === chap._id.toString())
-//           .map(a => ({
-//             title: a.title,
-//             type: a.type,
-//             questions: a.questions // This includes the valuable Q&A and MCQ options
-//           }))
-//       })),
-//       // Add Semester structure if it exists
-//       schedule: semesters.map(sem => ({
-//         semesterName: sem.title,
-//         dates: { start: sem.startDate, end: sem.endDate },
-//         quarters: quarters.filter(q => q.semester.toString() === sem._id.toString())
-//       }))
-//     };
-
-//     res.status(200).json(exportData);
-//   } catch (error) {
-//     res.status(500).json({ message: "Failed to compile course data", error: error.message });
-//   }
-// };
-
-
 export const toggleGradingSystem = async (req, res) => {
   try {
     const { courseId } = req.params;
@@ -477,7 +397,7 @@ export const createCourseSch = async (req, res) => {
     await course.save();
 
     // 5. Auto-enroll creator
-    await Enrollment.create({ student: createdby, course: course._id });
+    await Enrollment.create({ student: createdby, course: course._id, enrollmentType: "TEACHERENROLLMENT", status: "ACTIVE" });
 
     res.status(201).json({ course, message: "Course created successfully" });
   } catch (error) {

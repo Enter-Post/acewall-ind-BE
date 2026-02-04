@@ -16,6 +16,10 @@ const EnrollmentSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    trial: {
+      status: { type: Boolean, default: false },
+      endDate: { type: Date },
+    },
     progress: {
       type: Number,
       default: 0, // Percentage completion
@@ -28,9 +32,13 @@ const EnrollmentSchema = new mongoose.Schema(
     },
     stripeSessionId: { type: String },
     subscriptionId: { type: String },
-    enrollmentType: { type: String, enum: ["ONETIME", "SUBSCRIPTION", "FREE"], required: true },
-    status: { type: String, enum: ["ACTIVE", "PAST_DUE", "CANCELLED", "TRIAL"] },
+    enrollmentType: { type: String, enum: ["ONETIME", "SUBSCRIPTION", "FREE", "TEACHERENROLLMENT"], required: true },
+    status: { type: String, enum: ["ACTIVE", "PAST_DUE", "CANCELLED", "TRIAL", "APPLIEDFORCANCEL"] },
     stripeInvoiceId: { type: String },
+    hasUsedTrial: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
