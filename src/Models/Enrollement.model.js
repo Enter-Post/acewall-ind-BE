@@ -39,6 +39,7 @@ const EnrollmentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    cancellationReason: { type: String },
   },
   { timestamps: true }
 );

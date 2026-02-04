@@ -89,6 +89,7 @@ export const isEnrolled = async (req, res) => {
     const exists = await Enrollment.findOne({
       student: userId,
       course: courseId,
+      status: { $ne: "CANCELLED" },
     });
 
     res.status(200).json({ enrolled: !!exists });

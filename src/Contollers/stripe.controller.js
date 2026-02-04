@@ -266,6 +266,15 @@ export const createCheckoutSessionConnect = async (req, res) => {
       return res.status(404).json({ error: "Course not found" });
     }
 
+    const alreadyEnrolled = await Enrollment.findOne({
+      student: studentId,
+      course: courseId,
+    });
+
+    if (alreadyEnrolled && alreadyEnrolled.status !== "CANCELLED") {
+      return res.status(400).json({ error: "Already enrolled in this course" });
+    }
+
     const user = course.createdby;
 
     const teacher = await User.findById(user);
@@ -280,9 +289,13 @@ export const createCheckoutSessionConnect = async (req, res) => {
 
     const trialDays = course.freeTrialMonths
 
-    // Add trial only if > 0
-    if (trialDays > 0) {
-      subscriptionData.trial_period_days = trialDays * 30; // Convert months to days
+    if (
+      !alreadyEnrolled ||
+      alreadyEnrolled.status !== "CANCELLED"
+    ) {
+      if (trialDays > 0) {
+        subscriptionData.trial_period_days = trialDays * 30;
+      }
     }
 
     if (!user) {
@@ -377,216 +390,6 @@ export const createCheckoutSessionConnect = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-
-
-// export const createCheckoutSessionConnect = async (req, res) => {
-//   const { courseId, studentId } = req.body;
-
-//   try {
-//     // 1. Fetch course + teacher
-//     const course = await CourseSch.findById(courseId).populate("createdby");
-//     if (!course) {
-//       return res.status(404).json({ error: "Course not found" });
-//     }
-
-//     const teacher = await User.findById(course.createdby);
-//     if (!teacher) {
-//       return res.status(404).json({ error: "Teacher not found" });
-//     }
-
-//     if (!teacher.stripeAccountId) {
-//       return res.status(400).json({
-//         needsOnboarding: true,
-//         error: "Teacher payout not enabled",
-//       });
-//     }
-
-//     // 2. FREE COURSE
-//     if (course.paymentType === "FREE") {
-//       await Enrollment.create({
-//         student: studentId,
-//         course: courseId,
-//         status: "ACTIVE",
-//         enrollmentType: "FREE",
-//       });
-
-//       return res.json({ success: true, free: true });
-//     }
-
-//     // 3. Create TEST CLOCK (test mode only)
-//     let testClock = null;
-
-//     if (process.env.NODE_ENV !== "production") {
-//       testClock = await stripe.testHelpers.testClocks.create({
-//         frozen_time: Math.floor(Date.now() / 1000),
-//       });
-//     }
-
-//     // 4. Create STRIPE CUSTOMER (attached to test clock if exists)
-//     const customerData = {
-//       metadata: {
-//         studentId,
-//         courseId,
-//       },
-//     };
-
-//     if (testClock) {
-//       customerData.test_clock = testClock.id;
-//       await TestClock.create({ testClockId: testClock.id });
-//     }
-
-//     const customer = await stripe.customers.create(customerData);
-
-//     // 5. ONE-TIME PAYMENT
-//     if (course.paymentType === "ONETIME") {
-//       const amount = course.price * 100;
-//       const platformFee = Math.round(amount * 0.2);
-
-//       const session = await stripe.checkout.sessions.create({
-//         customer: customer.id,
-//         mode: "payment",
-//         allow_promotion_codes: true,
-
-//         line_items: [
-//           {
-//             price_data: {
-//               currency: "usd",
-//               product_data: {
-//                 name: course.courseTitle,
-//                 description: course.courseDescription,
-//               },
-//               unit_amount: amount,
-//             },
-//             quantity: 1,
-//           },
-//         ],
-
-//         payment_intent_data: {
-//           application_fee_amount: platformFee,
-//           transfer_data: {
-//             destination: teacher.stripeAccountId,
-//           },
-//         },
-
-//         metadata: {
-//           courseId,
-//           studentId,
-//           teacherId: teacher._id.toString(),
-//           paymentType: "ONETIME",
-//         },
-
-//         success_url: `${process.env.CLIENT_URL}/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-//         cancel_url: `${process.env.CLIENT_URL}/student/payment-cancelled`,
-//       });
-
-//       return res.json({
-//         success: true,
-//         url: session.url,
-//         testClockId: testClock?.id || null,
-//       });
-//     }
-
-//     // 6. SUBSCRIPTION PAYMENT
-//     if (course.paymentType === "SUBSCRIPTION") {
-//       const subscriptionData = {
-//         application_fee_percent: 20,
-//         transfer_data: {
-//           destination: teacher.stripeAccountId,
-//         },
-//       };
-
-//       // Trial (convert months → days only if present)
-//       if (course.freeTrialMonths > 0) {
-//         subscriptionData.trial_period_days = course.freeTrialMonths * 30;
-//       }
-
-//       const session = await stripe.checkout.sessions.create({
-//         customer: customer.id,
-//         mode: "subscription",
-//         allow_promotion_codes: true,
-
-//         line_items: [
-//           {
-//             price: course.stripePriceId,
-//             quantity: 1,
-//           },
-//         ],
-
-//         subscription_data: subscriptionData,
-
-//         metadata: {
-//           courseId,
-//           studentId,
-//           teacherId: teacher._id.toString(),
-//           paymentType: "SUBSCRIPTION",
-//         },
-
-//         success_url: `${process.env.CLIENT_URL}/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-//         cancel_url: `${process.env.CLIENT_URL}/student/payment-cancelled`,
-//       });
-
-//       return res.json({
-//         success: true,
-//         url: session.url,
-//         testClockId: testClock?.id || null,
-//       });
-//     }
-
-//     return res.status(400).json({ error: "Invalid payment type" });
-
-//   } catch (err) {
-//     console.error("Stripe Error:", err);
-//     res.status(500).json({ error: err.message });
-//   }
-// };
-
-// export const advanceTestClock = async (req, res) => {
-//   const { testClockId, action } = req.body;
-
-//   try {
-//     if (!testClockId) {
-//       return res.status(400).json({ error: "testClockId is required" });
-//     }
-
-//     // Get the current frozen time of the clock
-//     const testClock = await stripe.testHelpers.testClocks.retrieve(testClockId);
-//     let frozen_time = testClock.frozen_time;
-
-//     // Decide how many seconds to advance
-//     // We simulate "30-day trial" as 30 seconds, "monthly" as 30 seconds
-//     let advanceSeconds;
-
-//     switch (action) {
-//       case "END_TRIAL":
-//         advanceSeconds = 30; // trial ends after 30 seconds
-//         break;
-
-//       case "NEXT_MONTH":
-//         advanceSeconds = 30; // subscription renews after 30 seconds
-//         break;
-
-//       default:
-//         return res.status(400).json({ error: "Invalid action" });
-//     }
-
-//     const newTime = frozen_time + advanceSeconds;
-
-//     // Advance the clock
-//     const advancedClock = await stripe.testHelpers.testClocks.advance(testClockId, {
-//       frozen_time: newTime,
-//     });
-
-//     res.json({
-//       success: true,
-//       message: `Test clock advanced by ${advanceSeconds} seconds (${action})`,
-//       newFrozenTime: newTime,
-//       advancedClock,
-//     });
-//   } catch (error) {
-//     console.error("advanceTestClock error:", error);
-//     res.status(500).json({ error: error.message });
-//   }
-// };
 
 export const handleStripeWebhookConnect = async (req, res) => {
   const sig = req.headers["stripe-signature"];
@@ -1108,6 +911,10 @@ export const handleStripeWebhookConnect = async (req, res) => {
           enrollmentStatus = "ACTIVE";
         }
 
+        if (subscription.cancel_at_period_end === true) {
+          enrollmentStatus = "APPLIEDFORCANCEL";
+        }
+
         // Reactivate existing enrollment
         const enrollment = await Enrollment.findOne({ subscriptionId: subscription.id });
         if (enrollment) {
@@ -1192,7 +999,6 @@ export const handleStripeWebhookConnect = async (req, res) => {
     res.status(500).json({ error: "Webhook handler failed" });
   }
 };
-
 export const getpurchases = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -1210,23 +1016,19 @@ export const getpurchases = async (req, res) => {
 
 
 export const cancelSubscriptionAtPeriodEnd = async (req, res) => {
-  const { subscriptionId } = req.body;
+  const { subscriptionId, comment } = req.body;
 
   try {
-    const subscription = await stripe.subscriptions.update(
-      subscriptionId,
-      { cancel_at_period_end: true }
-    );
-
-    await Enrollment.updateOne(
-      { subscriptionId },
-      { $set: { status: "APPLIEDFORCANCEL" } }
-    );
+    await stripe.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: true,
+      metadata: {
+        cancellation_reason: comment
+      }
+    });
 
     return res.json({
       success: true,
-      message: "Subscription will cancel at period end",
-      subscription,
+      message: "Subscription will cancel at period end"
     });
   } catch (err) {
     console.error(err);
