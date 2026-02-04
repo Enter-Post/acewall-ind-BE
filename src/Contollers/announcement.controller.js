@@ -5,27 +5,31 @@ import Enrollment from "../Models/Enrollement.model.js";
 import User from "../Models/user.model.js";
 import nodemailer from "nodemailer";
 import { uploadToCloudinary } from "../lib/cloudinary-course.config.js";
+import {
+  ValidationError,
+  NotFoundError,
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
 
-export const createAnnouncement = async (req, res) => {
-  try {
-    const { title, message, courseId, teacherId, links } = req.body;
+export const createAnnouncement = asyncHandler(async (req, res) => {
+  const { title, message, courseId, teacherId, links } = req.body;
 
-    if (!title || !message || !courseId || !teacherId) {
-      return res.status(400).json({ error: "All fields are required." });
-    }
+  if (!title || !message || !courseId || !teacherId) {
+    throw new ValidationError("All fields are required.", "ANN_001");
+  }
 
-    // Validate teacher
-    const teacher = await User.findById(teacherId);
-    if (!teacher || teacher.role !== "teacher") {
-      return res.status(400).json({ error: "Invalid teacher." });
-    }
+  // Validate teacher
+  const teacher = await User.findById(teacherId);
+  if (!teacher || teacher.role !== "teacher") {
+    throw new ValidationError("Invalid teacher.", "ANN_002");
+  }
 
-    // Validate course
-    const course = await CourseSch.findById(courseId);
-    if (!course) {
-      return res.status(400).json({ error: "Course not found." });
-    }
+  // Validate course
+  const course = await CourseSch.findById(courseId);
+  if (!course) {
+    throw new NotFoundError("Course not found.", "ANN_003");
+  }
 
     // Process links
     const linkArray = links
@@ -148,104 +152,86 @@ export const createAnnouncement = async (req, res) => {
         attachments: mailAttachments,
       };
 
-      await transporter.sendMail(mailOptions);
-      console.log("Announcement emails sent");
-    }
-
-    res.status(201).json({
-      message: "Announcement created and emails sent successfully.",
-      announcement,
-    });
-  } catch (err) {
-    console.error("Error creating announcement:", err);
-    res.status(500).json({ error: "Server error." });
+    console.log("Announcement emails sent");
   }
-};
 
-export const getAnnouncementsForCourse = async (req, res) => {
+  return res.status(201).json({
+    success: true,
+    message: "Announcement created and emails sent successfully.",
+    data: announcement,
+  });
+});
+
+export const getAnnouncementsForCourse = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
-  try {
-    const announcements = await Announcement.find({ course: courseId })
-      .populate("teacher", "firstName lastName email")
-      .sort({ createdAt: -1 });
+  const announcements = await Announcement.find({ course: courseId })
+    .populate("teacher", "firstName lastName email")
+    .sort({ createdAt: -1 });
 
-    res.status(200).json(announcements);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch announcements" });
-  }
-};
+  return res.status(200).json({
+    success: true,
+    data: announcements
+  });
+});
 
-export const getAnnouncementsByTeacher = async (req, res) => {
+export const getAnnouncementsByTeacher = asyncHandler(async (req, res) => {
   const { teacherId } = req.params;
   const { course } = req.query;  // Get the course filter from the query parameters
 
-  try {
-    // Filter by teacherId and course if provided
-    const query = { teacher: teacherId };
-    if (course) query.course = course;
+  // Filter by teacherId and course if provided
+  const query = { teacher: teacherId };
+  if (course) query.course = course;
 
-    const announcements = await Announcement.find(query)
-      .populate("course", "courseTitle")  // Populate course title
-      .populate("teacher", "firstName lastName email")  // Populate teacher info
-      .select('title message course attachments links createdAt updatedAt');  // Select the fields you want to return, including attachments and links
+  const announcements = await Announcement.find(query)
+    .populate("course", "courseTitle")  // Populate course title
+    .populate("teacher", "firstName lastName email")  // Populate teacher info
+    .select('title message course attachments links createdAt updatedAt');  // Select the fields you want to return, including attachments and links
 
-    res.status(200).json({ announcements });
-  } catch (error) {
-    console.error("Error fetching announcements by teacher:", error);
-    res.status(500).json({ message: "Server error fetching announcements" });
-  }
-};
+  return res.status(200).json({ 
+    success: true,
+    data: announcements 
+  });
+});
 
 
 
-export const deleteAnnouncement = async (req, res) => {
+export const deleteAnnouncement = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  try {
-    const deleted = await Announcement.findByIdAndDelete(id);
-    if (!deleted) {
-      return res.status(404).json({ error: "Announcement not found" });
-    }
-
-    res.status(200).json({ message: "Announcement deleted successfully" });
-  } catch (err) {
-    console.error("Error deleting announcement:", err);
-    res.status(500).json({ error: "Server error" });
+  const deleted = await Announcement.findByIdAndDelete(id);
+  if (!deleted) {
+    throw new NotFoundError("Announcement not found", "ANN_004");
   }
-};
 
-export const getAnnouncementsForStudent = async (req, res) => {
+  return res.status(200).json({ 
+    success: true,
+    message: "Announcement deleted successfully" 
+  });
+});
+
+export const getAnnouncementsForStudent = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
 
-  try {
-    // 1. Find all courses the student is enrolled in
-    const enrollments = await Enrollment.find({ student: studentId }).select("course");
-    
-    if (!enrollments.length) {
-      return res.status(200).json({ success: true, announcements: [] });
-    }
-
-    const courseIds = enrollments.map((enrollment) => enrollment.course);
-
-    // 2. Fetch announcements for those courses with all necessary fields
-    const announcements = await Announcement.find({
-      course: { $in: courseIds },
-    })
-      .populate("course", "courseTitle thumbnail") // Added thumbnail in case you want to show course icons
-      .populate("teacher", "firstName lastName")    // Added teacher name so student knows who sent it
-      .select('title message course teacher attachments links createdAt updatedAt') 
-      .sort({ createdAt: -1 });
-
-    res.status(200).json({ 
-      success: true, 
-      count: announcements.length,
-      announcements 
-    });
-  } catch (error) {
-    console.error("Error fetching student announcements:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Server Error fetching announcements" 
-    });
+  // 1. Find all courses the student is enrolled in
+  const enrollments = await Enrollment.find({ student: studentId }).select("course");
+  
+  if (!enrollments.length) {
+    return res.status(200).json({ success: true, data: [] });
   }
-};
+
+  const courseIds = enrollments.map((enrollment) => enrollment.course);
+
+  // 2. Fetch announcements for those courses with all necessary fields
+  const announcements = await Announcement.find({
+    course: { $in: courseIds },
+  })
+    .populate("course", "courseTitle thumbnail") // Added thumbnail in case you want to show course icons
+    .populate("teacher", "firstName lastName")    // Added teacher name so student knows who sent it
+    .select('title message course teacher attachments links createdAt updatedAt') 
+    .sort({ createdAt: -1 });
+
+  return res.status(200).json({ 
+    success: true, 
+    data: announcements
+  });
+});

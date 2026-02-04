@@ -1,33 +1,36 @@
 import { getRecieverSocketId, io } from "../lib/socket.io.js";
 import Conversation from "../Models/conversation.model.js";
 import Message from "../Models/messages.model.js";
+import {
+  NotFoundError,
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
-export const createMessage = async (req, res) => {
+export const createMessage = asyncHandler(async (req, res) => {
   const { conversationId } = req.params;
   const myId = req.user._id;
   const { text } = req.body;
 
-  try {
-    // 1. Save the message
-    const newMessage = new Message({
-      conversationId,
-      text,
-      sender: myId,
-      readBy: [myId],
-    });
-    await newMessage.save();
+  // 1. Save the message
+  const newMessage = new Message({
+    conversationId,
+    text,
+    sender: myId,
+    readBy: [myId],
+  });
+  await newMessage.save();
 
-    await Conversation.findByIdAndUpdate(conversationId, {
-      lastMessage: text || "[Media]",
-      lastMessageAt: new Date(),
-    });
+  await Conversation.findByIdAndUpdate(conversationId, {
+    lastMessage: text || "[Media]",
+    lastMessageAt: new Date(),
+  });
 
-    // 2. Fetch the conversation to find the receiver
-    const conversation = await Conversation.findById(conversationId);
+  // 2. Fetch the conversation to find the receiver
+  const conversation = await Conversation.findById(conversationId);
 
-    if (!conversation) {
-      return res.status(404).json({ message: "Conversation not found" });
-    }
+  if (!conversation) {
+    throw new NotFoundError("Conversation not found", "MSG_001");
+  }
 
     // Assuming 1-to-1 conversation with two users
     const receiverId = conversation.members.find(
@@ -40,33 +43,29 @@ export const createMessage = async (req, res) => {
       io.to(receiverSocketId).emit("newMessage", newMessage);
     }
 
-    // 3. Populate sender data
-    const populatedMessage = await newMessage.populate(
-      "sender",
-      "firstName lastName profileImg"
-    );
+  // 3. Populate sender data
+  const populatedMessage = await newMessage.populate(
+    "sender",
+    "firstName lastName profileImg"
+  );
 
-    // 4. Respond
-    res.status(200).json({
-      message: "Message created successfully",
-      newMessage: populatedMessage,
-    });
-  } catch (err) {
-    console.error("Error in createMessage:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  // 4. Respond
+  return res.status(200).json({
+    success: true,
+    message: "Message created successfully",
+    data: populatedMessage,
+  });
+});
 
-export const getConversationMessages = async (req, res) => {
+export const getConversationMessages = asyncHandler(async (req, res) => {
   const { conversationId } = req.params;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
 
-  try {
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ message: "Conversation not found" });
-    }
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) {
+    throw new NotFoundError("Conversation not found", "MSG_002");
+  }
 
     const totalmessages = await Message.find({ conversationId })
       .populate("sender", "firstName lastName profileImg")
@@ -75,71 +74,64 @@ export const getConversationMessages = async (req, res) => {
       .limit(limit)
       .lean();
 
-    const enhancedMessages = totalmessages.map((msg) => ({
-      ...msg,
-      isUnread: !msg.readBy?.some(
-        (id) => id.toString() === req.user._id.toString()
-      ),
-    }));
+  const enhancedMessages = totalmessages.map((msg) => ({
+    ...msg,
+    isUnread: !msg.readBy?.some(
+      (id) => id.toString() === req.user._id.toString()
+    ),
+  }));
 
-    res.status(200).json({
-      message: "messages fetched successfully",
-      messages: enhancedMessages,
-    });
-  } catch (err) {
-    console.log("error in getConversationMessages", err);
-    res.status(500).json(err);
-  }
-};
+  return res.status(200).json({
+    success: true,
+    message: "messages fetched successfully",
+    data: enhancedMessages,
+  });
+});
 
-export const markMessagesAsRead = async (req, res) => {
+export const markMessagesAsRead = asyncHandler(async (req, res) => {
   const { conversationId } = req.params;
   const userId = req.user._id;
 
-  try {
-    await Message.updateMany(
-      {
-        conversationId,
-        readBy: { $ne: userId },
-        sender: { $ne: userId }, // only mark others' messages
-      },
-      {
-        $addToSet: { readBy: userId }, // avoid duplicates
-      }
-    );
+  await Message.updateMany(
+    {
+      conversationId,
+      readBy: { $ne: userId },
+      sender: { $ne: userId }, // only mark others' messages
+    },
+    {
+      $addToSet: { readBy: userId }, // avoid duplicates
+    }
+  );
 
-    res.status(200).json({ message: "Messages marked as read" });
-  } catch (err) {
-    console.error("Error in markMessagesAsRead:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  return res.status(200).json({ 
+    success: true,
+    message: "Messages marked as read" 
+  });
+});
 
 // GET /conversations/unread
-export const getAllUnreadCounts = async (req, res) => {
+export const getAllUnreadCounts = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
-  try {
-    const conversations = await Conversation.find({ members: userId }).lean();
+  const conversations = await Conversation.find({ members: userId }).lean();
 
-    const results = await Promise.all(
-      conversations.map(async (conv) => {
-        const unreadCount = await Message.countDocuments({
-          conversationId: conv._id,
-          readBy: { $ne: userId },
-          sender: { $ne: userId },
-        });
+  const results = await Promise.all(
+    conversations.map(async (conv) => {
+      const unreadCount = await Message.countDocuments({
+        conversationId: conv._id,
+        readBy: { $ne: userId },
+        sender: { $ne: userId },
+      });
 
-        return {
-          ...conv,
-          unreadCount,
-        };
-      })
-    );
+      return {
+        ...conv,
+        unreadCount,
+      };
+    })
+  );
 
-    res.status(200).json(results);
-  } catch (err) {
-    console.error("Error in getUnreadCounts:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  return res.status(200).json({ 
+    success: true,
+    data: results 
+  });
+});

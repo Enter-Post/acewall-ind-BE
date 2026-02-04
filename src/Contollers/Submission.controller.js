@@ -7,10 +7,15 @@ import dotenv from "dotenv";
 import User from "../Models/user.model.js";
 import { uploadToCloudinary } from "../lib/cloudinary-course.config.js";
 import { updateGradebookOnSubmission } from "../Utiles/updateGradebookOnSubmission.js";
+import {
+  ValidationError,
+  NotFoundError,
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
 dotenv.config();
 
-export const submission = async (req, res) => {
+export const submission = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
   const { assessmentId } = req.params;
   const answers = req.body;
@@ -18,17 +23,17 @@ export const submission = async (req, res) => {
 
   let finalQuestionsubmitted;
 
-  try {
-    const alreadySubmitted = await Submission.findOne({
-      studentId,
-      assessment: assessmentId,
-    });
+  const alreadySubmitted = await Submission.findOne({
+    studentId,
+    assessment: assessmentId,
+  });
 
-    if (alreadySubmitted) {
-      return res.status(400).json({
-        message: "You have already submitted this assessment",
-      });
-    }
+  if (alreadySubmitted) {
+    throw new ValidationError(
+      "You have already submitted this assessment",
+      "SUB_001"
+    );
+  }
 
     const assessment = await Assessment.findById(assessmentId);
 
@@ -49,8 +54,9 @@ export const submission = async (req, res) => {
       finalQuestionsubmitted = answers.answers;
     }
 
-    if (!assessment)
-      return res.status(404).json({ message: "Assessment not found" });
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found", "SUB_002");
+  }
 
     let totalScore = 0;
     let maxScore = 0;
@@ -72,9 +78,9 @@ export const submission = async (req, res) => {
         (q) => q._id.toString() === ans.questionId
       );
 
-      if (!question) {
-        throw new Error("Invalid questionId in submission.");
-      }
+    if (!question) {
+      throw new ValidationError("Invalid questionId in submission.", "SUB_003");
+    }
 
       if (question.type === "mcq" || question.type === "truefalse") {
         const isCorrect = question.correctAnswer === ans.selectedAnswer;
@@ -199,59 +205,48 @@ export const submission = async (req, res) => {
       }
     }
 
-    res.status(201).json({
+    return res.status(201).json({
+      success: true,
       message: "Submission recorded successfully",
-      submission,
+      data: submission,
     });
-  } catch (err) {
-    console.error(err);
-    res
-      .status(500)
-      .json({ message: "Error submitting assessment", error: err.message });
-  }
-};
+});
 
-export const getSubmissionsforStudent = async (req, res) => {
-  try {
-    const submissions = await Submission.find({
-      studentId: req.params.studentId,
-    })
-      .populate("assessment")
-      .sort({ submittedAt: -1 });
+export const getSubmissionsforStudent = asyncHandler(async (req, res) => {
+  const submissions = await Submission.find({
+    studentId: req.params.studentId,
+  })
+    .populate("assessment")
+    .sort({ submittedAt: -1 });
 
-    res.json(submissions);
-  } catch (err) {
-    res
-      .status(500)
-      .json({ message: "Error fetching submissions", error: err.message });
-  }
-};
+  return res.status(200).json({
+    success: true,
+    data: submissions
+  });
+});
 
-export const getSubmissionforAssessmentbyId = async (req, res) => {
+export const getSubmissionforAssessmentbyId = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
   const { assessmentId } = req.params;
-  try {
-    const submission = await Submission.findOne({
-      studentId,
-      assessment: assessmentId,
-    });
+  const submission = await Submission.findOne({
+    studentId,
+    assessment: assessmentId,
+  });
 
-    res.status(200).json({ message: "Submission found", submission });
-  } catch (err) {
-    res
-      .status(500)
-      .json({ message: "Error fetching submission", error: err.message });
-  }
-};
+  return res.status(200).json({ 
+    success: true,
+    message: "Submission found", 
+    data: submission 
+  });
+});
 
-export const getSubmissionById = async (req, res) => {
+export const getSubmissionById = asyncHandler(async (req, res) => {
   const { submissionId } = req.params;
 
-  try {
-    const submission = await Submission.findById(submissionId).populate({
-      path: "studentId",
-      select: "firstName lastName email profileImg",
-    });
+  const submission = await Submission.findById(submissionId).populate({
+    path: "studentId",
+    select: "firstName lastName email profileImg",
+  });
 
     const assessment = await Assessment.findById(submission.assessment);
 
@@ -270,35 +265,30 @@ export const getSubmissionById = async (req, res) => {
       questionDetails: questionMap[ans.questionId],
     }));
 
-    res.status(200).json({
-      message: "Submission found",
-      submission: {
-        ...submission.toObject(),
-        answers: answersWithDetails,
-      },
-    });
-  } catch (err) {
-    res
-      .status(500)
-      .json({ message: "Error fetching submission", error: err.message });
-  }
-};
+  return res.status(200).json({
+    success: true,
+    message: "Submission found",
+    data: {
+      ...submission.toObject(),
+      answers: answersWithDetails,
+    },
+  });
+});
 
-export const getSubmissionsofAssessment_forTeacher = async (req, res) => {
+export const getSubmissionsofAssessment_forTeacher = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
 
-  try {
-    const submissions = await Submission.find({
-      assessment: assessmentId,
-    }).populate({
-      path: "studentId",
-      select: "firstName lastName email profileImg",
-    });
+  const submissions = await Submission.find({
+    assessment: assessmentId,
+  }).populate({
+    path: "studentId",
+    select: "firstName lastName email profileImg",
+  });
 
-    const assessment = await Assessment.findById(assessmentId);
-    if (!assessment) {
-      return res.status(404).json({ message: "Assessment not found" });
-    }
+  const assessment = await Assessment.findById(assessmentId);
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found", "SUB_004");
+  }
 
     const questionMap = {};
     assessment.questions.forEach((q) => {
@@ -320,17 +310,12 @@ export const getSubmissionsofAssessment_forTeacher = async (req, res) => {
       };
     });
 
-    res.status(200).json({
-      message: "Submissions found",
-      submissions: submissionsWithDetails,
-    });
-  } catch (err) {
-    console.log("error in getting submission", err);
-    res
-      .status(500)
-      .json({ message: "Error fetching submission", error: err.message });
-  }
-};
+  return res.status(200).json({
+    success: true,
+    message: "Submissions found",
+    data: submissionsWithDetails,
+  });
+});
 
 // export const checkbyTeacher = async (req, res) => {
 //   try {
@@ -370,21 +355,20 @@ export const getSubmissionsofAssessment_forTeacher = async (req, res) => {
 //   }
 // };
 
-export const teacherGrading = async (req, res) => {
+export const teacherGrading = asyncHandler(async (req, res) => {
   const { submissionId } = req.params;
   const manualGrades = req.body;
 
-  try {
-    // ✅ Populate studentId from User model
-    const submission = await Submission.findById(submissionId).populate(
-      "studentId"
-    );
+  // ✅ Populate studentId from User model
+  const submission = await Submission.findById(submissionId).populate(
+    "studentId"
+  );
 
-    const assessment = await Assessment.findById(submission.assessment);
+  const assessment = await Assessment.findById(submission.assessment);
 
-    if (!submission) {
-      return res.status(404).json({ message: "Submission not found" });
-    }
+  if (!submission) {
+    throw new NotFoundError("Submission not found", "SUB_005");
+  }
     let allcourseMaxPoint = 0;
 
     // Grade each manually graded question
@@ -392,15 +376,17 @@ export const teacherGrading = async (req, res) => {
       const { awardedPoints, maxPoints } = manualGrades[questionId];
       allcourseMaxPoint += maxPoints;
 
-      if (awardedPoints > maxPoints) {
-        return res.status(400).json({
-          message: `Points for question ${questionId} can't exceed max points.`,
-        });
-      } else if (awardedPoints < 0) {
-        return res.status(400).json({
-          message: `Points for question ${questionId} can't be negative.`,
-        });
-      }
+    if (awardedPoints > maxPoints) {
+      throw new ValidationError(
+        `Points for question ${questionId} can't exceed max points.`,
+        "SUB_006"
+      );
+    } else if (awardedPoints < 0) {
+      throw new ValidationError(
+        `Points for question ${questionId} can't be negative.`,
+        "SUB_007"
+      );
+    }
 
       const isCorrect = awardedPoints >= maxPoints / 2;
 
@@ -480,18 +466,15 @@ export const teacherGrading = async (req, res) => {
       };
 
 
-      await transporter.sendMail(mailOptions);
-    }
-
-    res.json({ message: "Submission graded", submission });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      message: "Error grading submission",
-      error: err.message,
-    });
+    await transporter.sendMail(mailOptions);
   }
-};
+
+  return res.status(200).json({ 
+    success: true,
+    message: "Submission graded", 
+    data: submission 
+  });
+});
 
 // export const TeachersAssessmentSubmissions = async (req, res) => {
 //   const { submissionId } = req.params;

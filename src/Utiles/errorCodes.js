@@ -1,8 +1,4 @@
-/**
- * Error Code Registry
- * Centralized error codes with messages and HTTP status codes
- * Format: CATEGORY_NUMBER
- */
+
 
 export const ERROR_CODES = {
   // Authentication Errors (AUTH_xxx)
@@ -188,6 +184,26 @@ export const ERROR_CODES = {
     code: "PAY_006",
     message: "Coupon not found or expired",
     statusCode: 404,
+  },
+  PAY_007: {
+    code: "PAY_007",
+    message: "Stripe account not connected",
+    statusCode: 400,
+  },
+  PAY_008: {
+    code: "PAY_008",
+    message: "Teacher onboarding incomplete - payouts not enabled",
+    statusCode: 400,
+  },
+  PAY_009: {
+    code: "PAY_009",
+    message: "Subscription creation failed",
+    statusCode: 500,
+  },
+  PAY_010: {
+    code: "PAY_010",
+    message: "Invalid payment type",
+    statusCode: 400,
   },
 
   // Assessment Errors (ASM_xxx)

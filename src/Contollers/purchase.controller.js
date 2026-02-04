@@ -1,21 +1,23 @@
 import Purchase from "../Models/purchase.model.js";
+import { ValidationError, ConflictError, DatabaseError } from '../Utiles/errors.js';
+import { asyncHandler } from '../middlewares/errorHandler.middleware.js';
 // import User from "../Models/user.model";
 
-export const purchaseCourse = async (req, res) => {
-  const userId = req.user._id;
-  const { id } = req.params;
-
+export const purchaseCourse = asyncHandler(async (req, res, next) => {
   try {
-    // Check if course is already purchased
+    const userId = req.user._id;
+    const { id } = req.params;
 
-    const isPurchased = await Purchase.findOne({ student: userId, course: id });
-    if (isPurchased) {
-      return res
-        .status(400)
-        .json({ error: "You have already purchased this course." });
+    // Validate course ID
+    if (!id) {
+      throw new ValidationError("Course ID is required", "VAL_001");
     }
 
-    console.log(isPurchased, "isPurchased");
+    // Check if course is already purchased
+    const isPurchased = await Purchase.findOne({ student: userId, course: id });
+    if (isPurchased) {
+      throw new ConflictError("You have already purchased this course", "RES_008");
+    }
 
     const newPurchase = new Purchase({
       student: userId,
@@ -24,35 +26,30 @@ export const purchaseCourse = async (req, res) => {
 
     await newPurchase.save();
 
-    return res.status(200).json({
-      message: "Course purchased successfully!",
-      purchased: newPurchase, // Return updated purchased list
+    res.status(200).json({
+      success: true,
+      data: { purchased: newPurchase },
+      message: "Course purchased successfully"
     });
   } catch (error) {
-    console.error("Error purchasing course:", error.message);
-    return res
-      .status(500)
-      .json({ error: "Server error while purchasing course." });
+    next(error);
   }
-};
+});
 
-export const getPurchasedCourses = async (req, res) => {
-  const userId = req.user._id;
-
+export const getPurchasedCourses = asyncHandler(async (req, res, next) => {
   try {
+    const userId = req.user._id;
+
     const purchasedCourses = await Purchase.find({ student: userId })
       .populate("course")
       .exec();
 
-    return res.status(200).json({
-      message: "Purchased courses fetched successfully!",
-      purchasedCourses,
+    res.status(200).json({
+      success: true,
+      data: { purchasedCourses },
+      message: "Purchased courses fetched successfully"
     });
   } catch (error) {
-    console.error("Error fetching purchased courses:", error.message);
-    return res
-      .status(500)
-      .json({ error: "Server error while fetching purchased courses." });
-  }F
-
-}
+    next(error);
+  }
+});

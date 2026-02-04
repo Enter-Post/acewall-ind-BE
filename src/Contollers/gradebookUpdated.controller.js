@@ -4,6 +4,10 @@ import GPA from "../Models/GPA.model.js";
 import StandardGrading from "../Models/StandardGrading.model.js";
 import CourseSch from "../Models/courses.model.sch.js";
 import User from "../Models/user.model.js";
+import {
+  NotFoundError,
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
 // ======================================================
 // 🔥 Helper Methods
@@ -45,13 +49,12 @@ function getStandardGrade(percent, standardScale) {
 }
 
 /** Main API */
-export const getStudentGradebooksFormatted = async (req, res) => {
-  try {
-    const studentId = req.user._id;
+export const getStudentGradebooksFormatted = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
 
-    console.log("this is working")
+  console.log("this is working")
 
-    const gradingScale = await GradingScale.findOne({});
+  const gradingScale = await GradingScale.findOne({});
     const gpaScale = await GPA.findOne({});
     const standardScale = await StandardGrading.findOne({});
 
@@ -235,88 +238,91 @@ export const getStudentGradebooksFormatted = async (req, res) => {
     }
 
     return res.json({
-      studentId,
-      totalCourses,
-      overallGPA: Number((overallGPA / totalCourses).toFixed(2)),
-      overallStandardGrade,
-      currentPage: 1,
-      totalPages: 1,
-      courses,
+      success: true,
+      data: {
+        studentId,
+        totalCourses,
+        overallGPA: Number((overallGPA / totalCourses).toFixed(2)),
+        overallStandardGrade,
+        currentPage: 1,
+        totalPages: 1,
+        courses,
+      }
     });
-  } catch (error) {
-    console.error("Error generating gradebook:", error);
-    return res.status(500).json({ error: error.message });
-  }
-};
+});
 
-export const getStudentCourseAnalytics = async (req, res) => {
-  try {
-    const { courseId } = req.params;
-    const studentId = req.user._id;
+export const getStudentCourseAnalytics = asyncHandler(async (req, res) => {
+  const { courseId } = req.params;
+  const studentId = req.user._id;
 
-    const gradebook = await Gradebook.findOne({ studentId, courseId });
-    if (!gradebook)
-      return res.status(404).json({ message: "Analytics data not found." });
+  const gradebook = await Gradebook.findOne({ studentId, courseId });
+  if (!gradebook)
+    throw new NotFoundError("Analytics data not found.", "GRAD_001");
 
-    let allItems = [];
-    if (gradebook.courseItems?.length > 0) {
-      allItems = [...gradebook.courseItems];
-    } else if (gradebook.semesters) {
-      gradebook.semesters.forEach((sem) => {
-        sem.quarters?.forEach((q) => {
-          if (q.items) allItems.push(...q.items);
-        });
+  let allItems = [];
+  if (gradebook.courseItems?.length > 0) {
+    allItems = [...gradebook.courseItems];
+  } else if (gradebook.semesters) {
+    gradebook.semesters.forEach((sem) => {
+      sem.quarters?.forEach((q) => {
+        if (q.items) allItems.push(...q.items);
       });
-    }
+    });
+  }
 
-    if (allItems.length === 0) {
-      return res.json({
-        message: "No assessments completed yet.",
+  if (allItems.length === 0) {
+    return res.json({
+      success: true,
+      message: "No assessments completed yet.",
+      data: {
         summary: { currentPercentage: 0 },
         insights: null,
         charts: { lineChart: [], categoryPerformance: [] },
-      });
-    }
-
-    // --- SYNCHRONIZED CALCULATION LOGIC ---
-
-    // 1. TRUE Overall Average (Sum of Points / Sum of Max)
-    const totalEarned = allItems.reduce((acc, item) => acc + (item.studentPoints || 0), 0);
-    const totalPossible = allItems.reduce((acc, item) => acc + (item.maxPoints || 0), 0);
-    const currentOverallAvg = totalPossible > 0 ? (totalEarned / totalPossible) * 100 : 0;
-
-    // 2. Trend & Momentum Logic (Last 5 submissions)
-    const recentWindow = 5;
-    const trendItems = allItems.slice(-recentWindow);
-    const recentAvg = trendItems.reduce(
-      (acc, item) => acc + ((item.studentPoints / (item.maxPoints || 1)) * 100),
-      0
-    ) / trendItems.length;
-
-    const trendDiff = recentAvg - currentOverallAvg;
-    const projectedScore = recentAvg * 0.6 + currentOverallAvg * 0.4;
-
-    // 3. Category Performance
-    const categories = {};
-    allItems.forEach((item) => {
-      const cat = item.categoryName || "Assessment";
-      if (!categories[cat])
-        categories[cat] = { totalObtained: 0, totalMax: 0, count: 0 };
-      categories[cat].totalObtained += (item.studentPoints || 0);
-      categories[cat].totalMax += (item.maxPoints || 0);
-      categories[cat].count += 1;
+      }
     });
+  }
 
-    const categoryPerformance = Object.keys(categories).map((cat) => ({
-      category: cat,
-      average: (categories[cat].totalObtained / (categories[cat].totalMax || 1)) * 100,
-      count: categories[cat].count,
-    })).sort((a, b) => b.average - a.average); // Best to Worst
+  // --- SYNCHRONIZED CALCULATION LOGIC ---
 
-    const weakest = categoryPerformance[categoryPerformance.length - 1];
-    const best = categoryPerformance[0];
+  // 1. TRUE Overall Average (Sum of Points / Sum of Max)
+  const totalEarned = allItems.reduce((acc, item) => acc + (item.studentPoints || 0), 0);
+  const totalPossible = allItems.reduce((acc, item) => acc + (item.maxPoints || 0), 0);
+  const currentOverallAvg = totalPossible > 0 ? (totalEarned / totalPossible) * 100 : 0;
 
-    return res.json({
+  // 2. Trend & Momentum Logic (Last 5 submissions)
+  const recentWindow = 5;
+  const trendItems = allItems.slice(-recentWindow);
+  const recentAvg = trendItems.reduce(
+    (acc, item) => acc + ((item.studentPoints / (item.maxPoints || 1)) * 100),
+    0
+  ) / trendItems.length;
+
+  const trendDiff = recentAvg - currentOverallAvg;
+  const projectedScore = recentAvg * 0.6 + currentOverallAvg * 0.4;
+
+  // 3. Category Performance
+  const categories = {};
+  allItems.forEach((item) => {
+    const cat = item.categoryName || "Assessment";
+    if (!categories[cat])
+      categories[cat] = { totalObtained: 0, totalMax: 0, count: 0 };
+    categories[cat].totalObtained += (item.studentPoints || 0);
+    categories[cat].totalMax += (item.maxPoints || 0);
+    categories[cat].count += 1;
+  });
+
+  const categoryPerformance = Object.keys(categories).map((cat) => ({
+    category: cat,
+    average: (categories[cat].totalObtained / (categories[cat].totalMax || 1)) * 100,
+    count: categories[cat].count,
+  })).sort((a, b) => b.average - a.average); // Best to Worst
+
+  const weakest = categoryPerformance[categoryPerformance.length - 1];
+  const best = categoryPerformance[0];
+
+  return res.json({
+    success: true,
+    data: {
       courseName: gradebook.courseTitle,
       summary: {
         currentPercentage: currentOverallAvg.toFixed(1),
@@ -344,19 +350,16 @@ export const getStudentCourseAnalytics = async (req, res) => {
         })),
         categoryPerformance,
       },
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
+    }
+  });
+});
 
-export const getGradebooksOfCourseFormatted = async (req, res) => {
+export const getGradebooksOfCourseFormatted = asyncHandler(async (req, res) => {
   const courseId = req.params.courseId;
 
-  try {
-    // Fetch course
-    const course = await CourseSch.findById(courseId);
-    if (!course) return res.status(404).json({ message: "Course not found" });
+  // Fetch course
+  const course = await CourseSch.findById(courseId);
+  if (!course) throw new NotFoundError("Course not found", "GRAD_002");
 
     const gradingType = course.gradingSystem; // normalGrading | StandardGrading
     const isSemesterBased = course.semesterbased === true;
@@ -507,32 +510,30 @@ export const getGradebooksOfCourseFormatted = async (req, res) => {
     }
 
     return res.status(200).json({
-      gradebook: formatted,
-      gradingSystem: gradingType,
-      courseType: isSemesterBased ? "semester-based" : "chapter-based",
+      success: true,
+      data: {
+        gradebook: formatted,
+        gradingSystem: gradingType,
+        courseType: isSemesterBased ? "semester-based" : "chapter-based",
+      }
     });
-  } catch (error) {
-    console.error("Error in getGradebooksOfCourseFormatted", error);
-    return res.status(500).json({ error: error.message });
-  }
-};
+});
 
-export const getGradebooksOfStudentCourseFormatted = async (req, res) => {
+export const getGradebooksOfStudentCourseFormatted = asyncHandler(async (req, res) => {
   const { courseId, studentId } = req.params;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
 
-  try {
-    // Fetch course
-    const course = await CourseSch.findById(courseId)
-      .lean()
-      .select(
-        "courseTitle courseDescription thumbnail gradingSystem semesterbased"
-      );
+  // Fetch course
+  const course = await CourseSch.findById(courseId)
+    .lean()
+    .select(
+      "courseTitle courseDescription thumbnail gradingSystem semesterbased"
+    );
 
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
+  if (!course) {
+    throw new NotFoundError("Course not found", "GRAD_003");
+  }
 
     const gradingType = course.gradingSystem; // normalGrading | StandardGrading
     const isSemesterBased = course.semesterbased === true;
@@ -549,9 +550,7 @@ export const getGradebooksOfStudentCourseFormatted = async (req, res) => {
     }).lean();
 
     if (!gradebook) {
-      return res
-        .status(404)
-        .json({ message: "Gradebook not found for this student" });
+      throw new NotFoundError("Gradebook not found for this student", "GRAD_004");
     }
 
     // ------------------------------------
@@ -700,35 +699,37 @@ export const getGradebooksOfStudentCourseFormatted = async (req, res) => {
     }
 
     res.json(response);
-  } catch (error) {
-    console.error("Gradebook error:", error);
-    res.status(500).json({ error: "Internal server error" });
+});
+
+export const getTeacherStudentAnalytics = asyncHandler(async (req, res) => {
+  const { courseId, studentId } = req.params;
+
+  const course = await CourseSch.findById(courseId).lean().select("courseTitle");
+  const gradebook = await Gradebook.findOne({ courseId, studentId }).lean();
+
+  if (!gradebook || !course) {
+    throw new NotFoundError("Data not found.", "GRAD_005");
   }
-};
 
-export const getTeacherStudentAnalytics = async (req, res) => {
-  try {
-    const { courseId, studentId } = req.params;
+  let allItems = [];
+  if (gradebook.courseItems?.length > 0) {
+    allItems = [...gradebook.courseItems];
+  } else if (gradebook.semesters) {
+    gradebook.semesters.forEach(sem => {
+      sem.quarters?.forEach(q => { if (q.items) allItems.push(...q.items); });
+    });
+  }
 
-    const course = await CourseSch.findById(courseId).lean().select("courseTitle");
-    const gradebook = await Gradebook.findOne({ courseId, studentId }).lean();
-
-    if (!gradebook || !course) {
-      return res.status(404).json({ message: "Data not found." });
-    }
-
-    let allItems = [];
-    if (gradebook.courseItems?.length > 0) {
-      allItems = [...gradebook.courseItems];
-    } else if (gradebook.semesters) {
-      gradebook.semesters.forEach(sem => {
-        sem.quarters?.forEach(q => { if (q.items) allItems.push(...q.items); });
-      });
-    }
-
-    if (allItems.length === 0) {
-      return res.json({ message: "No graded items found.", summary: { currentPercentage: 0 }, charts: { lineChart: [], categoryPerformance: [] } });
-    }
+  if (allItems.length === 0) {
+    return res.json({ 
+      success: true,
+      message: "No graded items found.", 
+      data: { 
+        summary: { currentPercentage: 0 }, 
+        charts: { lineChart: [], categoryPerformance: [] } 
+      }
+    });
+  }
 
     // --- SYNCHRONIZED CALCULATION LOGIC (IDENTICAL TO STUDENT) ---
 
@@ -764,10 +765,12 @@ export const getTeacherStudentAnalytics = async (req, res) => {
       count: categories[cat].count
     })).sort((a, b) => b.average - a.average);
 
-    const weakest = categoryPerformance[categoryPerformance.length - 1];
-    const best = categoryPerformance[0];
+  const weakest = categoryPerformance[categoryPerformance.length - 1];
+  const best = categoryPerformance[0];
 
-    res.json({
+  return res.json({
+    success: true,
+    data: {
       studentId,
       courseName: course.courseTitle,
       summary: {
@@ -796,9 +799,6 @@ export const getTeacherStudentAnalytics = async (req, res) => {
         })),
         categoryPerformance
       }
-    });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
+    }
+  });
+});

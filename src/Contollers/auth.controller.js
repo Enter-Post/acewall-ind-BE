@@ -321,14 +321,13 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
     });
 });
 
-export const verifyPhoneOtp = async (req, res) => {
+export const verifyPhoneOtp = asyncHandler(async (req, res) => {
   const { email, otp } = req.body;
 
-  try {
-    const otpEntry = await OTP.findOne({ email });
-    if (!otpEntry || !otpEntry.isVerified) {
-      return res.status(400).json({ message: "Email not verified yet." });
-    }
+  const otpEntry = await OTP.findOne({ email });
+  if (!otpEntry || !otpEntry.isVerified) {
+    throw new ValidationError("Email not verified yet.", "AUTH_008");
+  }
 
     const isExpired = Date.now() > otpEntry.expiresAt;
     const isValid = await bcrypt.compare(otp, otpEntry.phoneOtp);
@@ -419,20 +418,19 @@ export const verifyPhoneOtp = async (req, res) => {
     // ✅ issue token
     generateToken(newUser, newUser.role, req, res);
 
-    res.status(201).json({ message: "User created successfully.", newUser });
-  } catch (error) {
-    console.error("verifyPhoneOtp error:", error.message);
-    res.status(500).json({ message: "Internal server error." });
-  }
-};
+    return res.status(201).json({ 
+      success: true,
+      message: "User created successfully.", 
+      data: newUser 
+    });
+});
 
-export const resendPhoneOTP = async (req, res) => {
+export const resendPhoneOTP = asyncHandler(async (req, res) => {
   const { email } = req.body;
 
-  try {
-    if (!email) {
-      return res.status(400).json({ message: "Email is required." });
-    }
+  if (!email) {
+    throw new ValidationError("Email is required.", "VAL_001");
+  }
 
     const otpRecord = await OTP.findOne({ email });
 
@@ -473,12 +471,11 @@ export const resendPhoneOTP = async (req, res) => {
       to: userData.phone,
     });
 
-    res.status(200).json({ message: "New OTP has been sent to your phone number." });
-  } catch (error) {
-    console.error("Resend OTP error:", error.message);
-    res.status(500).json({ message: "Internal server error." });
-  }
-}
+    return res.status(200).json({ 
+      success: true,
+      message: "New OTP has been sent to your phone number." 
+    });
+});
 
 export const login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
@@ -669,10 +666,9 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
   });
 });
 
-export const logout = async (req, res) => {
-  try {
-    // Detect portal like in generateToken/isUser
-    let host = "";
+export const logout = asyncHandler(async (req, res) => {
+  // Detect portal like in generateToken/isUser
+  let host = "";
     const origin = req.get("origin");
 
     if (origin) {
@@ -698,87 +694,71 @@ export const logout = async (req, res) => {
     });
 
     return res.status(200).json({
+      success: true,
       message: `User logged out successfully from ${portal} portal`,
     });
-  } catch (error) {
-    console.error("Error in logout =>", error.message);
-    return res.status(500).json({
-      message: "Something went wrong, sorry for the inconvenience",
-    });
-  }
-};
+});
 
-export const allUser = async (req, res) => {
-  try {
-    const allUser = await User.find();
+export const allUser = asyncHandler(async (req, res) => {
+  const allUser = await User.find();
 
-    res.status(200).json({
-      allUser,
-      message: "User finded Successfully",
-    });
-  } catch (error) {
-    console.log("error in getting allUser==>", error.message);
-    res.status(500).json({
-      message: "Some this Went Wrong, sorry for inconvenience",
-    });
-  }
-};
+  return res.status(200).json({
+    success: true,
+    data: allUser,
+    message: "Users retrieved successfully",
+  });
+});
 
-export const checkAuth = (req, res) => {
-  try {
-    res.status(200).json({ user: req.user });
-  } catch (error) {
-    console.log("error in check Auth", error.message);
-    res.status(500).json({
-      message: "Internal server Error",
-    });
-  }
-};
+export const checkAuth = asyncHandler(async (req, res) => {
+  return res.status(200).json({ 
+    success: true,
+    data: req.user 
+  });
+});
 
-export const updateUser = async (req, res) => {
+export const updateUser = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
   console.log(req.body, "body");
 
-  try {
-    let updatedFields = { ...req.body };
+  let updatedFields = { ...req.body };
 
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { $set: updatedFields },
-      { new: true, runValidators: true }
-    );
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    { $set: updatedFields },
+    { new: true, runValidators: true }
+  );
 
-    res.json({ message: "User Updated Successfully", updatedUser });
-  } catch (err) {
-    console.error("Update Error:", err);
-    res.status(500).json({ message: "Update failed", error: err.message });
-  }
-};
-export const checkUser = async (req, res) => {
+  return res.status(200).json({ 
+    success: true,
+    message: "User Updated Successfully", 
+    data: updatedUser 
+  });
+});
+export const checkUser = asyncHandler(async (req, res) => {
   const { email } = req.body;
 
   if (!email) {
-    return res.status(400).json({ error: "Email is required" });
+    throw new ValidationError("Email is required", "VAL_001");
   }
 
-  try {
-    const existingUser = await User.findOne({ email });
+  const existingUser = await User.findOne({ email });
 
-    if (existingUser) {
-      return res.status(409).json({ message: "User already exists" });
-    } else {
-      return res.status(200).json({ message: "User does not exist" });
-    }
-  } catch (err) {
-    console.error("Error checking user:", err);
-    return res.status(500).json({ error: "Server error" });
+  if (existingUser) {
+    return res.status(409).json({ 
+      success: false,
+      message: "User already exists" 
+    });
+  } else {
+    return res.status(200).json({ 
+      success: true,
+      message: "User does not exist" 
+    });
   }
-};
+});
 
-export const allTeacher = async (req, res) => {
-  try {
-    const { name, email } = req.query;
+export const allTeacher = asyncHandler(async (req, res) => {
+  const { name, email } = req.query;
 
     // Build query based on available filters
     let query = { role: "teacher" };
@@ -821,15 +801,14 @@ export const allTeacher = async (req, res) => {
       })
     );
 
-    res.status(200).json(formattedTeachers);
-  } catch (err) {
-    res.status(500).json({ message: "Server Error", error: err.message });
-  }
-};
+    return res.status(200).json({
+      success: true,
+      data: formattedTeachers
+    });
+});
 
-export const allStudent = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
+export const allStudent = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 6;
     const skip = (page - 1) * limit;
     const search = req.query.search || ""; // get search term
@@ -863,27 +842,26 @@ export const allStudent = async (req, res) => {
       id: student._id,
     }));
 
-    res.status(200).json({
-      total: totalStudents,
-      currentPage: page,
-      totalPages: Math.ceil(totalStudents / limit),
-      students: formattedStudents,
+    return res.status(200).json({
+      success: true,
+      data: {
+        total: totalStudents,
+        currentPage: page,
+        totalPages: Math.ceil(totalStudents / limit),
+        students: formattedStudents,
+      }
     });
-  } catch (err) {
-    res.status(500).json({ message: "Server Error", error: err.message });
-  }
-};
+});
 
-export const getStudentById = async (req, res) => {
-  try {
-    const { id } = req.params;
+export const getStudentById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
 
     // Get student/user info
     const user = await User.findById(id).select(
       "firstName middleName lastName email profileImg createdAt"
     );
     if (!user) {
-      return res.status(404).json({ message: "Student not found." });
+      throw new NotFoundError("Student not found.", "AUTH_009");
     }
 
     // Use aggregation to get enrollments with course and teacher info
@@ -930,61 +908,56 @@ export const getStudentById = async (req, res) => {
       },
     ]);
 
-    res.status(200).json({
-      user,
-      enrollments,
+    return res.status(200).json({
+      success: true,
+      data: {
+        user,
+        enrollments,
+      },
       message: "Student and enrollments fetched successfully",
     });
-  } catch (error) {
-    console.error("Error fetching user by ID:", error);
-    res.status(500).json({ message: "Server error." });
-  }
-};
+});
 
-export const getTeacherById = async (req, res) => {
+export const getTeacherById = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  try {
-    const teacher = await User.findById(id).select(
-      "firstName lastName email profileImg createdAt documents isVarified"
-    );
-    if (!teacher) {
-      return res.status(404).json({ message: "Teacher not found." });
-    }
+  const teacher = await User.findById(id).select(
+    "firstName lastName email profileImg createdAt documents isVarified"
+  );
+  if (!teacher) {
+    throw new NotFoundError("Teacher not found.", "AUTH_010");
+  }
 
     const courses = await CourseSch.aggregate([
       { $match: { createdby: new mongoose.Types.ObjectId(id) } },
       { $project: { courseTitle: 1, courseDescription: 1, _id: 1 } },
     ]);
 
-    res.status(200).json({ teacher, courses });
-  } catch (error) {
-    console.error("Error fetching teacher by ID:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+    return res.status(200).json({ 
+      success: true,
+      data: { teacher, courses } 
+    });
+});
 
-export const getUserInfo = async (req, res) => {
+export const getUserInfo = asyncHandler(async (req, res) => {
   const userId = req.user._id;
-  try {
-    const user = await User.findById(userId).select("-password");
-    if (!user) {
-      return res.status(404).json("User not found");
-    }
-    return res.status(200).json({ message: "User found successfully", user });
-  } catch (error) {
-    console.log("error in getUserInfo:", error);
-    return res.status(500).json("Internal Server Error");
+  const user = await User.findById(userId).select("-password");
+  if (!user) {
+    throw new NotFoundError("User not found", "AUTH_011");
   }
-};
-export const updateProfileImg = async (req, res) => {
+  return res.status(200).json({ 
+    success: true,
+    message: "User found successfully", 
+    data: user 
+  });
+});
+export const updateProfileImg = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const file = req.file;
 
-  try {
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new NotFoundError("User not found", "AUTH_012");
+  }
 
     // Delete previous image from Cloudinary
     if (user.profileImg?.publicId) {
@@ -1010,40 +983,37 @@ export const updateProfileImg = async (req, res) => {
 
     await user.save();
 
-    return res
-      .status(200)
-      .json({ message: "Profile image updated successfully", user });
-  } catch (error) {
-    console.error("Error in updateProfileImg:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+    return res.status(200).json({ 
+      success: true,
+      message: "Profile image updated successfully", 
+      data: user 
+    });
+});
 
-export const updatePasswordOTP = async (req, res) => {
+export const updatePasswordOTP = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { oldPassword, newPassword, confirmPassword } = req.body;
 
-  try {
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new NotFoundError("User not found", "AUTH_013");
+  }
 
     // Validate old password
     const isOldPasswordMatch = await bcrypt.compare(oldPassword, user.password);
     if (!isOldPasswordMatch) {
-      return res.status(400).json({ message: "Old password is incorrect" });
+      throw new ValidationError("Old password is incorrect", "AUTH_014");
     }
 
     // Reject if newPassword === old password
     const isSameAsOld = await bcrypt.compare(newPassword, user.password);
     if (isSameAsOld) {
-      return res.status(400).json({ message: "New password must be different from the old password" });
+      throw new ValidationError("New password must be different from the old password", "AUTH_015");
     }
 
     // Check if new and confirm password match
     if (newPassword !== confirmPassword) {
-      return res.status(400).json({ message: "New password and confirm password do not match" });
+      throw new ValidationError("New password and confirm password do not match", "AUTH_016");
     }
 
     // Hash new password
@@ -1136,24 +1106,19 @@ export const updatePasswordOTP = async (req, res) => {
     });
 
 
-    return res.status(200).json({ message: "OTP sent successfully" });
+    return res.status(200).json({ 
+      success: true,
+      message: "OTP sent successfully" 
+    });
+});
 
-  } catch (error) {
-    console.error("Error in updatePasswordOTP:", error.message);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-};
-
-export const updatePassword = async (req, res) => {
+export const updatePassword = asyncHandler(async (req, res) => {
   const { email, otp } = req.body;
-  try {
-    const otpEntry = await OTP.findOne({ email });
+  const otpEntry = await OTP.findOne({ email });
 
-    if (!otpEntry) {
-      return res
-        .status(400)
-        .json({ message: "OTP not found or already used." });
-    }
+  if (!otpEntry) {
+    throw new ValidationError("OTP not found or already used.", "AUTH_017");
+  }
 
     const isExpired = Date.now() > otpEntry.expiresAt;
     const isValid = await bcrypt.compare(otp, otpEntry.otp);
@@ -1175,26 +1140,24 @@ export const updatePassword = async (req, res) => {
 
     await User.updateOne({ email }, { password: newPassword });
 
-    return res.status(200).json({ message: "Password updated successfully" });
-  } catch (error) {
-    console.log("error in updatePassword:", error);
-    return res.status(500).json("Internal Server Error");
-  }
-};
+    return res.status(200).json({ 
+      success: true,
+      message: "Password updated successfully" 
+    });
+});
 
-export const updateEmailOTP = async (req, res) => {
+export const updateEmailOTP = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { newEmail } = req.body;
 
-  try {
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new NotFoundError("User not found", "AUTH_019");
+  }
 
     const isExist = await User.findOne({ email: newEmail });
     if (isExist) {
-      return res.status(400).json({ message: "Email already exists" });
+      throw new ConflictError("Email already exists", "AUTH_020");
     }
 
     function generateOTP(length = 6) {
@@ -1241,20 +1204,16 @@ export const updateEmailOTP = async (req, res) => {
       text: `Your OTP code is ${otp}. It will expire in 10 minutes.`,
     });
 
-    return res
-      .status(200)
-      .json({ message: "OTP sent successfully to previous email" });
-  } catch (error) {
-    console.error("Error in updatePasswordOTP:", error.message);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+    return res.status(200).json({ 
+      success: true,
+      message: "OTP sent successfully to previous email" 
+    });
+});
 
-export const updateEmail = async (req, res) => {
+export const updateEmail = asyncHandler(async (req, res) => {
   const { email, otp } = req.body;
-  const userId = req.user._id
-  try {
-    const user = await User.findById(userId).select("-email");
+  const userId = req.user._id;
+  const user = await User.findById(userId).select("-email");
 
     const otpEntry = await OTP.findOne({ email });
 
@@ -1286,24 +1245,22 @@ export const updateEmail = async (req, res) => {
 
     generateToken(newUser, newUser.role, req, res)
 
-    return res.status(200).json({ message: "Email updated successfully" });
-  } catch (error) {
-    console.log("error in updatePassword:", error);
-    return res.status(500).json("Internal Server Error");
-  }
-};
+    return res.status(200).json({ 
+      success: true,
+      message: "Email updated successfully" 
+    });
+});
 
-export const updatePhoneOTP = async (req, res) => {
+export const updatePhoneOTP = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { newPhone } = req.body;
 
   console.log(newPhone, "newPhone");
 
-  try {
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new NotFoundError("User not found", "AUTH_023");
+  }
 
     function generateOTP(length = 6) {
       const digits = "0123456789";
@@ -1341,33 +1298,27 @@ export const updatePhoneOTP = async (req, res) => {
       to: phoneNumUpdated,
     });
 
-    return res
-      .status(200)
-      .json({ message: "OTP sent successfully to new phone number" });
-  } catch (error) {
-    console.error("Error in updatePasswordOTP:", error.message);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+    return res.status(200).json({ 
+      success: true,
+      message: "OTP sent successfully to new phone number" 
+    });
+});
 
-export const updatePhone = async (req, res) => {
+export const updatePhone = asyncHandler(async (req, res) => {
   const { email, otp } = req.body;
-  try {
-    const otpEntry = await OTP.findOne({ email });
+  const otpEntry = await OTP.findOne({ email });
 
-    console.log(otpEntry, "otpEntry");
+  console.log(otpEntry, "otpEntry");
 
-    if (!otpEntry) {
-      return res
-        .status(400)
-        .json({ message: "OTP not found or already used." });
-    }
+  if (!otpEntry) {
+    throw new ValidationError("OTP not found or already used.", "AUTH_024");
+  }
 
     const isExpired = Date.now() > otpEntry.expiresAt;
     const isValid = await bcrypt.compare(otp, otpEntry.phoneOtp);
 
     if (!isValid || isExpired) {
-      return res.status(400).json({ message: "Invalid or expired OTP." });
+      throw new ValidationError("Invalid or expired OTP.", "AUTH_025");
     }
 
     await OTP.updateOne(
@@ -1385,22 +1336,20 @@ export const updatePhone = async (req, res) => {
 
     await User.findOneAndUpdate({ email: email }, { phone });
 
-    return res.status(200).json({ message: "Phone number updated successfully" });
-  } catch (error) {
-    console.log("error in updatePassword:", error);
-    return res.status(500).json("Internal Server Error");
+    return res.status(200).json({ 
+      success: true,
+      message: "Phone number updated successfully" 
+    });
+});
+
+export const uploadTeacherDocument = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const file = req.file;
+  const { category } = req.body;
+
+  if (!file || !category) {
+    throw new ValidationError("Category and file are required", "VAL_002");
   }
-};
-
-export const uploadTeacherDocument = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const file = req.file;
-    const { category } = req.body;
-
-    if (!file || !category) {
-      return res.status(400).json({ message: "Category and file are required" });
-    }
 
     const user = await User.findById(userId);
     if (!user || user.role !== "teacher") {
@@ -1417,7 +1366,7 @@ export const uploadTeacherDocument = async (req, res) => {
     };
 
     if (!documentCategories.hasOwnProperty(category)) {
-      return res.status(400).json({ message: "Invalid document category" });
+      throw new ValidationError("Invalid document category", "VAL_003");
     }
 
     // Ensure document storage structure exists
@@ -1428,9 +1377,10 @@ export const uploadTeacherDocument = async (req, res) => {
 
     // Check limit
     if (user.documents[category].length >= documentCategories[category]) {
-      return res.status(400).json({
-        message: `Maximum upload limit reached for ${category}`,
-      });
+      throw new ValidationError(
+        `Maximum upload limit reached for ${category}`,
+        "VAL_004"
+      );
     }
 
     // Upload file
@@ -1454,35 +1404,30 @@ export const uploadTeacherDocument = async (req, res) => {
     user.documents[category].push(document);
     await user.save();
 
-    res.status(200).json({
+    return res.status(200).json({
+      success: true,
       message: "Document uploaded successfully",
-      documents: user.documents,
+      data: user.documents,
     });
+});
 
-  } catch (err) {
-    console.error("Error uploading document:", err);
-    res.status(500).json({ message: "Internal Server Error" });
+
+
+
+
+
+
+
+
+
+export const deleteTeacherDocument = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const { documentId } = req.params;
+
+  const user = await User.findById(userId);
+  if (!user || user.role !== "teacher") {
+    throw new AuthenticationError("Unauthorized or not a teacher", "AUTH_027");
   }
-};
-
-
-
-
-
-
-
-
-
-
-export const deleteTeacherDocument = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const { documentId } = req.params;
-
-    const user = await User.findById(userId);
-    if (!user || user.role !== "teacher") {
-      return res.status(403).json({ message: "Unauthorized or not a teacher" });
-    }
 
     // Find and remove document from nested categories
     let deleted = false;
@@ -1516,38 +1461,36 @@ export const deleteTeacherDocument = async (req, res) => {
     }
 
     if (!deleted) {
-      return res.status(404).json({ message: "Document not found" });
+      throw new NotFoundError("Document not found", "AUTH_028");
     }
 
     await user.save();
 
     return res.status(200).json({
+      success: true,
       message: "Document deleted and reindexed successfully",
-      documents: user.documents,
+      data: user.documents,
     });
-
-  } catch (err) {
-    console.error("Error deleting document:", err);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+});
 
 
 
 
-export const verifyTeacherDocument = async (req, res) => {
+export const verifyTeacherDocument = asyncHandler(async (req, res) => {
   const { userId, documentId } = req.params;
   const { status } = req.body;
 
   if (!["verified", "not_verified"].includes(status)) {
-    return res.status(400).json({
-      message: "Invalid status value. Must be 'verified' or 'not_verified'.",
-    });
+    throw new ValidationError(
+      "Invalid status value. Must be 'verified' or 'not_verified'.",
+      "VAL_005"
+    );
   }
 
-  try {
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found." });
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new NotFoundError("User not found.", "AUTH_029");
+  }
 
     // Documents are stored per category, so we need to find the document by its _id in any category array
     let foundDoc = null;
@@ -1562,7 +1505,9 @@ export const verifyTeacherDocument = async (req, res) => {
       }
     }
 
-    if (!foundDoc) return res.status(404).json({ message: "Document not found." });
+    if (!foundDoc) {
+      throw new NotFoundError("Document not found.", "AUTH_030");
+    }
 
     // Update document verification status
     foundDoc.verificationStatus = status;
@@ -1663,32 +1608,27 @@ export const verifyTeacherDocument = async (req, res) => {
 
 
     return res.status(200).json({
+      success: true,
       message: `Document ${status === "verified" ? "verified" : "rejected"} successfully.`,
-      isVarified: user.isVarified,
-      document: foundDoc,
-      documents: user.documents, // send back updated documents to frontend
+      data: {
+        isVarified: user.isVarified,
+        document: foundDoc,
+        documents: user.documents,
+      }
     });
-  } catch (error) {
-    console.error("Verification error:", error);
-    return res.status(500).json({ message: "Internal server error." });
-  }
-};
+});
 
 
 
 
 
 
-export const previewSignIn = async (req, res) => {
+export const previewSignIn = asyncHandler(async (req, res) => {
   const user = req.user;
 
-  try {
-    if (!user) {
-      return res.status(400).json({
-        error: true,
-        message: "No user found",
-      });
-    }
+  if (!user) {
+    throw new AuthenticationError("No user found", "AUTH_031");
+  }
 
     // Clear old cookie
     res.clearCookie("ind_client_jwt", {
@@ -1707,26 +1647,17 @@ export const previewSignIn = async (req, res) => {
     const updatedUser = { ...user, role: prevRole };
 
     return res.status(200).json({
+      success: true,
       message: "Preview Signin Successful",
-      user: updatedUser, // Send back the updated user
+      data: updatedUser,
     });
-  } catch (error) {
-    console.error("error in Preview Signin", error.message);
-    return res.status(500).json({
-      message: "Something went wrong, sorry for inconvenience",
-    });
-  }
-};
+});
 
-export const previewSignOut = async (req, res) => {
+export const previewSignOut = asyncHandler(async (req, res) => {
   const user = req.user;
-  try {
-    if (!user) {
-      return res.status(400).json({
-        error: true,
-        message: "No user found",
-      });
-    }
+  if (!user) {
+    throw new AuthenticationError("No user found", "AUTH_032");
+  }
 
     // Clear old cookie
     res.clearCookie("ind_client_jwt", {
@@ -1738,20 +1669,14 @@ export const previewSignOut = async (req, res) => {
 
     const teacherUser = await User.findById(req.user._id);
     if (!teacherUser) {
-      return res.status(404).json({ message: "User not found" });
+      throw new NotFoundError("User not found", "AUTH_033");
     }
 
     // Generate new token with new role
     generateToken(teacherUser, teacherUser.role, req, res);
 
-    // Return the updated user object
     return res.status(200).json({
-      message: "Preview Signin Successful",
+      success: true,
+      message: "Preview Signout Successful",
     });
-  } catch (error) {
-    console.error("error in Preview Signin", error.message);
-    return res.status(500).json({
-      message: "Something went wrong, sorry for inconvenience",
-    });
-  }
-};
+});

@@ -4,19 +4,32 @@ import { ConversationListInstance } from "twilio/lib/rest/conversations/v1/conve
 import stripe from "../config/stripe.js";
 import CourseSch from "../Models/courses.model.sch.js";
 import Enrollment from "../Models/Enrollement.model.js";
-import Purchase from "../Models/purchase.model.js"; // Assuming you have this model
+import Purchase from "../Models/purchase.model.js";
 import TestClock from "../Models/testClock.model.js";
 import User from "../Models/user.model.js";
+import {
+  ValidationError,
+  NotFoundError,
+  PaymentError,
+  ExternalServiceError,
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+import { withNetworkErrorHandling } from "../Utiles/networkErrorHelper.js";
 
 // Create Mobile-Only Checkout Session
-export const createMobileCheckoutSession = async (req, res) => {
-  const { courseId, studentId } = req.body;
-
+export const createMobileCheckoutSession = asyncHandler(async (req, res, next) => {
   try {
+    const { courseId, studentId } = req.body;
+
+    // Validation
+    if (!courseId || !studentId) {
+      throw new ValidationError("Course ID and Student ID are required", "VAL_001");
+    }
+
     // Fetch course
     const course = await CourseSch.findById(courseId).populate("createdby");
     if (!course) {
-      return res.status(404).json({ error: "Course not found" });
+      throw new NotFoundError("Course not found", "RES_004");
     }
 
     const teacher = course.createdby;
@@ -30,61 +43,65 @@ export const createMobileCheckoutSession = async (req, res) => {
     const successURL = `${process.env.MOBILE_APP_SCHEME}://payment-success?session_id={CHECKOUT_SESSION_ID}`;
     const cancelURL = `${process.env.MOBILE_APP_SCHEME}://payment-cancelled`;
 
-    // Create checkout session
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
+    // Create checkout session with network error handling
+    const session = await withNetworkErrorHandling(async () => {
+      return await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
 
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: course.courseTitle,
-              description: course.courseDescription,
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: course.courseTitle,
+                description: course.courseDescription,
+              },
+              unit_amount: amount,
             },
-            unit_amount: amount,
+            quantity: 1,
           },
-          quantity: 1,
+        ],
+
+        metadata: {
+          courseId,
+          studentId,
+          teacherId: teacher._id.toString(),
+          teacherEarning: teacherEarning.toString(),
+          platformFee: platformFee.toString(),
+          source: "mobile"
         },
-      ],
 
-      metadata: {
-        courseId,
-        studentId,
-        teacherId: teacher._id.toString(),
-        teacherEarning: teacherEarning.toString(),
-        platformFee: platformFee.toString(),
-        source: "mobile"
-      },
-
-      success_url: successURL,
-      cancel_url: cancelURL,
-    });
+        success_url: successURL,
+        cancel_url: cancelURL,
+      });
+    }, "Stripe");
 
     res.status(200).json({
       success: true,
-      url: session.url,
+      data: { url: session.url },
+      message: "Mobile checkout session created successfully",
     });
 
-  } catch (err) {
-    console.error("Mobile Stripe Checkout Error:", err);
-    res.status(500).json({
-      error: "Failed to create mobile checkout session",
-      details: err.message
-    });
+  } catch (error) {
+    next(error);
   }
-};
+});
 
 // Create Checkout Session
-export const createCheckoutSession = async (req, res) => {
-  const { courseId, studentId, } = req.body;
-
+export const createCheckoutSession = asyncHandler(async (req, res, next) => {
   try {
+    const { courseId, studentId } = req.body;
+
+    // Validation
+    if (!courseId || !studentId) {
+      throw new ValidationError("Course ID and Student ID are required", "VAL_001");
+    }
+
     // Fetch the course and populate the teacher details
     const course = await CourseSch.findById(courseId).populate("createdby");
     if (!course) {
-      return res.status(404).json({ error: "Course not found" });
+      throw new NotFoundError("Course not found", "RES_004");
     }
 
     const teacher = course.createdby;
@@ -92,55 +109,67 @@ export const createCheckoutSession = async (req, res) => {
     // Calculate the amount and fees
     const amount = course.price * 100; // Price in cents
     const platformFeePercentage = 0.2;
-    const platformFee = Math.round(amount * platformFeePercentage); // Round the platform fee to avoid decimals
+    const platformFee = Math.round(amount * platformFeePercentage);
     const teacherEarning = amount - platformFee;
 
-    // Create a Stripe Checkout session
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: course.courseTitle,
-              description: course.courseDescription,
+    // Create a Stripe Checkout session with network error handling
+    const session = await withNetworkErrorHandling(async () => {
+      return await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: course.courseTitle,
+                description: course.courseDescription,
+              },
+              unit_amount: amount,
             },
-            unit_amount: amount,
+            quantity: 1,
           },
-          quantity: 1,
+        ],
+        metadata: {
+          courseId,
+          studentId,
+          teacherId: course.createdby._id.toString(),
+          teacherEarning: teacherEarning.toString(),
+          platformFee: platformFee.toString(),
         },
-      ],
-      metadata: {
-        courseId,
-        studentId,
-        teacherId: course.createdby._id.toString(),
-        teacherEarning: teacherEarning.toString(),
-        platformFee: platformFee.toString(),
-      },
 
-      success_url: `${process.env.CLIENT_URL}/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.CLIENT_URL}/student/payment-cancelled`,
+        success_url: `${process.env.CLIENT_URL}/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.CLIENT_URL}/student/payment-cancelled`,
+      });
+    }, "Stripe");
+
+    res.status(200).json({
+      success: true,
+      data: { url: session.url },
+      message: "Checkout session created successfully",
     });
-
-    // Return the session URL for redirection to the Stripe Checkout page
-    res.status(200).json({ success: true, url: session.url });
-  } catch (err) {
-    console.error("Stripe Checkout Error:", err);
-    res.status(500).json({ error: "Failed to create checkout session", details: err.message });
+  } catch (error) {
+    next(error);
   }
-};
+});
 
 // Webhook Handler for Payment Confirmation
-export const handleStripeWebhook = async (req, res) => {
-  const sig = req.headers["stripe-signature"];
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  let event;
-
+export const handleStripeWebhook = asyncHandler(async (req, res, next) => {
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    const sig = req.headers["stripe-signature"];
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!sig) {
+      throw new PaymentError("Webhook signature missing", "PAY_005");
+    }
+
+    let event;
+
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    } catch (err) {
+      throw new PaymentError(`Webhook signature verification failed: ${err.message}`, "PAY_005");
+    }
 
     switch (event.type) {
       case "checkout.session.completed":
@@ -156,11 +185,10 @@ export const handleStripeWebhook = async (req, res) => {
           stripeSessionId: session.id,
           amount: session.amount_total / 100,
           currency: session.currency,
-          platformFee: Number(platformFee) / 100, // ✅ convert to dollars
-          teacherEarning: Number(teacherEarning) / 100, // ✅ convert to dollars
+          platformFee: Number(platformFee) / 100,
+          teacherEarning: Number(teacherEarning) / 100,
           paymentMethod: "stripe",
         });
-
 
         const enrollment = await Enrollment.create({
           student: studentId,
@@ -169,214 +197,255 @@ export const handleStripeWebhook = async (req, res) => {
         break;
 
       default:
+        // Log unhandled event types for monitoring
+        console.log(`Unhandled webhook event type: ${event.type}`);
     }
 
-    res.status(200).json({ received: true });
-  } catch (err) {
-    res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-};
-
-export const stripeOnboarding = async (req, res) => {
-  try {
-    const teacher = req.user;
-
-    if (!teacher.stripeAccountId) {
-      return res.status(400).json({ error: "No Stripe account ID found for this user." });
-    }
-
-    const link = await stripe.accountLinks.create({
-      account: teacher.stripeAccountId,
-      refresh_url: `${process.env.CLIENT_URL}/teacher/onboarding-failed`,
-      return_url: `${process.env.CLIENT_URL}/teacher/onboarding-success`,
-      type: "account_onboarding",
-    });
-
-    res.json({ url: link.url });
-
+    res.status(200).json({ success: true, received: true });
   } catch (error) {
-    console.error("Error in stripeOnboarding:", error);
-    res.status(500).json({
-      error: "Failed to create onboarding link",
-      details: error.message
-    });
+    next(error);
   }
-}
+});
 
-export const checkOnboarding = async (req, res) => {
+export const stripeOnboarding = asyncHandler(async (req, res, next) => {
   try {
     const teacher = req.user;
 
     if (!teacher.stripeAccountId) {
-      return res.json({
-        onboarded: false,
-        reason: "Stripe account not created",
-      });
+      throw new PaymentError("No Stripe account ID found for this user", "PAY_007");
     }
 
-    const account = await stripe.accounts.retrieve(
-      teacher.stripeAccountId
-    );
+    const link = await withNetworkErrorHandling(async () => {
+      return await stripe.accountLinks.create({
+        account: teacher.stripeAccountId,
+        refresh_url: `${process.env.CLIENT_URL}/teacher/onboarding-failed`,
+        return_url: `${process.env.CLIENT_URL}/teacher/onboarding-success`,
+        type: "account_onboarding",
+      });
+    }, "Stripe");
 
-    return res.json({
-      onboarded: account.payouts_enabled,
-      stripeId: account.id,
-      chargesEnabled: account.charges_enabled,
-      detailsSubmitted: account.details_submitted,
+    res.status(200).json({
+      success: true,
+      data: { url: link.url },
+      message: "Onboarding link created successfully",
     });
 
   } catch (error) {
-    console.error("Stripe onboarding check error:", error);
-
-    return res.status(400).json({
-      error: "Stripe account access error",
-      hint: "Account not owned by this platform or key mismatch",
-    });
+    next(error);
   }
-};
+});
 
-export const getStripeLoginLink = async (req, res) => {
+export const checkOnboarding = asyncHandler(async (req, res, next) => {
   try {
     const teacher = req.user;
 
     if (!teacher.stripeAccountId) {
-      return res.status(400).json({
-        error: "Stripe account not connected",
+      return res.status(200).json({
+        success: true,
+        data: {
+          onboarded: false,
+          reason: "Stripe account not created",
+        },
       });
     }
 
-    const link = await stripe.accounts.createLoginLink(
-      teacher.stripeAccountId
-    );
+    const account = await withNetworkErrorHandling(async () => {
+      return await stripe.accounts.retrieve(teacher.stripeAccountId);
+    }, "Stripe");
 
-    res.json({ url: link.url });
+    res.status(200).json({
+      success: true,
+      data: {
+        onboarded: account.payouts_enabled,
+        stripeId: account.id,
+        chargesEnabled: account.charges_enabled,
+        detailsSubmitted: account.details_submitted,
+      },
+    });
 
-  } catch (err) {
-    res.status(500).json({ error: "Unable to create login link" });
+  } catch (error) {
+    next(error);
   }
-};
+});
 
-
-export const createCheckoutSessionConnect = async (req, res) => {
-  const { courseId, studentId } = req.body;
-
+export const getStripeLoginLink = asyncHandler(async (req, res, next) => {
   try {
+    const teacher = req.user;
+
+    if (!teacher.stripeAccountId) {
+      throw new PaymentError("Stripe account not connected", "PAY_007");
+    }
+
+    const link = await withNetworkErrorHandling(async () => {
+      return await stripe.accounts.createLoginLink(teacher.stripeAccountId);
+    }, "Stripe");
+
+    res.status(200).json({
+      success: true,
+      data: { url: link.url },
+      message: "Login link created successfully",
+    });
+
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+export const createCheckoutSessionConnect = asyncHandler(async (req, res, next) => {
+  try {
+    const { courseId, studentId } = req.body;
+
+    // Validate required fields
+    if (!courseId || !studentId) {
+      throw new ValidationError("courseId and studentId are required", "VAL_001");
+    }
+
+    // Fetch course and populate teacher
     const course = await CourseSch.findById(courseId).populate("createdby");
     if (!course) {
-      return res.status(404).json({ error: "Course not found" });
+      throw new NotFoundError("Course not found", "RES_001");
     }
 
     const user = course.createdby;
+    if (!user) {
+      throw new NotFoundError("Teacher not found", "RES_001");
+    }
 
     const teacher = await User.findById(user);
+    if (!teacher) {
+      throw new NotFoundError("Teacher not found", "RES_001");
+    }
+
     const student = await User.findById(studentId);
-
-    const subscriptionData = {
-      application_fee_percent: 20,
-      transfer_data: {
-        destination: teacher.stripeAccountId,
-      },
-    };
-
-    const trialDays = course.freeTrialMonths
-
-    // Add trial only if > 0
-    if (trialDays > 0) {
-      subscriptionData.trial_period_days = trialDays * 30; // Convert months to days
+    if (!student) {
+      throw new NotFoundError("Student not found", "RES_001");
     }
 
-    if (!user) {
-      return res.status(404).json({ error: "Teacher not found" });
-    }
-
+    // Check if teacher has completed Stripe onboarding
     if (!teacher.stripeAccountId) {
-      return res.status(400).json({
-        neetsOnboarding: true,
-        error: "Teacher payout not enabled"
-      });
+      throw new PaymentError("Teacher payout not enabled", "PAY_008");
     }
 
-    // FREE COURSE
+    // Handle FREE course
     if (course.paymentType === "FREE") {
-      await Enrollment.create({ student: studentId, course: courseId, status: "ACTIVE", enrollmentType: "FREE" });
-      return res.json({ success: true, free: true });
+      await Enrollment.create({
+        student: studentId,
+        course: courseId,
+        status: "ACTIVE",
+        enrollmentType: "FREE",
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: { free: true },
+        message: "Enrolled in free course successfully",
+      });
     }
 
     const amount = course.price * 100; // cents
     const platformFee = Math.round(amount * 0.20); // 20%
 
-    // ONE-TIME PAYMENT
+    // Handle ONE-TIME payment
     if (course.paymentType === "ONETIME") {
-      const session = await stripe.checkout.sessions.create({
-        mode: "payment",
-        allow_promotion_codes: true,
-        customer_creation: "always",
+      const session = await withNetworkErrorHandling(async () => {
+        return await stripe.checkout.sessions.create({
+          mode: "payment",
+          allow_promotion_codes: true,
+          customer_creation: "always",
 
-        line_items: [{
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: course.courseTitle,
-              description: course.courseDescription,
+          line_items: [{
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: course.courseTitle,
+                description: course.courseDescription,
+              },
+              unit_amount: course.price * 100,
             },
-            unit_amount: course.price * 100,
+            quantity: 1,
+          }],
+
+          payment_intent_data: {
+            application_fee_amount: platformFee,
+            transfer_data: {
+              destination: teacher.stripeAccountId,
+            },
           },
-          quantity: 1,
-        }],
 
-        payment_intent_data: {
-          application_fee_amount: platformFee,
-          transfer_data: {
-            destination: teacher.stripeAccountId,
+          metadata: {
+            courseId,
+            studentId,
+            teacherId: teacher._id.toString(),
+            paymentType: "ONETIME",
           },
-        },
 
-        metadata: {
-          courseId,
-          studentId,
-          teacherId: teacher._id.toString(),
-          paymentType: "ONETIME",
-        },
+          success_url: `${process.env.CLIENT_URL}/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${process.env.CLIENT_URL}/student/payment-cancelled`,
+        });
+      }, "Stripe");
 
-        success_url: `${process.env.CLIENT_URL}/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.CLIENT_URL}/student/payment-cancelled`,
+      return res.status(200).json({
+        success: true,
+        data: { url: session.url },
+        message: "Checkout session created successfully",
       });
-
-      return res.json({ success: true, url: session.url });
     }
 
-    // SUBSCRIPTION
+    // Handle SUBSCRIPTION payment
     if (course.paymentType === "SUBSCRIPTION") {
-      const session = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        allow_promotion_codes: true,
-
-        line_items: [{
-          price: course.stripePriceId,
-          quantity: 1,
-        }],
-
-        subscription_data: subscriptionData,
-
-        metadata: {
-          courseId,
-          studentId,
-          teacherId: teacher._id.toString(),
-          paymentType: "SUBSCRIPTION",
+      const subscriptionData = {
+        application_fee_percent: 20,
+        transfer_data: {
+          destination: teacher.stripeAccountId,
         },
+      };
 
-        success_url: `${process.env.CLIENT_URL}/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.CLIENT_URL}/student/payment-cancelled`,
+      const trialDays = course.freeTrialMonths;
+
+      // Add trial only if > 0
+      if (trialDays > 0) {
+        subscriptionData.trial_period_days = trialDays * 30; // Convert months to days
+      }
+
+      const session = await withNetworkErrorHandling(async () => {
+        return await stripe.checkout.sessions.create({
+          mode: "subscription",
+          allow_promotion_codes: true,
+
+          line_items: [{
+            price: course.stripePriceId,
+            quantity: 1,
+          }],
+
+          subscription_data: subscriptionData,
+
+          metadata: {
+            courseId,
+            studentId,
+            teacherId: teacher._id.toString(),
+            paymentType: "SUBSCRIPTION",
+          },
+
+          success_url: `${process.env.CLIENT_URL}/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${process.env.CLIENT_URL}/student/payment-cancelled`,
+        });
+      }, "Stripe");
+
+      return res.status(200).json({
+        success: true,
+        data: { url: session.url },
+        message: "Subscription checkout session created successfully",
       });
-
-      return res.json({ success: true, url: session.url });
     }
 
-  } catch (err) {
-    console.error("Stripe Error:", err);
-    res.status(500).json({ error: err.message });
+    // Invalid payment type
+    throw new PaymentError("Invalid payment type", "PAY_010");
+
+  } catch (error) {
+    next(error);
   }
-};
+});
 
 
 // export const createCheckoutSessionConnect = async (req, res) => {
@@ -588,25 +657,28 @@ export const createCheckoutSessionConnect = async (req, res) => {
 //   }
 // };
 
-export const handleStripeWebhookConnect = async (req, res) => {
-  const sig = req.headers["stripe-signature"];
-
-  let event;
-
+export const handleStripeWebhookConnect = asyncHandler(async (req, res, next) => {
   try {
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    console.error("❌ Webhook signature verification failed:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+    const sig = req.headers["stripe-signature"];
 
-  console.log("✅ Webhook received:", event.type);
+    if (!sig) {
+      throw new PaymentError("Missing stripe signature", "PAY_005");
+    }
 
-  try {
+    let event;
+
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+    } catch (err) {
+      throw new PaymentError(`Webhook signature verification failed: ${err.message}`, "PAY_005");
+    }
+
+    console.log("✅ Webhook received:", event.type);
+
     switch (event.type) {
       /**
        * ================================
@@ -639,32 +711,39 @@ export const handleStripeWebhookConnect = async (req, res) => {
 
         if (paymentType === "ONETIME") {
           // Create invoice item
-          await stripe.invoiceItems.create({
-            customer: session.customer,
-            amount: session.amount_total,
-            currency: session.currency,
-            description: `Course purchase: ${courseId}`,
-            metadata: {
-              courseId,
-              studentId,
-              teacherId,
-              paymentType: paymentType,
-            },
-          });
+          await withNetworkErrorHandling(async () => {
+            return await stripe.invoiceItems.create({
+              customer: session.customer,
+              amount: session.amount_total,
+              currency: session.currency,
+              description: `Course purchase: ${courseId}`,
+              metadata: {
+                courseId,
+                studentId,
+                teacherId,
+                paymentType: paymentType,
+              },
+            });
+          }, "Stripe");
 
           // Create and finalize invoice
-          const invoice = await stripe.invoices.create({
-            customer: session.customer,
-            auto_advance: true,
-            metadata: {
-              courseId,
-              studentId,
-              teacherId,
-              paymentType: paymentType,
-            },
-          });
+          const invoice = await withNetworkErrorHandling(async () => {
+            return await stripe.invoices.create({
+              customer: session.customer,
+              auto_advance: true,
+              metadata: {
+                courseId,
+                studentId,
+                teacherId,
+                paymentType: paymentType,
+              },
+            });
+          }, "Stripe");
 
-          await stripe.invoices.finalizeInvoice(invoice.id);
+          await withNetworkErrorHandling(async () => {
+            return await stripe.invoices.finalizeInvoice(invoice.id);
+          }, "Stripe");
+
           manualInvoiceId = invoice.id;
         }
 
@@ -677,14 +756,18 @@ export const handleStripeWebhookConnect = async (req, res) => {
         if (paymentType === "ONETIME" && session.payment_intent) {
           // ✅ ONE-TIME PAYMENT: Get receipt from payment intent
           try {
-            const paymentIntent = await stripe.paymentIntents.retrieve(
-              session.payment_intent,
-              { expand: ["latest_charge"] }
-            );
+            const paymentIntent = await withNetworkErrorHandling(async () => {
+              return await stripe.paymentIntents.retrieve(
+                session.payment_intent,
+                { expand: ["latest_charge"] }
+              );
+            }, "Stripe");
 
             if (paymentIntent.latest_charge) {
               const charge = typeof paymentIntent.latest_charge === 'string'
-                ? await stripe.charges.retrieve(paymentIntent.latest_charge)
+                ? await withNetworkErrorHandling(async () => {
+                    return await stripe.charges.retrieve(paymentIntent.latest_charge);
+                  }, "Stripe")
                 : paymentIntent.latest_charge;
 
               receiptUrl = charge.receipt_url;
@@ -696,10 +779,12 @@ export const handleStripeWebhookConnect = async (req, res) => {
         } else if (paymentType === "SUBSCRIPTION" && session.subscription) {
           // ✅ SUBSCRIPTION: Get receipt from subscription's latest invoice
           try {
-            const subscription = await stripe.subscriptions.retrieve(
-              session.subscription,
-              { expand: ["latest_invoice"] }
-            );
+            const subscription = await withNetworkErrorHandling(async () => {
+              return await stripe.subscriptions.retrieve(
+                session.subscription,
+                { expand: ["latest_invoice"] }
+              );
+            }, "Stripe");
 
             console.log(subscription, "subscription")
 
@@ -711,7 +796,9 @@ export const handleStripeWebhookConnect = async (req, res) => {
 
             if (subscription.latest_invoice) {
               const latestInvoice = typeof subscription.latest_invoice === 'object'
-                ? await stripe.invoices.retrieve(subscription.latest_invoice)
+                ? await withNetworkErrorHandling(async () => {
+                    return await stripe.invoices.retrieve(subscription.latest_invoice);
+                  }, "Stripe")
                 : subscription.latest_invoice;
 
               console.log(latestInvoice, "latestInvoice checking")
@@ -727,18 +814,12 @@ export const handleStripeWebhookConnect = async (req, res) => {
                 amountPaid: latestInvoice.amount_paid / 100
               });
 
-              const charge = await stripe.charges.retrieve(latestInvoice.charge);
-                receiptUrl = charge.receipt_url;
-                console.log("✅ Subscription receipt captured at checkout:", receiptUrl);
+              const charge = await withNetworkErrorHandling(async () => {
+                return await stripe.charges.retrieve(latestInvoice.charge);
+              }, "Stripe");
 
-              // Only get receipt if invoice was actually paid (not $0 trial invoice)
-              // if (latestInvoice.paid && latestInvoice.charge && latestInvoice.amount_paid > 0) {
-              //   const charge = await stripe.charges.retrieve(latestInvoice.charge);
-              //   receiptUrl = charge.receipt_url;
-              //   console.log("✅ Subscription receipt captured at checkout:", receiptUrl);
-              // } else {
-              //   console.log("ℹ️ No charge yet (trial period or $0 invoice). Receipt will be captured on first payment.");
-              // }
+              receiptUrl = charge.receipt_url;
+              console.log("✅ Subscription receipt captured at checkout:", receiptUrl);
             }
           } catch (error) {
             console.error("⚠️ Error retrieving subscription details:", error.message);
@@ -777,12 +858,14 @@ export const handleStripeWebhookConnect = async (req, res) => {
           console.log("✅ Purchase updated with receipt");
         }
 
-        // Rest of your enrollment logic...
         // ================================
         // SUBSCRIPTION ENROLLMENT
         // ================================
         if (paymentType === "SUBSCRIPTION" && session.subscription) {
-          const subscription = await stripe.subscriptions.retrieve(session.subscription);
+          const subscription = await withNetworkErrorHandling(async () => {
+            return await stripe.subscriptions.retrieve(session.subscription);
+          }, "Stripe");
+
           const subMetadata = subscription.metadata || {};
 
           const subStudentId = subMetadata.studentId || studentId;
@@ -916,7 +999,10 @@ export const handleStripeWebhookConnect = async (req, res) => {
 
         if (invoice.charge) {
           try {
-            const charge = await stripe.charges.retrieve(invoice.charge);
+            const charge = await withNetworkErrorHandling(async () => {
+              return await stripe.charges.retrieve(invoice.charge);
+            }, "Stripe");
+
             receiptUrl = charge.receipt_url;
             console.log(`✅ Receipt URL captured: ${receiptUrl}`);
           } catch (error) {
@@ -1010,7 +1096,10 @@ export const handleStripeWebhookConnect = async (req, res) => {
 
         if (invoice.charge) {
           try {
-            const charge = await stripe.charges.retrieve(invoice.charge);
+            const charge = await withNetworkErrorHandling(async () => {
+              return await stripe.charges.retrieve(invoice.charge);
+            }, "Stripe");
+
             receiptUrl = charge.receipt_url;
             console.log(`✅ Receipt URL: ${receiptUrl}`);
           } catch (error) {
@@ -1143,28 +1232,41 @@ export const handleStripeWebhookConnect = async (req, res) => {
         break;
     }
 
-    res.json({ received: true });
-  } catch (err) {
-    console.error("❌ Webhook processing error:", err);
-    console.error("Stack trace:", err.stack);
-    res.status(500).json({ error: "Webhook handler failed" });
-  }
-};
-
-
-export const endTrial = async (req, res) => {
-  const { subscriptionId } = req.body;
-
-  try {
-    const subscription = await stripe.subscriptions.update(subscriptionId, {
-      trial_end: "now",
+    res.status(200).json({
+      success: true,
+      data: { received: true },
+      message: "Webhook processed successfully",
     });
+
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+export const endTrial = asyncHandler(async (req, res, next) => {
+  try {
+    const { subscriptionId } = req.body;
+
+    if (!subscriptionId) {
+      throw new ValidationError("subscriptionId is required", "VAL_001");
+    }
+
+    const subscription = await withNetworkErrorHandling(async () => {
+      return await stripe.subscriptions.update(subscriptionId, {
+        trial_end: "now",
+      });
+    }, "Stripe");
 
     console.log(subscription, "✅ Trial ended immediately for subscription:", subscriptionId);
 
-    res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Ending trial error:", err);
-    res.status(500).json({ error: "Ending trial failed" });
+    res.status(200).json({
+      success: true,
+      data: { subscription },
+      message: "Trial ended successfully",
+    });
+
+  } catch (error) {
+    next(error);
   }
-}
+});

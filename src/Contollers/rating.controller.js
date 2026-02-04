@@ -2,31 +2,34 @@ import Rating from "../Models/rating.model.js"; // Assuming you have a Rating mo
 import CourseInd from "../Models/courses.model.sch.js"; // Assuming you have a Course model
 import mongoose from "mongoose";
 import CourseSch from "../Models/courses.model.sch.js";
+import {
+  ValidationError,
+  NotFoundError,
+  AuthenticationError,
+  ConflictError,
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
-export const getSingleCourseRating = async (req, res) => {
+export const getSingleCourseRating = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  try {
-    // Fetch all ratings for the specified course
-    const ratings = await Rating.find({ course: id });
+  // Fetch all ratings for the specified course
+  const ratings = await Rating.find({ course: id });
 
-    if (!ratings || ratings.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "No ratings found for this course" });
-    }
-
-    // Calculate average of rating.star
-    const totalStars = ratings.reduce((sum, rating) => sum + rating.star, 0);
-    const averageStar = totalStars / ratings.length;
-
-    res.status(200).json({ count: ratings.length, averageStar });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal server error" });
+  if (!ratings || ratings.length === 0) {
+    throw new NotFoundError("No ratings found for this course", "RAT_001");
   }
-};
 
-export const createRating = async (req, res) => {
+  // Calculate average of rating.star
+  const totalStars = ratings.reduce((sum, rating) => sum + rating.star, 0);
+  const averageStar = totalStars / ratings.length;
+
+  return res.status(200).json({ 
+    success: true,
+    data: { count: ratings.length, averageStar } 
+  });
+});
+
+export const createRating = asyncHandler(async (req, res) => {
   const createdby = req.user?._id;
   const { id } = req.params;
   const { star } = req.body;
@@ -34,29 +37,24 @@ export const createRating = async (req, res) => {
   console.log(id, "courseId");
 
   if (!createdby) {
-    return res.status(401).json({ message: "User not authenticated" });
+    throw new AuthenticationError("User not authenticated", "RAT_002");
   }
 
-  try {
-    // Validate rating value
-    if (star < 1 || star > 5) {
-      return res
-        .status(400)
-        .json({ message: "Rating must be between 1 and 5" });
-    }
+  // Validate rating value
+  if (star < 1 || star > 5) {
+    throw new ValidationError("Rating must be between 1 and 5", "RAT_003");
+  }
 
-    // Check if the course exists
-    const course = await CourseSch.findById(id);
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
+  // Check if the course exists
+  const course = await CourseSch.findById(id);
+  if (!course) {
+    throw new NotFoundError("Course not found", "RAT_004");
+  }
 
-    const existingRating = await Rating.findOne({ course, createdby });
-    if (existingRating) {
-      return res
-        .status(400)
-        .json({ message: "You have already rated this course" });
-    }
+  const existingRating = await Rating.findOne({ course, createdby });
+  if (existingRating) {
+    throw new ConflictError("You have already rated this course", "RAT_005");
+  }
 
     // Create a new rating
     const newRating = new Rating({
@@ -65,26 +63,26 @@ export const createRating = async (req, res) => {
       star,
     });
 
-    await newRating.save();
+  await newRating.save();
 
-    res.status(201).json({ message: "Rating created successfully", newRating });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
+  return res.status(201).json({ 
+    success: true,
+    message: "Rating created successfully", 
+    data: newRating 
+  });
+});
 
-export const isRatedbyUser = async (req, res) => {
+export const isRatedbyUser = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { id } = req.params;
 
   // Validate ObjectIds
   if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-    return res.status(400).json({ message: "Invalid or missing user ID" });
+    throw new ValidationError("Invalid or missing user ID", "RAT_006");
   }
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ message: "Invalid course ID" });
+    throw new ValidationError("Invalid course ID", "RAT_007");
   }
 
   const courseId = new mongoose.Types.ObjectId(id);
@@ -93,16 +91,17 @@ export const isRatedbyUser = async (req, res) => {
   console.log(courseId, "userId");
   console.log(createdby, "createdby");
 
-  try {
-    const isRated = await Rating.findOne({ course: courseId, createdby });
-    console.log(isRated, "isRated");
+  const isRated = await Rating.findOne({ course: courseId, createdby });
+  console.log(isRated, "isRated");
 
-    if (!isRated) {
-      return res.status(404).json({ rating: false });
-    }
-    res.status(200).json({ rating: true, star: isRated.star });
-  } catch (error) {
-    console.log("Error in isRatedbyUser", error);
-    res.status(500).json({ message: "Internal server error" });
+  if (!isRated) {
+    return res.status(200).json({ 
+      success: true,
+      data: { rating: false } 
+    });
   }
-};
+  return res.status(200).json({ 
+    success: true,
+    data: { rating: true, star: isRated.star } 
+  });
+});

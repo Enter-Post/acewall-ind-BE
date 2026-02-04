@@ -9,29 +9,34 @@ import e from "express";
 import Submission from "../Models/submission.model.js";
 import Discussion from "../Models/discussion.model.js";
 import nodemailer from "nodemailer";
-export const sendAssessmentReminder = async (req, res) => {
-  try {
-    const { assessmentId } = req.params;
-    const teacherId = req.user._id;
+import {
+  ValidationError,
+  NotFoundError,
+  AuthenticationError,
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+export const sendAssessmentReminder = asyncHandler(async (req, res) => {
+  const { assessmentId } = req.params;
+  const teacherId = req.user._id;
 
-    if (!mongoose.Types.ObjectId.isValid(assessmentId)) {
-      return res.status(400).json({ message: "Invalid assessment ID." });
-    }
+  if (!mongoose.Types.ObjectId.isValid(assessmentId)) {
+    throw new ValidationError("Invalid assessment ID.", "VAL_006");
+  }
 
-    const assessment = await Assessment.findById(assessmentId)
-      .populate("course", "courseTitle")
-      .populate("createdby", "firstName lastName email");
+  const assessment = await Assessment.findById(assessmentId)
+    .populate("course", "courseTitle")
+    .populate("createdby", "firstName lastName email");
 
-    if (!assessment) {
-      return res.status(404).json({ message: "Assessment not found." });
-    }
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found.", "ASS_001");
+  }
 
-    if (assessment.createdby._id.toString() !== teacherId.toString()) {
-      return res.status(403).json({
-        message:
-          "You are not authorized to send reminders for this assessment.",
-      });
-    }
+  if (assessment.createdby._id.toString() !== teacherId.toString()) {
+    throw new AuthenticationError(
+      "You are not authorized to send reminders for this assessment.",
+      "ASS_002"
+    );
+  }
 
     // ✅ Find enrolled students
     const enrollments = await Enrollment.find({
@@ -45,11 +50,9 @@ export const sendAssessmentReminder = async (req, res) => {
       (enr) => enr.student !== null
     );
 
-    if (!filteredEnrollments.length) {
-      return res
-        .status(404)
-        .json({ message: "No students enrolled in this course." });
-    }
+  if (!filteredEnrollments.length) {
+    throw new NotFoundError("No students enrolled in this course.", "ASS_003");
+  }
 
     const transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST,
@@ -147,76 +150,58 @@ export const sendAssessmentReminder = async (req, res) => {
       }
     }
 
-    return res.status(200).json({
-      success: true,
-      message: `Reminder emails sent to ${sentCount} students successfully.`,
-      data: {
-        assessmentId,
-        assessmentTitle: assessment.title,
-        dueDate,
-        studentCount: sentCount,
-        allStudents: filteredEnrollments.map((e) => ({
-          id: e.student._id,
-          name: `${e.student.firstName} ${e.student.lastName}`,
-          email: e.student.email,
-        })),
-      },
-    });
-  } catch (error) {
-    console.error("💥 Error in sendAssessmentReminder:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error while sending reminders.",
-    });
-  }
-};
+  return res.status(200).json({
+    success: true,
+    message: `Reminder emails sent to ${sentCount} students successfully.`,
+    data: {
+      assessmentId,
+      assessmentTitle: assessment.title,
+      dueDate,
+      studentCount: sentCount,
+      allStudents: filteredEnrollments.map((e) => ({
+        id: e.student._id,
+        name: `${e.student.firstName} ${e.student.lastName}`,
+        email: e.student.email,
+      })),
+    },
+  });
+});
 
-export const setReminderTime = async (req, res) => {
+export const setReminderTime = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const { reminder } = req.body;
 
-  try {
-    const assessment = await Assessment.findById(assessmentId);
+  const assessment = await Assessment.findById(assessmentId);
 
-    if (!assessment) {
-      return res.status(400).json({ message: "Assessment not found" });
-    }
-
-    assessment.reminderTimeBefore = reminder;
-
-    assessment.save();
-    res
-      .status(200)
-      .json({ message: "Assessment reminder time updated successfully" });
-  } catch (error) {
-    console.log("error in the edit Assessment Info", error);
-    res.status(500).json({ message: "Internal Server Error" });
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found", "ASS_004");
   }
-};
 
-export const findReminderTime = async (req, res) => {
+  assessment.reminderTimeBefore = reminder;
+
+  await assessment.save();
+  return res.status(200).json({ 
+    success: true,
+    message: "Assessment reminder time updated successfully" 
+  });
+});
+
+export const findReminderTime = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
-  try {
-    const assessment = await Assessment.findById(assessmentId);
+  const assessment = await Assessment.findById(assessmentId);
 
-    if (!assessment) {
-      console.log("Assessment not found");
-      return null;
-    }
-
-    res
-      .status(200)
-      .json({
-        message: "Assessment reminder time updated successfully",
-        reminderTime: assessment.reminderTimeBefore,
-      }); // Return the reminder time
-  } catch (error) {
-    console.log("error in the edit Assessment Info", error);
-    res.status(500).json({ message: "Internal Server Error" });
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found", "ASS_005");
   }
-};
 
-export const createAssessment = async (req, res) => {
+  return res.status(200).json({
+    success: true,
+    message: "Assessment reminder time retrieved successfully",
+    data: { reminderTime: assessment.reminderTimeBefore },
+  });
+});
+
+export const createAssessment = asyncHandler(async (req, res) => {
   const {
     title,
     description,
@@ -233,18 +218,17 @@ export const createAssessment = async (req, res) => {
   const files = req.files;
   const createdby = req.user._id;
 
-  try {
-    const parsedQuestions = JSON.parse(questions || "[]");
+  const parsedQuestions = JSON.parse(questions || "[]");
 
     // ✅ Optional: Manual validation if questions exist
     if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
       for (const [index, q] of parsedQuestions.entries()) {
         if (!q.type || !["mcq", "truefalse", "qa"].includes(q.type)) {
-          throw new Error(`Invalid question type at index ${index}`);
+          throw new ValidationError(`Invalid question type at index ${index}`, "VAL_007");
         }
 
         if (typeof q.points !== "number" || q.points < 1 || q.points > 999) {
-          throw new Error(`Invalid points in question ${index + 1}`);
+          throw new ValidationError(`Invalid points in question ${index + 1}`, "VAL_008");
         }
 
         if (q.type === "mcq") {
@@ -253,19 +237,21 @@ export const createAssessment = async (req, res) => {
             q.options.length < 2 ||
             q.options.length > 4
           ) {
-            throw new Error(`Question ${index + 1} must have 2–4 options`);
+            throw new ValidationError(`Question ${index + 1} must have 2–4 options`, "VAL_009");
           }
           if (!q.correctAnswer || typeof q.correctAnswer !== "string") {
-            throw new Error(
-              `Correct answer is required for question ${index + 1}`
+            throw new ValidationError(
+              `Correct answer is required for question ${index + 1}`,
+              "VAL_010"
             );
           }
         }
 
         if (q.type === "truefalse") {
           if (!["true", "false"].includes(q.correctAnswer)) {
-            throw new Error(
-              `Correct answer must be true/false in question ${index + 1}`
+            throw new ValidationError(
+              `Correct answer must be true/false in question ${index + 1}`,
+              "VAL_011"
             );
           }
         }
@@ -288,24 +274,24 @@ export const createAssessment = async (req, res) => {
     let finalCourse = course;
     let finalChapter = chapter;
 
-    if (chapter && !course) {
-      const foundChapter = await Chapter.findById(chapter);
-      if (!foundChapter) throw new Error("Chapter not found");
-      finalCourse = foundChapter.course;
-    }
+  if (chapter && !course) {
+    const foundChapter = await Chapter.findById(chapter);
+    if (!foundChapter) throw new NotFoundError("Chapter not found", "ASS_006");
+    finalCourse = foundChapter.course;
+  }
 
-    if (lesson && !chapter) {
-      const foundLesson = await Lesson.findById(lesson).populate("chapter");
-      if (!foundLesson) throw new Error("Lesson not found");
+  if (lesson && !chapter) {
+    const foundLesson = await Lesson.findById(lesson).populate("chapter");
+    if (!foundLesson) throw new NotFoundError("Lesson not found", "ASS_007");
 
-      if (!foundLesson.chapter)
-        throw new Error("Lesson has no associated chapter");
-      finalChapter = foundLesson.chapter._id;
+    if (!foundLesson.chapter)
+      throw new ValidationError("Lesson has no associated chapter", "VAL_012");
+    finalChapter = foundLesson.chapter._id;
 
-      const foundChapter = await Chapter.findById(finalChapter);
-      if (!foundChapter) throw new Error("Associated chapter not found");
-      finalCourse = foundChapter.course;
-    }
+    const foundChapter = await Chapter.findById(finalChapter);
+    if (!foundChapter) throw new NotFoundError("Associated chapter not found", "ASS_008");
+    finalCourse = foundChapter.course;
+  }
 
     // ✅ Format due date if provided
     let dueDateObj = {};
@@ -322,8 +308,8 @@ export const createAssessment = async (req, res) => {
       return null;
     };
 
-    const type = determineType();
-    if (!type) throw new Error("Assessment type could not be determined");
+  const type = determineType();
+  if (!type) throw new ValidationError("Assessment type could not be determined", "VAL_013");
 
     // ✅ Save to DB
     const newAssessment = new Assessment({
@@ -342,39 +328,34 @@ export const createAssessment = async (req, res) => {
       createdby,
     });
 
-    await newAssessment.save();
+  await newAssessment.save();
 
-    res.status(201).json({
-      message: "Assessment created successfully",
-      assessment: newAssessment,
-    });
-  } catch (error) {
-    console.error("Error creating assessment:", error.message);
-    res.status(400).json({ error: error.message });
-  }
-};
+  return res.status(201).json({
+    success: true,
+    message: "Assessment created successfully",
+    data: newAssessment,
+  });
+});
 
-export const deleteAssessment = async (req, res) => {
+export const deleteAssessment = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  try {
-    const deletedAssessment = await Assessment.findByIdAndDelete(id);
-    if (!deletedAssessment) {
-      return res.status(404).json({ message: "Assessment not found" });
-    }
-    res.status(200).json({ message: "Assessment deleted successfully" });
-  } catch (error) {
-    console.error("Error deleting assessment:", error.message);
-    res.status(500).json({ messages: "Some thing went wrong" });
+  const deletedAssessment = await Assessment.findByIdAndDelete(id);
+  if (!deletedAssessment) {
+    throw new NotFoundError("Assessment not found", "ASS_009");
   }
-};
+  return res.status(200).json({ 
+    success: true,
+    message: "Assessment deleted successfully" 
+  });
+});
 
-export const uploadFiles = async (req, res) => {
+export const uploadFiles = asyncHandler(async (req, res) => {
   const files = req.files;
   const { id } = req.params;
 
   const assessment = await Assessment.findById(id);
   if (!assessment) {
-    return res.status(404).json({ message: "Assessment not found" });
+    throw new NotFoundError("Assessment not found", "ASS_010");
   }
 
   if (files && files.length > 0) {
@@ -387,65 +368,65 @@ export const uploadFiles = async (req, res) => {
     }
     await assessment.save();
 
-    res.status(200).json({ message: "Files uploaded successfully" });
+    return res.status(200).json({ 
+      success: true,
+      message: "Files uploaded successfully" 
+    });
   }
-};
+});
 
-export const deleteFile = async (req, res) => {
+export const deleteFile = asyncHandler(async (req, res) => {
   const { assessmentId, fileId } = req.params;
 
   const assessment = await Assessment.findById(assessmentId);
   if (!assessment) {
-    return res.status(404).json({ message: "Assessment not found" });
+    throw new NotFoundError("Assessment not found", "ASS_011");
   }
 
   const fileIndex = assessment.files.findIndex(
     (file) => file._id.toString() === fileId
   );
   if (fileIndex === -1) {
-    return res.status(404).json({ message: "File not found" });
+    throw new NotFoundError("File not found", "ASS_012");
   }
 
   const file = assessment.files[fileIndex];
   console.log(file, "file");
 
-  try {
-    await uploadToCloudinary(file.url, "assessment_files", "delete");
-    assessment.files.splice(fileIndex, 1);
-    await assessment.save();
+  await uploadToCloudinary(file.url, "assessment_files", "delete");
+  assessment.files.splice(fileIndex, 1);
+  await assessment.save();
 
-    return res.status(200).json({ message: "File deleted successfully" });
-  } catch (error) {
-    console.error("Error deleting file:", error);
-    return res.status(500).json({ message: "Error deleting file" });
-  }
-};
+  return res.status(200).json({ 
+    success: true,
+    message: "File deleted successfully" 
+  });
+});
 
-export const getAssesmentbyID = async (req, res) => {
+export const getAssesmentbyID = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const validObjectId = new mongoose.Types.ObjectId(assessmentId);
 
   console.log(assessmentId, validObjectId);
-  try {
-    const assessment = await Assessment.findById(validObjectId);
+  const assessment = await Assessment.findById(validObjectId);
 
-    if (!assessment) {
-      return res.status(404).json({ message: "Assessment not found" });
-    }
-
-    res.status(200).json({ message: "Assessment found", assessment });
-  } catch (error) {
-    res.status(500).json({ message: "Something went wrong" });
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found", "ASS_013");
   }
-};
 
-export const allAssessmentByTeacher = async (req, res) => {
+  return res.status(200).json({ 
+    success: true,
+    message: "Assessment found", 
+    data: assessment 
+  });
+});
+
+export const allAssessmentByTeacher = asyncHandler(async (req, res) => {
   const createdby = req.user._id;
 
-  try {
-    if (!createdby) {
-      return res.status(401).json({ error: "Unauthorized. User ID missing." });
-    }
+  if (!createdby) {
+    throw new AuthenticationError("Unauthorized. User ID missing.", "ASS_014");
+  }
 
     // Fetch the assessments created by the teacher and populate the relevant fields
     const assessments = await Assessment.find({ createdby })
@@ -460,23 +441,21 @@ export const allAssessmentByTeacher = async (req, res) => {
       .populate({ path: "lesson", select: "title" })
       .populate({ path: "category", select: "name" });
 
-    console.log(assessments, "assessment");
+  console.log(assessments, "assessment");
 
-    res.status(200).json(assessments);
-  } catch (err) {
-    console.error("Error fetching assessments by teacher:", err.message);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
+  return res.status(200).json({
+    success: true,
+    data: assessments
+  });
+});
 
-export const getAllassessmentforStudent = async (req, res) => {
+export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
 
-  try {
-    // 1. Get all enrollments
-    const allEnrollmentofStudent = await Enrollment.find({
-      student: studentId,
-    });
+  // 1. Get all enrollments
+  const allEnrollmentofStudent = await Enrollment.find({
+    student: studentId,
+  });
 
     const courseIds = allEnrollmentofStudent.map(
       (enrollment) => new mongoose.Types.ObjectId(enrollment.course)
@@ -654,31 +633,29 @@ export const getAllassessmentforStudent = async (req, res) => {
       },
     ]);
 
-    // 4. Merge and sort
-    const combined = [...assessments, ...discussions].sort((a, b) => {
-      // Sort by submission status first, then by date
-      if (a.isSubmitted === b.isSubmitted) {
-        return new Date(a.dueDate?.date || a.createdAt) - new Date(b.dueDate?.date || b.createdAt);
-      }
-      return a.isSubmitted ? 1 : -1;
-    });
+  // 4. Merge and sort
+  const combined = [...assessments, ...discussions].sort((a, b) => {
+    // Sort by submission status first, then by date
+    if (a.isSubmitted === b.isSubmitted) {
+      return new Date(a.dueDate?.date || a.createdAt) - new Date(b.dueDate?.date || b.createdAt);
+    }
+    return a.isSubmitted ? 1 : -1;
+  });
 
-    res.status(200).json(combined);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
+  return res.status(200).json({
+    success: true,
+    data: combined
+  });
+});
 
-export const editAssessmentInfo = async (req, res) => {
+export const editAssessmentInfo = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const { title, description, category, dueDate } = req.body;
 
-  try {
-    const assessment = await Assessment.findById(assessmentId);
-    if (!assessment) {
-      return res.status(400).json({ message: "Assessment not found" });
-    }
+  const assessment = await Assessment.findById(assessmentId);
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found", "ASS_015");
+  }
 
     let dueDateObj = {};
     if (dueDate) {
@@ -687,29 +664,27 @@ export const editAssessmentInfo = async (req, res) => {
       dueDateObj.time = date.toISOString().split("T")[1].split(".")[0];
     }
 
-    assessment.title = title;
-    assessment.description = description;
-    assessment.category = category;
-    assessment.dueDate = dueDateObj;
+  assessment.title = title;
+  assessment.description = description;
+  assessment.category = category;
+  assessment.dueDate = dueDateObj;
 
-    assessment.save();
-    res.status(200).json({ message: "Assessment updated successfully" });
-  } catch (error) {
-    console.log("error in the edit Assessment Info", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+  await assessment.save();
+  return res.status(200).json({ 
+    success: true,
+    message: "Assessment updated successfully" 
+  });
+});
  
 
 
-export const getAssessmentStats = async (req, res) => {
+export const getAssessmentStats = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
 
-  try {
-    const assessment = await Assessment.findById(assessmentId);
-    if (!assessment) {
-      return res.status(404).json({ message: "Assessment not found" });
-    }
+  const assessment = await Assessment.findById(assessmentId);
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found", "ASS_016");
+  }
 
     // 1. Count On-Time Submissions
     const onTimeCount = await Submission.countDocuments({ 
@@ -726,18 +701,18 @@ export const getAssessmentStats = async (req, res) => {
     // 3. Get total students enrolled in the course
     const totalEnrolled = await Enrollment.countDocuments({ course: assessment.course });
 
-    const submittedCount = onTimeCount + lateCount;
-    const notSubmittedCount = Math.max(0, totalEnrolled - submittedCount);
+  const submittedCount = onTimeCount + lateCount;
+  const notSubmittedCount = Math.max(0, totalEnrolled - submittedCount);
 
-    res.status(200).json({
+  return res.status(200).json({
+    success: true,
+    data: {
       totalEnrolled,
       onTimeCount,
       lateCount,
       submittedCount,
       notSubmittedCount,
       completionRate: totalEnrolled > 0 ? ((submittedCount / totalEnrolled) * 100).toFixed(1) : 0
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Error fetching stats", error: err.message });
-  }
-};
+    }
+  });
+});

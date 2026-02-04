@@ -1,17 +1,17 @@
 import nodemailer from "nodemailer";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
-export const sendSchoolcontactmail = async (req, res) => {
-    try {
-        const {
-            organization,
-            contactPerson,
-            contactNumber,
-            contactEmail,
-            teachers,
-            students,
-            schoolSize,
-            address,
-        } = req.body;
+export const sendSchoolcontactmail = asyncHandler(async (req, res) => {
+    const {
+        organization,
+        contactPerson,
+        contactNumber,
+        contactEmail,
+        teachers,
+        students,
+        schoolSize,
+        address,
+    } = req.body;
 
         // Transporter setup (replace with your SMTP)
         const transporter = nodemailer.createTransport({
@@ -99,12 +99,11 @@ export const sendSchoolcontactmail = async (req, res) => {
         };
 
 
-        // Send email
-        await transporter.sendMail(mailOptions);
+    // Send email
+    await transporter.sendMail(mailOptions);
 
-        res.json({ success: true, message: "Email sent successfully!" });
-    } catch (error) {
-        console.log("error in sending contact mail", error);
-        res.status(500).json({ message: "Internal Server Error" })
-    }
-}
+    return res.json({ 
+        success: true, 
+        message: "Email sent successfully!" 
+    });
+});

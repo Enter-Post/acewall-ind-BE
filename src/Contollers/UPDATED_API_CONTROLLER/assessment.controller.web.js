@@ -3,9 +3,11 @@ import { uploadToCloudinary } from "../../lib/cloudinary-course.config.js";
 import Chapter from "../../Models/chapter.model.sch.js";
 import Lesson from "../../Models/lesson.model.sch.js";
 import Assessment from "../../Models/Assessment.model.js";
+import { asyncHandler } from "../../middlewares/errorHandler.middleware.js";
+import { ValidationError, NotFoundError } from "../../Utiles/errors.js";
 
 
-export const createAssessment_updated = async (req, res) => {
+export const createAssessment_updated = asyncHandler(async (req, res) => {
   const {
     title,
     description,
@@ -23,8 +25,7 @@ export const createAssessment_updated = async (req, res) => {
   const files = req.files;
   const createdby = req.user._id;
 
-  try {
-    const parsedQuestions = JSON.parse(questions || "[]");
+  const parsedQuestions = JSON.parse(questions || "[]");
 
     const questionFiles = [];
 
@@ -42,17 +43,24 @@ export const createAssessment_updated = async (req, res) => {
     if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
       for (const [index, q] of parsedQuestions.entries()) {
         if (!q.type || !["mcq", "truefalse", "qa", "file"].includes(q.type)) {
-          throw new Error(`Invalid question type at index ${index}`);
+          throw new ValidationError(
+            `Invalid question type at index ${index}`,
+            "ASSW_001"
+          );
         }
 
         if (!q.question || q.question.length < 5) {
-          throw new Error(
-            `Question ${index + 1} must be at least 5 characters`
+          throw new ValidationError(
+            `Question ${index + 1} must be at least 5 characters`,
+            "ASSW_002"
           );
         }
 
         if (typeof q.points !== "number" || q.points < 1 || q.points > 999) {
-          throw new Error(`Invalid points in question ${index + 1}`);
+          throw new ValidationError(
+            `Invalid points in question ${index + 1}`,
+            "ASSW_003"
+          );
         }
 
         if (q.type === "mcq") {
@@ -61,19 +69,24 @@ export const createAssessment_updated = async (req, res) => {
             q.options.length < 2 ||
             q.options.length > 4
           ) {
-            throw new Error(`Question ${index + 1} must have 2–4 options`);
+            throw new ValidationError(
+              `Question ${index + 1} must have 2–4 options`,
+              "ASSW_004"
+            );
           }
           if (!q.correctAnswer || typeof q.correctAnswer !== "string") {
-            throw new Error(
-              `Correct answer is required for question ${index + 1}`
+            throw new ValidationError(
+              `Correct answer is required for question ${index + 1}`,
+              "ASSW_005"
             );
           }
         }
 
         if (q.type === "truefalse") {
           if (!["true", "false"].includes(q.correctAnswer)) {
-            throw new Error(
-              `Correct answer must be true/false in question ${index + 1}`
+            throw new ValidationError(
+              `Correct answer must be true/false in question ${index + 1}`,
+              "ASSW_006"
             );
           }
         }
@@ -98,20 +111,30 @@ export const createAssessment_updated = async (req, res) => {
 
     if (chapter && !course) {
       const foundChapter = await Chapter.findById(chapter);
-      if (!foundChapter) throw new Error("Chapter not found");
+      if (!foundChapter) {
+        throw new NotFoundError("Chapter not found", "ASSW_007");
+      }
       finalCourse = foundChapter.course;
     }
 
     if (lesson && !chapter) {
       const foundLesson = await Lesson.findById(lesson).populate("chapter");
-      if (!foundLesson) throw new Error("Lesson not found");
+      if (!foundLesson) {
+        throw new NotFoundError("Lesson not found", "ASSW_008");
+      }
 
-      if (!foundLesson.chapter)
-        throw new Error("Lesson has no associated chapter");
+      if (!foundLesson.chapter) {
+        throw new ValidationError(
+          "Lesson has no associated chapter",
+          "ASSW_009"
+        );
+      }
       finalChapter = foundLesson.chapter._id;
 
       const foundChapter = await Chapter.findById(finalChapter);
-      if (!foundChapter) throw new Error("Associated chapter not found");
+      if (!foundChapter) {
+        throw new NotFoundError("Associated chapter not found", "ASSW_010");
+      }
       finalCourse = foundChapter.course;
     }
 
@@ -131,7 +154,12 @@ export const createAssessment_updated = async (req, res) => {
     };
 
     const type = determineType();
-    if (!type) throw new Error("Assessment type could not be determined");
+    if (!type) {
+      throw new ValidationError(
+        "Assessment type could not be determined",
+        "ASSW_011"
+      );
+    }
 
     // ✅ Save to DB
     const newAssessment = new Assessment({
@@ -153,12 +181,9 @@ export const createAssessment_updated = async (req, res) => {
 
     await newAssessment.save();
 
-    res.status(201).json({
-      message: "Assessment created successfully",
-      assessment: newAssessment,
+    return res.status(201).json({
+      success: true,
+      data: newAssessment,
+      message: "Assessment created successfully"
     });
-  } catch (error) {
-    console.error("Error creating assessment:", error.message);
-    res.status(400).json({ error: error.message });
-  }
-};
+});

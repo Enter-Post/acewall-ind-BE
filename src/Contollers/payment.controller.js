@@ -2,10 +2,12 @@ import Purchase from '../Models/purchase.model.js';
 import Withdrawal from '../Models/Withdrawal.model.js';
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
+import { ValidationError, NotFoundError, DatabaseError } from '../Utiles/errors.js';
+import { asyncHandler } from '../middlewares/errorHandler.middleware.js';
 
 
 // Get Teacher Earnings
-export const getTeacherEarnings = async (req, res) => {
+export const getTeacherEarnings = asyncHandler(async (req, res, next) => {
   try {
     const teacherId = req.user._id;
 
@@ -35,18 +37,21 @@ export const getTeacherEarnings = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(10);
 
-    res.json({
-      earnings: earnings[0] || { totalEarnings: 0, totalSales: 0, totalRevenue: 0 },
-      recentTransactions
+    res.status(200).json({
+      success: true,
+      data: {
+        earnings: earnings[0] || { totalEarnings: 0, totalSales: 0, totalRevenue: 0 },
+        recentTransactions
+      },
+      message: 'Teacher earnings retrieved successfully'
     });
   } catch (error) {
-    console.error('Get teacher earnings error:', error);
-    res.status(500).json({ message: 'Failed to fetch earnings' });
+    next(error);
   }
-};
+});
 
 // Get Teacher Transactions
-export const getTeacherTransactions = async (req, res) => {
+export const getTeacherTransactions = asyncHandler(async (req, res, next) => {
   try {
     const teacherId = new mongoose.Types.ObjectId(req.user._id);
     const { page = 1, limit = 10, status = 'all' } = req.query;
@@ -65,19 +70,22 @@ export const getTeacherTransactions = async (req, res) => {
 
     const total = await Purchase.countDocuments(filter);
 
-    res.json({
-      transactions,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
-      total
+    res.status(200).json({
+      success: true,
+      data: {
+        transactions,
+        totalPages: Math.ceil(total / limit),
+        currentPage: page,
+        total
+      },
+      message: 'Teacher transactions retrieved successfully'
     });
   } catch (error) {
-    console.error('Get teacher transactions error:', error);
-    res.status(500).json({ message: 'Failed to fetch transactions' });
+    next(error);
   }
-};
+});
 
-export const getTeacherPaymentStats = async (req, res) => {
+export const getTeacherPaymentStats = asyncHandler(async (req, res, next) => {
   try {
     const teacherId = new mongoose.Types.ObjectId(req.user._id);
 
@@ -155,38 +163,52 @@ export const getTeacherPaymentStats = async (req, res) => {
         .limit(limit),
     ]);
 
-    res.json({
-      stats: {
-        totalRevenue,
-        totalEarnings,
-        totalWithdrawals,
-        currentBalance,
-        todayRevenue,
+    res.status(200).json({
+      success: true,
+      data: {
+        stats: {
+          totalRevenue,
+          totalEarnings,
+          totalWithdrawals,
+          currentBalance,
+          todayRevenue,
+        },
+        revenueOverTime,
+        recentWithdrawals,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(totalWithdrawalsCount / pageSize),
+          totalWithdrawalsCount,
+        },
       },
-      revenueOverTime,
-      recentWithdrawals,
-      pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(totalWithdrawalsCount / pageSize),
-        totalWithdrawalsCount,
-      },
+      message: 'Payment stats retrieved successfully'
     });
   } catch (err) {
-    console.error("Error in getTeacherPaymentStats:", err);
-    res.status(500).json({ message: "Failed to fetch payment stats" });
+    next(err);
   }
-};
+});
 
 
-export const requestWithdrawal = async (req, res) => {
+export const requestWithdrawal = asyncHandler(async (req, res, next) => {
   try {
     const teacherId = req.user._id;
     const { amount, method, stripeAccountId } = req.body;
-    if (method === "stripe" && !stripeAccountId) {
-      return res.status(400).json({ message: "Stripe Account ID is required." });
+
+    // Validate required fields
+    if (!amount) {
+      throw new ValidationError("Amount is required", "VAL_001");
     }
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ message: "Invalid amount" });
+
+    if (!method) {
+      throw new ValidationError("Payment method is required", "VAL_001");
+    }
+
+    if (method === "stripe" && !stripeAccountId) {
+      throw new ValidationError("Stripe Account ID is required for Stripe withdrawals", "VAL_001");
+    }
+
+    if (amount <= 0) {
+      throw new ValidationError("Amount must be greater than zero", "VAL_001");
     }
 
     // Get teacher's total earnings and withdrawals
@@ -199,29 +221,32 @@ export const requestWithdrawal = async (req, res) => {
     const availableBalance = totalEarnings - totalWithdrawn;
 
     if (amount > availableBalance) {
-      return res.status(400).json({ message: "Insufficient balance" });
+      throw new ValidationError(`Insufficient balance. Available: ${availableBalance}`, "VAL_001");
     }
 
     const withdrawal = await Withdrawal.create({
       teacher: new mongoose.Types.ObjectId(teacherId),
       amount,
       method,
-      stripeAccountId: method === "stripe" ? stripeAccountId : undefined, // ✅ Save it if method is stripe
+      stripeAccountId: method === "stripe" ? stripeAccountId : undefined,
       status: "pending",
     });
 
-    res.status(201).json({ message: "Withdrawal request submitted", withdrawal });
+    res.status(201).json({
+      success: true,
+      data: { withdrawal },
+      message: "Withdrawal request submitted successfully"
+    });
   } catch (err) {
-    console.error("Withdrawal request error:", err);
-    res.status(500).json({ message: "Failed to submit withdrawal" });
+    next(err);
   }
-};
-export const getAllWithdrawals = async (req, res) => {
+});
+export const getAllWithdrawals = asyncHandler(async (req, res, next) => {
   try {
     // Get the page and limit from the query params, default to page 1 and limit 10 if not provided
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit; // Skip the appropriate number of documents for pagination
+    const skip = (page - 1) * limit;
 
     // Fetch total number of withdrawals for statistics
     const totalWithdrawalsCount = await Withdrawal.countDocuments();
@@ -230,15 +255,15 @@ export const getAllWithdrawals = async (req, res) => {
     const withdrawalStats = await Withdrawal.aggregate([
       {
         $group: {
-          _id: "$status", // Group by status (approved, pending, rejected)
-          count: { $sum: 1 }, // Count the number of withdrawals for each status
+          _id: "$status",
+          count: { $sum: 1 },
         },
       },
       {
         $project: {
-          _id: 0, // Exclude the _id field
-          status: "$_id", // Alias the _id to 'status'
-          count: 1, // Include the count
+          _id: 0,
+          status: "$_id",
+          count: 1,
         },
       },
     ]);
@@ -260,38 +285,45 @@ export const getAllWithdrawals = async (req, res) => {
     // Fetch the withdrawals with pagination
     const withdrawals = await Withdrawal.find()
       .populate("teacher", "firstName lastName email")
-      .sort({ createdAt: -1 }) // Sort by created date
-      .skip(skip) // Skip the appropriate number of withdrawals for pagination
-      .limit(limit); // Limit the number of withdrawals per page
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     // Calculate total pages
     const totalPages = Math.ceil(totalWithdrawalsCount / limit);
 
-    // Send the response with withdrawals, stats, and pagination details
     res.status(200).json({
-      withdrawals,
-      stats, // Include stats in the response
-      pagination: {
-        currentPage: page,
-        totalPages,
-        totalWithdrawalsCount,
+      success: true,
+      data: {
+        withdrawals,
+        stats,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalWithdrawalsCount,
+        },
       },
+      message: 'Withdrawals retrieved successfully'
     });
   } catch (err) {
-    console.error("Error fetching withdrawals:", err);
-    res.status(500).json({ message: "Failed to fetch withdrawals" });
+    next(err);
   }
-};
+});
 
 
 
-export const updateStripeId = async (req, res) => {
+export const updateStripeId = asyncHandler(async (req, res, next) => {
   try {
-    const { stripeAccountId, action } = req.body; // ✅ separate action
+    const { stripeAccountId, action } = req.body;
     const { id } = req.params;
 
+    // Validate required fields
     if (!action) {
-      return res.status(400).json({ message: "Action is required (approved/rejected)." });
+      throw new ValidationError("Action is required (approved/rejected)", "VAL_001");
+    }
+
+    if (!['approved', 'rejected'].includes(action)) {
+      throw new ValidationError("Action must be either 'approved' or 'rejected'", "VAL_001");
     }
 
     // Get current date for processedAt
@@ -299,7 +331,7 @@ export const updateStripeId = async (req, res) => {
 
     // Build update object
     const updateData = {
-      status: action, // ✅ set status based on action
+      status: action,
       processedAt,
     };
 
@@ -313,7 +345,7 @@ export const updateStripeId = async (req, res) => {
     }).populate("teacher", "firstName lastName email");
 
     if (!withdrawal) {
-      return res.status(404).json({ message: "Withdrawal not found" });
+      throw new NotFoundError("Withdrawal not found", "RES_001");
     }
 
     // Send email to teacher
@@ -363,14 +395,14 @@ export const updateStripeId = async (req, res) => {
     await transporter.sendMail(mailOptions);
 
     res.status(200).json({
-      message: "Withdrawal updated successfully, and email sent",
-      withdrawal,
+      success: true,
+      data: { withdrawal },
+      message: "Withdrawal updated successfully and email sent"
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to update withdrawal" });
+    next(err);
   }
-};
+});
 
 
 

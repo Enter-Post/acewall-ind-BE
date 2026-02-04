@@ -1,13 +1,13 @@
 import nodemailer from "nodemailer";
+import { ValidationError } from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
-export const sendSupportMail = async (req, res) => {
+export const sendSupportMail = asyncHandler(async (req, res) => {
   const { fullName, email, feedback } = req.body;
 
   if (!fullName || !email || !feedback) {
-    return res.status(400).json({ message: "All fields are required." });
+    throw new ValidationError("All fields are required.", "SUP_001");
   }
-
-  try {
     const transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST,
       port: Number(process.env.MAIL_PORT),
@@ -61,9 +61,8 @@ export const sendSupportMail = async (req, res) => {
 
     await transporter.sendMail(mailOptions);
 
-    return res.status(200).json({ message: "Support message sent successfully!" });
-  } catch (error) {
-    console.error("Error sending email:", error);
-    return res.status(500).json({ message: "Failed to send support email." });
-  }
-};
+    return res.status(200).json({ 
+        success: true,
+        message: "Support message sent successfully!" 
+    });
+});
