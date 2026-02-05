@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "../Models/customer.model.js";
+// import User from "../Models/customer.model.js";
 
 //// it is responsible for only super admin and manager can access
 export const checkRole = async (req, res, next) => {
