@@ -62,7 +62,6 @@ export const sendSupportMail = asyncHandler(async (req, res) => {
     await transporter.sendMail(mailOptions);
 
     return res.status(200).json({ 
-        success: true,
         message: "Support message sent successfully!" 
     });
 });

@@ -304,8 +304,8 @@ export const getStudentGradebook = asyncHandler(async (req, res) => {
   }
 
   return res.json({
-    success: true,
-    data: response
+    ...response,
+    message: "Student gradebook fetched successfully"
   });
 });
 
@@ -654,15 +654,13 @@ export const getStudentGradeReport = asyncHandler(async (req, res) => {
   const overallGPA = totalQuarters > 0 ? parseFloat((totalGPA / totalQuarters).toFixed(2)) : 0;
 
   return res.json({
-    success: true,
-    data: {
-      studentId,
-      overallGPA,
-      totalCourses: allCourseIds.length,
-      currentPage: page,
-      totalPages: Math.ceil(allCourseIds.length / limit),
-      courses: courseGrades,
-    }
+    studentId,
+    overallGPA,
+    totalCourses: allCourseIds.length,
+    currentPage: page,
+    totalPages: Math.ceil(allCourseIds.length / limit),
+    courses: courseGrades,
+    message: "Student grade report fetched successfully"
   });
 });
 
@@ -681,9 +679,8 @@ export const setGradingScale = asyncHandler(async (req, res) => {
       await GradingScale.findOneAndUpdate({ _id: existing._id }, { scale });
 
       return res.status(200).json({
-      success: true,
-      message: "Grading scale updated successfully",
-      data: { scale },
+      scale,
+      message: "Grading scale updated successfully"
     });
   }
 
@@ -694,9 +691,8 @@ export const setGradingScale = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json({
-    success: true,
-    message: "Grading scale saved successfully",
-    data: { scale: newScale.scale },
+    scale: newScale.scale,
+    message: "Grading scale saved successfully"
   });
 });
 export const getGradingScale = asyncHandler(async (req, res) => {
@@ -711,9 +707,8 @@ export const getGradingScale = asyncHandler(async (req, res) => {
     throw new NotFoundError("Grading scale not found", "GRD_002");
   }
   return res.status(200).json({ 
-    success: true,
-    message: "Grading scale found", 
-    data: { scale } 
+    scale,
+    message: "Grading scale found"
   });
 });
 
@@ -1021,15 +1016,13 @@ export const getGradebookForCourse = asyncHandler(async (req, res) => {
     }
 
     return res.json({
-      success: true,
-      data: {
-        courseId,
-        total: totalStudents,
-        page: Number(page),
-        limit: Number(limit),
-        hasSemesterStructure,
-        gradebook
-      }
+      courseId,
+      total: totalStudents,
+      page: Number(page),
+      limit: Number(limit),
+      hasSemesterStructure,
+      gradebook,
+      message: "Gradebook fetched successfully"
     });
 });
 

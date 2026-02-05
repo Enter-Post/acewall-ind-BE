@@ -21,13 +21,10 @@ export const getreplyofComment = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json({
-    success: true,
-    message: "Replies fetched successfully",
-    data: {
-      replies,
-      totalPages: Math.ceil(totalReplies / limit),
-      currentPage: parseInt(page),
-    }
+    replies,
+    totalPages: Math.ceil(totalReplies / limit),
+    currentPage: parseInt(page),
+    message: "Replies fetched successfully"
   });
 });
 
@@ -49,9 +46,8 @@ export const sendReplyofComment = asyncHandler(async (req, res) => {
 
   await newReply.save();
   return res.status(200).json({ 
-    success: true,
-    message: "Reply sent successfully", 
-    data: newReply 
+    newReply,
+    message: "Reply sent successfully"
   });
 });
 
@@ -62,8 +58,7 @@ export const getReplyCount = asyncHandler(async (req, res) => {
   const replyCount = await DiscussionReply.countDocuments({ comment: commentId });
 
   return res.status(200).json({
-    success: true,
-    message: "Total reply count fetched successfully",
-    data: { replyCount },
+    replyCount,
+    message: "Total reply count fetched successfully"
   });
 });

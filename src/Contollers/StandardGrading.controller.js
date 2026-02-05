@@ -19,18 +19,16 @@ export const SetStandardGradingScale = asyncHandler(async (req, res) => {
         await StandardGrading.findOneAndUpdate({ course: courseId }, { scale });
 
         return res.status(200).json({
-            success: true,
-            message: "Standard Grading scale updated successfully",
-            data: { scale },
+            scale,
+            message: "Standard Grading scale updated successfully"
         });
     }
 
     const newScale = await StandardGrading.create({ scale, course: courseId });
 
     return res.status(200).json({
-        success: true,
-        message: "Standard Grading scale saved successfully",
-        data: { scale: newScale.scale },
+        scale: newScale.scale,
+        message: "Standard Grading scale saved successfully"
     });
 });
 
@@ -45,8 +43,7 @@ export const getStandardGradingScale = asyncHandler(async (req, res) => {
         throw new NotFoundError("Standard Grading scale not found", "STD_002");
     }
     return res.status(200).json({ 
-        success: true,
-        message: "Standard Grading scale found", 
-        data: { scale } 
+        scale,
+        message: "Standard Grading scale found"
     });
 });

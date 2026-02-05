@@ -22,7 +22,6 @@ export const setGPAscale = asyncHandler(async (req, res) => {
         await GPA.findOneAndUpdate({ course: courseId }, { gpaScale });
 
         return res.status(200).json({
-            success: true,
             message: "Grading scale updated successfully",
         });
     }
@@ -30,7 +29,6 @@ export const setGPAscale = asyncHandler(async (req, res) => {
     const newGrade = await GPA.create({ gpaScale, createdby: userId, course: courseId });
 
     return res.status(200).json({
-        success: true,
         message: "Grading scale saved successfully",
     });
 });
@@ -51,9 +49,8 @@ export const getGPAScale = asyncHandler(async (req, res) => {
     if (!grade) {
         throw new NotFoundError("Grading scale not found", "GPA_002");
     }
-    return res.status(200).json({ 
-        success: true,
-        message: "Grading scale found", 
-        data: { grade } 
+    return res.status(201).json({ 
+        message: "Grading scale found",
+        grade
     });
 });

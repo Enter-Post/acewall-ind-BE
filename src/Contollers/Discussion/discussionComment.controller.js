@@ -27,13 +27,10 @@ export const getDiscussionComments = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json({
-    success: true,
-    message: "Comments fetched successfully",
-    data: {
-      discussionComments,
-      totalPages: Math.ceil(totalComments / limit),
-      currentPage: parseInt(page),
-    }
+    discussionComments,
+    totalPages: Math.ceil(totalComments / limit),
+    currentPage: parseInt(page),
+    message: "Comments fetched successfully"
   });
 });
 
@@ -59,9 +56,8 @@ export const sendDiscussionComment = asyncHandler(async (req, res) => {
   });
   await newDiscussionComment.save();
   return res.status(200).json({
-    success: true,
-    message: "Comment sent successfully",
-    data: newDiscussionComment,
+    newDiscussionComment,
+    message: "Comment sent successfully"
   });
 });
 
@@ -74,7 +70,6 @@ export const deleteComment = asyncHandler(async (req, res) => {
     throw new NotFoundError("Comment not found", "DCOM_002");
   }
   return res.status(200).json({ 
-    success: true,
     message: "Comment deleted successfully" 
   });
 });
@@ -125,7 +120,6 @@ export const gradeDiscussionofStd = asyncHandler(async (req, res) => {
   );
 
   return res.status(200).json({ 
-    success: true,
     message: "Marks graded successfully" 
   });
 });
@@ -141,13 +135,13 @@ export const isCommentedInDiscussion = asyncHandler(async (req, res) => {
 
   if (user.role !== "teacher" && isCommented) {
     return res.status(200).json({ 
-      success: true,
-      data: { commented: true } 
+      commented: true,
+      message: "User has commented"
     });
   }
   
   return res.status(200).json({ 
-    success: true,
-    data: { commented: false } 
+    commented: false,
+    message: "User has not commented"
   });
 });

@@ -21,9 +21,8 @@ export const getCourseComments = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json({
-    success: true,
+    comments,
     message: "Comments found successfully",
-    data: comments,
   });
 });
 
@@ -59,7 +58,6 @@ export const sendComment = asyncHandler(async (req, res) => {
     );
 
   return res.status(201).json({
-    success: true,
     comment: populatedComment,
     message: "Comment added successfully",
   });
@@ -89,13 +87,9 @@ export const allCommentsofTeacher = asyncHandler(async (req, res) => {
   const recentComments = comments.slice(0, 5);
 
   return res.status(200).json({
-    success: true,
-    data: recentComments,
+    recentComments,
   });
 });
-
-
-
 
 
 export const deleteComment = asyncHandler(async (req, res) => {
@@ -121,7 +115,6 @@ export const deleteComment = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json({ 
-    success: true,
     message: "Comment deleted successfully" 
   });
 });

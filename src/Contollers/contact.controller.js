@@ -103,7 +103,6 @@ export const sendSchoolcontactmail = asyncHandler(async (req, res) => {
     await transporter.sendMail(mailOptions);
 
     return res.json({ 
-        success: true, 
         message: "Email sent successfully!" 
     });
 });

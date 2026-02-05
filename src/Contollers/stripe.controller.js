@@ -18,8 +18,7 @@ import { withNetworkErrorHandling } from "../Utiles/networkErrorHelper.js";
 
 // Create Mobile-Only Checkout Session
 export const createMobileCheckoutSession = asyncHandler(async (req, res, next) => {
-  try {
-    const { courseId, studentId } = req.body;
+  const { courseId, studentId } = req.body;
 
     // Validation
     if (!courseId || !studentId) {
@@ -77,21 +76,15 @@ export const createMobileCheckoutSession = asyncHandler(async (req, res, next) =
       });
     }, "Stripe");
 
-    res.status(200).json({
-      success: true,
-      data: { url: session.url },
-      message: "Mobile checkout session created successfully",
-    });
-
-  } catch (error) {
-    next(error);
-  }
+  res.status(200).json({
+    url: session.url,
+    message: "Mobile checkout session created successfully",
+  });
 });
 
 // Create Checkout Session
 export const createCheckoutSession = asyncHandler(async (req, res, next) => {
-  try {
-    const { courseId, studentId } = req.body;
+  const { courseId, studentId } = req.body;
 
     // Validation
     if (!courseId || !studentId) {
@@ -143,20 +136,15 @@ export const createCheckoutSession = asyncHandler(async (req, res, next) => {
       });
     }, "Stripe");
 
-    res.status(200).json({
-      success: true,
-      data: { url: session.url },
-      message: "Checkout session created successfully",
-    });
-  } catch (error) {
-    next(error);
-  }
+  res.status(200).json({
+    url: session.url,
+    message: "Checkout session created successfully",
+  });
 });
 
 // Webhook Handler for Payment Confirmation
 export const handleStripeWebhook = asyncHandler(async (req, res, next) => {
-  try {
-    const sig = req.headers["stripe-signature"];
+  const sig = req.headers["stripe-signature"];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!sig) {
@@ -199,17 +187,13 @@ export const handleStripeWebhook = asyncHandler(async (req, res, next) => {
       default:
         // Log unhandled event types for monitoring
         console.log(`Unhandled webhook event type: ${event.type}`);
-    }
-
-    res.status(200).json({ success: true, received: true });
-  } catch (error) {
-    next(error);
   }
+
+  res.status(200).json({ received: true });
 });
 
 export const stripeOnboarding = asyncHandler(async (req, res, next) => {
-  try {
-    const teacher = req.user;
+  const teacher = req.user;
 
     if (!teacher.stripeAccountId) {
       throw new PaymentError("No Stripe account ID found for this user", "PAY_007");
@@ -224,81 +208,58 @@ export const stripeOnboarding = asyncHandler(async (req, res, next) => {
       });
     }, "Stripe");
 
-    res.status(200).json({
-      success: true,
-      data: { url: link.url },
-      message: "Onboarding link created successfully",
-    });
-
-  } catch (error) {
-    next(error);
-  }
+  res.status(200).json({
+    onboardingUrl: link.url,
+    message: "Onboarding link created successfully",
+  });
 });
 
 export const checkOnboarding = asyncHandler(async (req, res, next) => {
-  try {
-    const teacher = req.user;
+  const teacher = req.user;
 
-    if (!teacher.stripeAccountId) {
-      return res.status(200).json({
-        success: true,
-        data: {
-          onboarded: false,
-          reason: "Stripe account not created",
-        },
-      });
-    }
-
-    const account = await withNetworkErrorHandling(async () => {
-      return await stripe.accounts.retrieve(teacher.stripeAccountId);
-    }, "Stripe");
-
-    res.status(200).json({
-      success: true,
-      data: {
-        onboarded: account.payouts_enabled,
-        stripeId: account.id,
-        chargesEnabled: account.charges_enabled,
-        detailsSubmitted: account.details_submitted,
-      },
+  if (!teacher.stripeAccountId) {
+    return res.status(200).json({
+      onboarded: false,
+      reason: "Stripe account not created",
     });
-
-  } catch (error) {
-    next(error);
   }
+
+  const account = await withNetworkErrorHandling(async () => {
+    return await stripe.accounts.retrieve(teacher.stripeAccountId);
+  }, "Stripe");
+
+  res.status(200).json({
+    onboarded: account.payouts_enabled,
+    stripeId: account.id,
+    chargesEnabled: account.charges_enabled,
+    detailsSubmitted: account.details_submitted,
+  });
 });
 
 export const getStripeLoginLink = asyncHandler(async (req, res, next) => {
-  try {
-    const teacher = req.user;
+  const teacher = req.user;
 
-    if (!teacher.stripeAccountId) {
-      throw new PaymentError("Stripe account not connected", "PAY_007");
-    }
-
-    const link = await withNetworkErrorHandling(async () => {
-      return await stripe.accounts.createLoginLink(teacher.stripeAccountId);
-    }, "Stripe");
-
-    res.status(200).json({
-      success: true,
-      data: { url: link.url },
-      message: "Login link created successfully",
-    });
-
-  } catch (error) {
-    next(error);
+  if (!teacher.stripeAccountId) {
+    throw new PaymentError("Stripe account not connected", "PAY_007");
   }
+
+  const link = await withNetworkErrorHandling(async () => {
+    return await stripe.accounts.createLoginLink(teacher.stripeAccountId);
+  }, "Stripe");
+
+  res.status(200).json({
+    url: link.url,
+    message: "Login link created successfully",
+  });
 });
 
 
 export const createCheckoutSessionConnect = asyncHandler(async (req, res, next) => {
-  try {
-    const { courseId, studentId } = req.body;
+  const { courseId, studentId } = req.body;
 
-    // Validate required fields
-    if (!courseId || !studentId) {
-      throw new ValidationError("courseId and studentId are required", "VAL_001");
+  // Validate required fields
+  if (!courseId || !studentId) {
+    throw new ValidationError("courseId and studentId are required", "VAL_001");
     }
 
     // Fetch course and populate teacher
@@ -337,8 +298,7 @@ export const createCheckoutSessionConnect = asyncHandler(async (req, res, next) 
       });
 
       return res.status(200).json({
-        success: true,
-        data: { free: true },
+        free: true,
         message: "Enrolled in free course successfully",
       });
     }
@@ -386,8 +346,7 @@ export const createCheckoutSessionConnect = asyncHandler(async (req, res, next) 
       }, "Stripe");
 
       return res.status(200).json({
-        success: true,
-        data: { url: session.url },
+        url: session.url,
         message: "Checkout session created successfully",
       });
     }
@@ -433,18 +392,13 @@ export const createCheckoutSessionConnect = asyncHandler(async (req, res, next) 
       }, "Stripe");
 
       return res.status(200).json({
-        success: true,
-        data: { url: session.url },
+        url: session.url,
         message: "Subscription checkout session created successfully",
       });
     }
 
     // Invalid payment type
     throw new PaymentError("Invalid payment type", "PAY_010");
-
-  } catch (error) {
-    next(error);
-  }
 });
 
 
@@ -658,24 +612,23 @@ export const createCheckoutSessionConnect = asyncHandler(async (req, res, next) 
 // };
 
 export const handleStripeWebhookConnect = asyncHandler(async (req, res, next) => {
+  const sig = req.headers["stripe-signature"];
+
+  if (!sig) {
+    throw new PaymentError("Missing stripe signature", "PAY_005");
+  }
+
+  let event;
+
   try {
-    const sig = req.headers["stripe-signature"];
-
-    if (!sig) {
-      throw new PaymentError("Missing stripe signature", "PAY_005");
-    }
-
-    let event;
-
-    try {
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-    } catch (err) {
-      throw new PaymentError(`Webhook signature verification failed: ${err.message}`, "PAY_005");
-    }
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    throw new PaymentError(`Webhook signature verification failed: ${err.message}`, "PAY_005");
+  }
 
     console.log("✅ Webhook received:", event.type);
 
@@ -1233,40 +1186,29 @@ export const handleStripeWebhookConnect = asyncHandler(async (req, res, next) =>
     }
 
     res.status(200).json({
-      success: true,
-      data: { received: true },
+      received: true,
       message: "Webhook processed successfully",
     });
-
-  } catch (error) {
-    next(error);
-  }
 });
 
 
 export const endTrial = asyncHandler(async (req, res, next) => {
-  try {
-    const { subscriptionId } = req.body;
+  const { subscriptionId } = req.body;
 
-    if (!subscriptionId) {
-      throw new ValidationError("subscriptionId is required", "VAL_001");
-    }
-
-    const subscription = await withNetworkErrorHandling(async () => {
-      return await stripe.subscriptions.update(subscriptionId, {
-        trial_end: "now",
-      });
-    }, "Stripe");
-
-    console.log(subscription, "✅ Trial ended immediately for subscription:", subscriptionId);
-
-    res.status(200).json({
-      success: true,
-      data: { subscription },
-      message: "Trial ended successfully",
-    });
-
-  } catch (error) {
-    next(error);
+  if (!subscriptionId) {
+    throw new ValidationError("subscriptionId is required", "VAL_001");
   }
+
+  const subscription = await withNetworkErrorHandling(async () => {
+    return await stripe.subscriptions.update(subscriptionId, {
+      trial_end: "now",
+    });
+  }, "Stripe");
+
+  console.log(subscription, "✅ Trial ended immediately for subscription:", subscriptionId);
+
+  res.status(200).json({
+    subscription,
+    message: "Trial ended successfully",
+  });
 });

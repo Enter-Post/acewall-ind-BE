@@ -47,7 +47,6 @@ export const createSubCategory = async (req, res) => {
     await subcategory.save();
 
     res.status(201).json({
-      success: true,
       message: "Subcategory created successfully",
       subcategory,
     });
@@ -70,7 +69,6 @@ export const getSubcategory = async (req, res) => {
       .sort({ title: 1 }); 
 
     res.status(200).json({
-      success: true,
       count: subcategories.length,
       subcategories,
     });
@@ -109,7 +107,6 @@ export const deleteSubcategory = async (req, res) => {
     const deletedSub = await Subcategory.findByIdAndDelete(id);
 
     res.status(200).json({
-      success: true,
       message: "Subcategory deleted successfully",
       deletedSub,
     });
@@ -190,7 +187,6 @@ export const updateSubCategory = async (req, res) => {
     );
 
     res.status(200).json({
-      success: true,
       message: "Subcategory updated successfully",
       subcategory: updated,
     });

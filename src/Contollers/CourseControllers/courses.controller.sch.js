@@ -153,14 +153,9 @@ export const importCourseFromJSON = asyncHandler(async (req, res) => {
     });
   }
 
-  res.status(201).json({
-    success: true,
-    data: {
-      courseId: newCourse._id,
-      courseTitle: newCourse.courseTitle,
-    },
-    message: "Course imported successfully",
-    timestamp: new Date().toISOString(),
+  res.status(201).json({ 
+    courseId: newCourse._id,
+    message: "Course imported successfully"
   });
 });
 
@@ -263,12 +258,7 @@ export const getFullCourseData = asyncHandler(async (req, res) => {
 
   delete fullCourseData.semesterData;
 
-  res.status(200).json({
-    success: true,
-    data: fullCourseData,
-    message: "Full course data retrieved successfully",
-    timestamp: new Date().toISOString(),
-  });
+  res.status(200).json(fullCourseData);
 });
 
 
@@ -311,7 +301,6 @@ export const getCoursesWithMeetings = async (req, res) => {
     }));
 
     res.status(200).json({
-      success: true,
       count: coursesWithCounts.length,
       courses: coursesWithCounts,
       message: "Courses with meetings fetched successfully",
@@ -423,12 +412,8 @@ export const toggleGradingSystem = asyncHandler(async (req, res) => {
   await course.save();
 
   res.status(200).json({
-    success: true,
-    data: {
-      gradingSystem: course.gradingSystem,
-    },
     message: "Grading system updated successfully",
-    timestamp: new Date().toISOString(),
+    gradingSystem: course.gradingSystem,
   });
 });
 
@@ -524,13 +509,9 @@ export const createCourseSch = asyncHandler(async (req, res) => {
 
   await Enrollment.create({ student: createdby, course: course._id });
 
-  res.status(201).json({
-    success: true,
-    data: {
-      course,
-    },
-    message: "Course created successfully",
-    timestamp: new Date().toISOString(),
+  res.status(201).json({ 
+    course, 
+    message: "Course created successfully" 
   });
 });
 
@@ -553,14 +534,9 @@ export const getAllCoursesSch = asyncHandler(async (req, res) => {
     .populate("category", "title")
     .populate("subcategory", "title");
 
-  res.status(200).json({
-    success: true,
-    data: {
-      courses,
-      count: courses.length,
-    },
-    message: courses.length === 0 ? "No courses found" : "All courses fetched successfully",
-    timestamp: new Date().toISOString(),
+  res.status(200).json({ 
+    courses, 
+    message: courses.length === 0 ? "No courses found" : "All courses fetched successfully" 
   });
 });
 
@@ -599,13 +575,8 @@ export const getCoursesbySubcategorySch = asyncHandler(async (req, res) => {
   );
 
   res.status(200).json({
-    success: true,
-    data: {
-      courses: filteredCourses,
-      count: filteredCourses.length,
-    },
-    message: filteredCourses.length === 0 ? "No courses found" : "Courses fetched successfully",
-    timestamp: new Date().toISOString(),
+    courses: filteredCourses,
+    message: filteredCourses.length === 0 ? "No courses found" : "Courses fetched successfully"
   });
 });
 
@@ -730,12 +701,8 @@ export const courseDetailsStdPre = asyncHandler(async (req, res) => {
   }
 
   res.status(200).json({
-    success: true,
-    data: {
-      course: courseData[0],
-    },
-    message: "Course details fetched successfully",
-    timestamp: new Date().toISOString(),
+    course: courseData[0],
+    message: "Course details fetched successfully"
   });
 });
 
@@ -871,12 +838,8 @@ export const getunPurchasedCourseByIdStdPrew = asyncHandler(async (req, res) => 
   }
 
   res.status(200).json({
-    success: true,
-    data: {
-      course: courseData[0],
-    },
-    message: "Course fetched successfully",
-    timestamp: new Date().toISOString(),
+    course: courseData[0],
+    message: "Course fetched successfully"
   });
 });
 
@@ -985,13 +948,9 @@ export const getunPurchasedCourseByIdSch = asyncHandler(async (req, res) => {
     throw new NotFoundError("Course not found");
   }
 
-  res.status(200).json({
-    success: true,
-    data: {
-      course: courseData[0],
-    },
-    message: "Course fetched successfully",
-    timestamp: new Date().toISOString(),
+  res.status(200).json({ 
+    course: courseData[0], 
+    message: "Course fetched successfully" 
   });
 });
 
@@ -1151,12 +1110,8 @@ export const getCourseDetails = asyncHandler(async (req, res) => {
   }
 
   res.status(200).json({
-    success: true,
-    data: {
-      course: course[0],
-    },
     message: "Course fetched successfully",
-    timestamp: new Date().toISOString(),
+    course: course[0]
   });
 });
 export const deleteCourseSch = asyncHandler(async (req, res) => {
@@ -1202,12 +1157,8 @@ export const deleteCourseSch = asyncHandler(async (req, res) => {
   await Enrollment.deleteMany({ course: courseObjectId });
 
   res.status(200).json({
-    success: true,
-    data: {
-      deletedCourseId: courseId,
-    },
-    message: "Course and all related data, including comments, deleted successfully",
-    timestamp: new Date().toISOString(),
+    deletedCourseId: courseId,
+    message: "Course and all related data, including comments, deleted successfully"
   });
 });
 
@@ -1241,14 +1192,9 @@ export const getCoursesByTeacherSch = asyncHandler(async (req, res) => {
       select: "title",
     });
 
-  res.status(200).json({
-    success: true,
-    data: {
-      courses,
-      count: courses.length,
-    },
-    message: courses.length === 0 ? "No courses found for this teacher" : "Courses fetched successfully",
-    timestamp: new Date().toISOString(),
+  res.status(200).json({ 
+    courses, 
+    message: courses.length === 0 ? "No courses found for this teacher" : "Courses fetched successfully" 
   });
 });
 
@@ -1273,14 +1219,9 @@ export const getCoursesforadminofteacher = asyncHandler(async (req, res) => {
     .populate("createdby")
     .populate("category");
 
-  res.status(200).json({
-    success: true,
-    data: {
-      courses,
-      count: courses.length,
-    },
-    message: courses.length === 0 ? "No courses found for this teacher" : "Courses fetched successfully",
-    timestamp: new Date().toISOString(),
+  res.status(200).json({ 
+    courses, 
+    message: courses.length === 0 ? "No courses found for this teacher" : "Courses fetched successfully" 
   });
 });
 
@@ -1343,13 +1284,8 @@ export const getallcoursesforteacher = asyncHandler(async (req, res) => {
   ]);
 
   res.status(200).json({
-    success: true,
-    data: {
-      students: studentsWithCourses,
-      count: studentsWithCourses.length,
-    },
-    message: "Students with their teacher's approved courses fetched successfully",
-    timestamp: new Date().toISOString(),
+    students: studentsWithCourses,
+    message: "Students with their teacher's approved courses fetched successfully"
   });
 });
 
@@ -1369,13 +1305,8 @@ export const getDueDate = asyncHandler(async (req, res) => {
   }
 
   res.status(200).json({
-    success: true,
-    data: {
-      startingDate: course.startingDate,
-      endingDate: course.endingDate,
-    },
-    message: "Course dates retrieved successfully",
-    timestamp: new Date().toISOString(),
+    startingDate: course.startingDate,
+    endingDate: course.endingDate
   });
 });
 
@@ -1411,12 +1342,8 @@ export const thumnailChange = asyncHandler(async (req, res) => {
   await course.save();
 
   res.status(200).json({
-    success: true,
-    data: {
-      thumbnail: course.thumbnail,
-    },
-    message: "Thumbnail updated successfully",
-    timestamp: new Date().toISOString(),
+    thumbnail: course.thumbnail,
+    message: "Thumbnail updated successfully"
   });
 });
 
@@ -1434,12 +1361,8 @@ export const getCourseBasics = asyncHandler(async (req, res) => {
   }
 
   res.status(200).json({
-    success: true,
-    data: {
-      course,
-    },
     message: "Course found successfully",
-    timestamp: new Date().toISOString(),
+    course
   });
 });
 
@@ -1500,14 +1423,7 @@ export const editCourseInfo = asyncHandler(async (req, res) => {
 
   await course.save();
 
-  res.status(200).json({
-    success: true,
-    data: {
-      course,
-    },
-    message: "Course updated successfully",
-    timestamp: new Date().toISOString(),
-  });
+  res.status(200).json({ message: "Course updated successfully" });
 });
 
 export const verifyCourse = asyncHandler(async (req, res) => {
@@ -1650,13 +1566,9 @@ export const verifyCourse = asyncHandler(async (req, res) => {
           : "Course verification status updated.";
 
   res.status(200).json({
-    success: true,
-    data: {
-      courseId: course._id,
-      isVerified: course.isVerified,
-    },
-    message,
-    timestamp: new Date().toISOString(),
+    courseId: course._id,
+    isVerified: course.isVerified,
+    message
   });
 });
 
@@ -1750,14 +1662,10 @@ export const rejectCourse = asyncHandler(async (req, res) => {
   }
 
   res.status(200).json({
-    success: true,
-    data: {
-      courseId: course._id,
-      isVerified: course.isVerified,
-      remarks: course.remarks,
-    },
-    message: "Course rejected successfully",
-    timestamp: new Date().toISOString(),
+    courseId: course._id,
+    isVerified: course.isVerified,
+    remarks: course.remarks,
+    message: "Course rejected successfully"
   });
 });
 
@@ -1786,14 +1694,10 @@ export const applyCourseReverification = asyncHandler(async (req, res) => {
   await course.save();
 
   res.status(200).json({
-    success: true,
-    data: {
-      courseId: course._id,
-      isAppliedReverified: course.isAppliedReverified,
-      isVerified: course.isVerified,
-    },
-    message: "Course re-verification request applied successfully",
-    timestamp: new Date().toISOString(),
+    courseId: course._id,
+    isAppliedReverified: course.isAppliedReverified,
+    isVerified: course.isVerified,
+    message: "Course re-verification request applied successfully"
   });
 });
 
@@ -1840,18 +1744,14 @@ export const teacherCourseForDesboard = asyncHandler(async (req, res) => {
   });
 
   res.status(200).json({
-    success: true,
-    data: {
-      published: recentPublishedCourses,
-      unpublished: unpublishedCount,
-      publishedCount: publishedCount,
-      approved: approvedCount,
-      pending: pendingCount,
-      rejected: rejectedCount,
-      total: totalCount,
-    },
-    message: "Course counts fetched successfully",
-    timestamp: new Date().toISOString(),
+    published: recentPublishedCourses,
+    unpublished: unpublishedCount,
+    publishedCount: publishedCount,
+    approved: approvedCount,
+    pending: pendingCount,
+    rejected: rejectedCount,
+    total: totalCount,
+    message: "Course counts fetched successfully"
   });
 });
 
@@ -1872,12 +1772,10 @@ export const archivedCourse = asyncHandler(async (req, res) => {
   await course.save();
 
   res.status(200).json({
-    success: true,
-    data: { course },
+    course,
     message: course.published
       ? "Course published successfully"
-      : "Course archived successfully",
-    timestamp: new Date().toISOString(),
+      : "Course archived successfully"
   });
 });
 
@@ -1892,10 +1790,8 @@ export const getVerifiedCourses = asyncHandler(async (req, res) => {
   }).select("courseTitle thumbnail");
 
   res.status(200).json({
-    success: true,
-    data: { courses },
-    message: courses.length > 0 ? "Courses fetched successfully" : "No courses found",
-    timestamp: new Date().toISOString(),
+    courses,
+    message: courses.length > 0 ? "Courses fetched successfully" : "No courses found"
   });
 });
 
@@ -1931,18 +1827,14 @@ export const getCoursesforAdmin = asyncHandler(async (req, res) => {
   const totalCount = await CourseSch.countDocuments({});
 
   res.status(200).json({
-    success: true,
-    data: {
-      published: recentPublishedCourses,
-      unpublished: unpublishedCount,
-      publishedCount: publishedCount,
-      approved: approvedCount,
-      pending: pendingCount,
-      rejected: rejectedCount,
-      total: totalCount,
-    },
-    message: "Course counts fetched successfully",
-    timestamp: new Date().toISOString(),
+    published: recentPublishedCourses,
+    unpublished: unpublishedCount,
+    publishedCount: publishedCount,
+    approved: approvedCount,
+    pending: pendingCount,
+    rejected: rejectedCount,
+    total: totalCount,
+    message: "Course counts fetched successfully"
   });
 });
 
@@ -1961,13 +1853,9 @@ export const getRequiredDocumentforEdit = asyncHandler(async (req, res) => {
   }
 
   res.status(200).json({
-    success: true,
-    data: { 
-      documents: course.documents,
-      courseType: course.courseType 
-    },
-    message: "Required documents fetched successfully",
-    timestamp: new Date().toISOString(),
+    documents: course.documents,
+    courseType: course.courseType,
+    message: "Required documents fetched successfully"
   });
 });
 
@@ -2016,10 +1904,8 @@ export const editCoureDocument = asyncHandler(async (req, res) => {
   await course.save();
 
   res.status(200).json({
-    success: true,
-    data: { course },
-    message: "Course documents updated successfully",
-    timestamp: new Date().toISOString(),
+    course,
+    message: "Course documents updated successfully"
   });
 });
 
@@ -2078,10 +1964,8 @@ export const getCourseEnrollmentStats = asyncHandler(async (req, res) => {
   ]);
 
   res.status(200).json({
-    success: true,
-    data: { stats: stats || [] },
-    message: "Enrollment statistics fetched successfully",
-    timestamp: new Date().toISOString(),
+    stats: stats || [],
+    message: "Enrollment statistics fetched successfully"
   });
 });
 
@@ -2247,12 +2131,8 @@ export const getUserCoursesforFilter = asyncHandler(async (req, res) => {
   }
 
   res.status(200).json({
-    success: true,
-    data: {
-      totalCourses: courses.length,
-      courses,
-    },
-    message: "User courses fetched successfully",
-    timestamp: new Date().toISOString(),
+    totalCourses: courses.length,
+    courses,
+    message: "User courses fetched successfully"
   });
 });

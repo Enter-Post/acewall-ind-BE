@@ -163,13 +163,10 @@ One per line, plain English, no bullets.
   // 9. Return response
   // ------------------------------------------
   return res.json({
-    success: true,
-    data: {
-      question,
-      answer,
-      suggestedQuestions,
-      fileUsed: file ? file.originalname : null,
-    }
+    question,
+    answer,
+    suggestedQuestions,
+    fileUsed: file ? file.originalname : null,
   });
 });
 
@@ -179,8 +176,7 @@ export const getChatHistory = asyncHandler(async (req, res) => {
   const chats = await AIChat.find({ userId }).limit(limit);
 
   return res.json({ 
-    success: true, 
-    data: chats 
+    chats 
   });
 });
 
@@ -475,21 +471,18 @@ One per line, plain English, no bullets.
     await AIChat.create(chatData);
 
     return res.json({
-      success: true,
-      data: {
-        question,
-        answer,
-        suggestedQuestions,
-        fileUsed: file ? file.originalname : null,
-        generatedFile: generatedFileUrl
-          ? {
-              url: generatedFileUrl,
-              filename: generatedFileName,
-              sender: "ai",
-              FileType: requestedFileType,
-            }
-          : null,
-      }
+      question,
+      answer,
+      suggestedQuestions,
+      fileUsed: file ? file.originalname : null,
+      generatedFile: generatedFileUrl
+        ? {
+            url: generatedFileUrl,
+            filename: generatedFileName,
+            sender: "ai",
+            FileType: requestedFileType,
+          }
+        : null,
     });
 });
 
@@ -733,11 +726,8 @@ Generate content now.
     const aiResponse = await model.generateContent(prompt);
 
     return res.json({
-      success: true,
-      data: {
-        usedfor,
-        content: aiResponse.response.text().trim(),
-      }
+      usedfor,
+      content: aiResponse.response.text().trim(),
     });
 });
 
@@ -756,10 +746,7 @@ export const generateImage = asyncHandler(async (req, res) => {
 
   // Send back the first image (or adjust logic to send an array if result has many)
   return res.status(200).json({
-    success: true,
-    data: {
-      mimeType: result.mimeType,
-      imageBase64: result.imageBase64,
-    }
+    mimeType: result.mimeType,
+    imageBase64: result.imageBase64,
   });
 });

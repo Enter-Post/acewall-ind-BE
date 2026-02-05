@@ -15,9 +15,8 @@ export const requestCoupen = asyncHandler(async (req, res) => {
   });
   await newCoupon.save();
   return res.status(201).json({ 
-    success: true,
     message: "Request sent to Admin",
-    data: newCoupon
+    coupon: newCoupon
   });
 });
 
@@ -36,9 +35,8 @@ export const reviewCoupen = asyncHandler(async (req, res) => {
   }
 
   return res.json({
-    success: true,
     message: "Coupon status updated",
-    data: coupon
+    coupon
   });
 });
 
@@ -62,12 +60,9 @@ export const getCouponsByStatus = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 });
 
   return res.status(200).json({
-    success: true,
-    message: "Coupons fetched successfully",
-    data: {
-      count: coupons.length,
-      coupons
-    }
+    count: coupons.length,
+    coupons,
+    message: "Coupons fetched successfully"
   });
 });
 
@@ -85,11 +80,8 @@ export const getCouponsByCourse = asyncHandler(async (req, res) => {
   }).sort({ createdAt: -1 });
 
   return res.status(200).json({
-    success: true,
-    message: "Coupons fetched successfully",
-    data: {
-      count: coupons.length,
-      coupons
-    }
+    count: coupons.length,
+    coupons,
+    message: "Coupons fetched successfully"
   });
 });

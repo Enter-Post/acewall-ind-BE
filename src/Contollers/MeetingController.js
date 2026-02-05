@@ -33,11 +33,9 @@ export const joinMeeting = asyncHandler(async (req, res) => {
 
   // 4. Return the token and room details to React
   return res.json({
-    success: true,
-    data: {
-      token,
-      roomName: meeting.roomName,
-      domain: "meet.your-lms-domain.com" // This will be your self-hosted Jitsi domain
-    }
+    token,
+    roomName: meeting.roomName,
+    domain: "meet.your-lms-domain.com", // This will be your self-hosted Jitsi domain
+    message: "Meeting joined successfully"
   });
 });

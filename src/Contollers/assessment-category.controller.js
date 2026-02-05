@@ -27,9 +27,8 @@ export const createAssessmentCategory = asyncHandler(async (req, res) => {
   await newCategory.save();
 
   return res.status(201).json({
-    success: true,
     message: "Assessment category created successfully",
-    data: newCategory,
+    category: newCategory,
   });
 });
 
@@ -41,9 +40,8 @@ export const getAssessmentCategories = asyncHandler(async (req, res) => {
     throw new NotFoundError("No categories found for this course", "ACAT_002");
   }
   return res.status(200).json({
-    success: true,
     message: "Categories retrieved successfully",
-    data: categories,
+    categories,
   });
 });
 
@@ -60,7 +58,6 @@ export const editWeight = asyncHandler(async (req, res) => {
   await category.save();
 
   return res.status(200).json({ 
-    success: true,
     message: "Category weight updated successfully" 
   });
 });
@@ -73,7 +70,6 @@ export const deleteAssessmentCategory = asyncHandler(async (req, res) => {
     throw new NotFoundError("Category not found", "ACAT_004");
   }
   return res.status(200).json({ 
-    success: true,
     message: "Category deleted successfully" 
   });
 });

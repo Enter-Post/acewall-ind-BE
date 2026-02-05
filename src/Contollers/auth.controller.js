@@ -148,7 +148,7 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
 
   console.log("working here 5");
 
-  res.status(201).json({ success: true, message: "OTP sent to your email." });
+  res.status(201).json({ message: "OTP sent to your email." });
 });
 
 
@@ -244,7 +244,7 @@ export const resendOTP = asyncHandler(async (req, res, next) => {
   });
 
 
-  res.status(200).json({ success: true, message: "New OTP has been sent to your email." });
+  res.status(200).json({ message: "New OTP has been sent to your email." });
 });
 
 const twilioClient = twilio(
@@ -315,7 +315,6 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
   delete userResponse.password;
 
   res.status(200).json({
-    success: true,
     message: "Email verified successfully. Registration complete!",
     user: userResponse,
   });
@@ -419,9 +418,8 @@ export const verifyPhoneOtp = asyncHandler(async (req, res) => {
   generateToken(newUser, newUser.role, req, res);
 
   return res.status(201).json({
-    success: true,
     message: "User created successfully.",
-    data: newUser
+    user: newUser
   });
 });
 
@@ -472,7 +470,6 @@ export const resendPhoneOTP = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json({
-    success: true,
     message: "New OTP has been sent to your phone number."
   });
 });
@@ -500,7 +497,6 @@ export const login = asyncHandler(async (req, res, next) => {
   const token = generateToken(user, user.role, req, res);
 
   return res.status(200).json({
-    success: true,
     message: "Login Successful",
     user,
     token, // optional, since cookie is already set
@@ -604,7 +600,6 @@ export const forgetPassword = asyncHandler(async (req, res, next) => {
 
 
   return res.status(200).json({
-    success: true,
     message: "OTP sent successfully",
   });
 });
@@ -634,7 +629,7 @@ export const verifyOTPForgotPassword = asyncHandler(async (req, res, next) => {
     }
   );
 
-  return res.status(200).json({ success: true, message: "OTP verified successfully." });
+  return res.status(200).json({ message: "OTP verified successfully." });
 });
 
 export const resetPassword = asyncHandler(async (req, res, next) => {
@@ -662,7 +657,6 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
   await OTP.deleteOne({ email });
 
   return res.status(200).json({
-    success: true,
     message: "Password updated successfully",
   });
 });
@@ -695,7 +689,6 @@ export const logout = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json({
-    success: true,
     message: `User logged out successfully from ${portal} portal`,
   });
 });
@@ -704,16 +697,14 @@ export const allUser = asyncHandler(async (req, res) => {
   const allUser = await User.find();
 
   return res.status(200).json({
-    success: true,
-    data: allUser,
+    users: allUser,
     message: "Users retrieved successfully",
   });
 });
 
 export const checkAuth = asyncHandler(async (req, res) => {
   return res.status(200).json({
-    success: true,
-    data: req.user
+    user: req.user
   });
 });
 
@@ -731,9 +722,8 @@ export const updateUser = asyncHandler(async (req, res) => {
   );
 
   return res.status(200).json({
-    success: true,
     message: "User Updated Successfully",
-    data: updatedUser
+    user: updatedUser
   });
 });
 export const checkUser = asyncHandler(async (req, res) => {
@@ -747,12 +737,10 @@ export const checkUser = asyncHandler(async (req, res) => {
 
   if (existingUser) {
     return res.status(409).json({
-      success: false,
       message: "User already exists"
     });
   } else {
     return res.status(200).json({
-      success: true,
       message: "User does not exist"
     });
   }
@@ -803,8 +791,7 @@ export const allTeacher = asyncHandler(async (req, res) => {
   );
 
   return res.status(200).json({
-    success: true,
-    data: formattedTeachers
+    teachers: formattedTeachers
   });
 });
 
@@ -844,13 +831,10 @@ export const allStudent = asyncHandler(async (req, res) => {
   }));
 
   return res.status(200).json({
-    success: true,
-    data: {
-      total: totalStudents,
-      currentPage: page,
-      totalPages: Math.ceil(totalStudents / limit),
-      students: formattedStudents,
-    }
+    total: totalStudents,
+    currentPage: page,
+    totalPages: Math.ceil(totalStudents / limit),
+    students: formattedStudents,
   });
 });
 
@@ -910,11 +894,8 @@ export const getStudentById = asyncHandler(async (req, res) => {
   ]);
 
   return res.status(200).json({
-    success: true,
-    data: {
-      user,
-      enrollments,
-    },
+    user,
+    enrollments,
     message: "Student and enrollments fetched successfully",
   });
 });
@@ -934,8 +915,8 @@ export const getTeacherById = asyncHandler(async (req, res) => {
   ]);
 
   return res.status(200).json({
-    success: true,
-    data: { teacher, courses }
+    teacher, 
+    courses
   });
 });
 
@@ -946,9 +927,8 @@ export const getUserInfo = asyncHandler(async (req, res) => {
     throw new NotFoundError("User not found", "AUTH_011");
   }
   return res.status(200).json({
-    success: true,
     message: "User found successfully",
-    data: user
+    user
   });
 });
 
@@ -986,9 +966,8 @@ export const updateProfileImg = asyncHandler(async (req, res) => {
   await user.save();
 
   return res.status(200).json({
-    success: true,
     message: "Profile image updated successfully",
-    data: user
+    user
   });
 });
 
@@ -1109,7 +1088,6 @@ export const updatePasswordOTP = asyncHandler(async (req, res) => {
 
 
   return res.status(200).json({
-    success: true,
     message: "OTP sent successfully"
   });
 });
@@ -1143,7 +1121,6 @@ export const updatePassword = asyncHandler(async (req, res) => {
   await User.updateOne({ email }, { password: newPassword });
 
   return res.status(200).json({
-    success: true,
     message: "Password updated successfully"
   });
 });
@@ -1207,7 +1184,6 @@ export const updateEmailOTP = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json({
-    success: true,
     message: "OTP sent successfully to previous email"
   });
 });
@@ -1248,7 +1224,6 @@ export const updateEmail = asyncHandler(async (req, res) => {
   generateToken(newUser, newUser.role, req, res)
 
   return res.status(200).json({
-    success: true,
     message: "Email updated successfully"
   });
 });
@@ -1301,7 +1276,6 @@ export const updatePhoneOTP = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json({
-    success: true,
     message: "OTP sent successfully to new phone number"
   });
 });
@@ -1339,7 +1313,6 @@ export const updatePhone = asyncHandler(async (req, res) => {
   await User.findOneAndUpdate({ email: email }, { phone });
 
   return res.status(200).json({
-    success: true,
     message: "Phone number updated successfully"
   });
 });
@@ -1407,9 +1380,8 @@ export const uploadTeacherDocument = asyncHandler(async (req, res) => {
   await user.save();
 
   return res.status(200).json({
-    success: true,
     message: "Document uploaded successfully",
-    data: user.documents,
+    documents: user.documents,
   });
 });
 
@@ -1469,9 +1441,8 @@ export const deleteTeacherDocument = asyncHandler(async (req, res) => {
   await user.save();
 
   return res.status(200).json({
-    success: true,
     message: "Document deleted and reindexed successfully",
-    data: user.documents,
+    documents: user.documents,
   });
 });
 
@@ -1610,13 +1581,10 @@ export const verifyTeacherDocument = asyncHandler(async (req, res) => {
 
 
   return res.status(200).json({
-    success: true,
     message: `Document ${status === "verified" ? "verified" : "rejected"} successfully.`,
-    data: {
-      isVarified: user.isVarified,
-      document: foundDoc,
-      documents: user.documents,
-    }
+    isVarified: user.isVarified,
+    document: foundDoc,
+    documents: user.documents,
   });
 });
 
@@ -1649,9 +1617,8 @@ export const previewSignIn = asyncHandler(async (req, res) => {
   const updatedUser = { ...user, role: prevRole };
 
   return res.status(200).json({
-    success: true,
     message: "Preview Signin Successful",
-    data: updatedUser,
+    user: updatedUser,
   });
 });
 
@@ -1678,7 +1645,6 @@ export const previewSignOut = asyncHandler(async (req, res) => {
   generateToken(teacherUser, teacherUser.role, req, res);
 
   return res.status(200).json({
-    success: true,
     message: "Preview Signout Successful",
   });
 });

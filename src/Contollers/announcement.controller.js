@@ -156,9 +156,8 @@ export const createAnnouncement = asyncHandler(async (req, res) => {
   }
 
   return res.status(201).json({
-    success: true,
     message: "Announcement created and emails sent successfully.",
-    data: announcement,
+    announcement,
   });
 });
 
@@ -168,10 +167,7 @@ export const getAnnouncementsForCourse = asyncHandler(async (req, res) => {
     .populate("teacher", "firstName lastName email")
     .sort({ createdAt: -1 });
 
-  return res.status(200).json({
-    success: true,
-    data: announcements
-  });
+  return res.status(200).json(announcements);
 });
 
 export const getAnnouncementsByTeacher = asyncHandler(async (req, res) => {
@@ -188,8 +184,8 @@ export const getAnnouncementsByTeacher = asyncHandler(async (req, res) => {
     .select('title message course attachments links createdAt updatedAt');  // Select the fields you want to return, including attachments and links
 
   return res.status(200).json({ 
-    success: true,
-    data: announcements 
+    announcements,
+    message: "Announcements fetched successfully"
   });
 });
 
@@ -204,7 +200,6 @@ export const deleteAnnouncement = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json({ 
-    success: true,
     message: "Announcement deleted successfully" 
   });
 });
@@ -216,7 +211,7 @@ export const getAnnouncementsForStudent = asyncHandler(async (req, res) => {
   const enrollments = await Enrollment.find({ student: studentId }).select("course");
   
   if (!enrollments.length) {
-    return res.status(200).json({ success: true, data: [] });
+    return res.status(200).json({ announcements: [] });
   }
 
   const courseIds = enrollments.map((enrollment) => enrollment.course);
@@ -231,7 +226,6 @@ export const getAnnouncementsForStudent = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 });
 
   return res.status(200).json({ 
-    success: true, 
-    data: announcements
+    announcements
   });
 });

@@ -151,19 +151,16 @@ export const sendAssessmentReminder = asyncHandler(async (req, res) => {
     }
 
   return res.status(200).json({
-    success: true,
+    assessmentId,
+    assessmentTitle: assessment.title,
+    dueDate,
+    studentCount: sentCount,
+    allStudents: filteredEnrollments.map((e) => ({
+      id: e.student._id,
+      name: `${e.student.firstName} ${e.student.lastName}`,
+      email: e.student.email,
+    })),
     message: `Reminder emails sent to ${sentCount} students successfully.`,
-    data: {
-      assessmentId,
-      assessmentTitle: assessment.title,
-      dueDate,
-      studentCount: sentCount,
-      allStudents: filteredEnrollments.map((e) => ({
-        id: e.student._id,
-        name: `${e.student.firstName} ${e.student.lastName}`,
-        email: e.student.email,
-      })),
-    },
   });
 });
 
@@ -181,7 +178,6 @@ export const setReminderTime = asyncHandler(async (req, res) => {
 
   await assessment.save();
   return res.status(200).json({ 
-    success: true,
     message: "Assessment reminder time updated successfully" 
   });
 });
@@ -195,9 +191,8 @@ export const findReminderTime = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json({
-    success: true,
+    reminderTime: assessment.reminderTimeBefore,
     message: "Assessment reminder time retrieved successfully",
-    data: { reminderTime: assessment.reminderTimeBefore },
   });
 });
 
@@ -331,9 +326,8 @@ export const createAssessment = asyncHandler(async (req, res) => {
   await newAssessment.save();
 
   return res.status(201).json({
-    success: true,
+    assessment: newAssessment,
     message: "Assessment created successfully",
-    data: newAssessment,
   });
 });
 
@@ -344,7 +338,6 @@ export const deleteAssessment = asyncHandler(async (req, res) => {
     throw new NotFoundError("Assessment not found", "ASS_009");
   }
   return res.status(200).json({ 
-    success: true,
     message: "Assessment deleted successfully" 
   });
 });
@@ -369,7 +362,6 @@ export const uploadFiles = asyncHandler(async (req, res) => {
     await assessment.save();
 
     return res.status(200).json({ 
-      success: true,
       message: "Files uploaded successfully" 
     });
   }
@@ -398,7 +390,6 @@ export const deleteFile = asyncHandler(async (req, res) => {
   await assessment.save();
 
   return res.status(200).json({ 
-    success: true,
     message: "File deleted successfully" 
   });
 });
@@ -415,9 +406,8 @@ export const getAssesmentbyID = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json({ 
-    success: true,
+    assessment,
     message: "Assessment found", 
-    data: assessment 
   });
 });
 
@@ -443,10 +433,7 @@ export const allAssessmentByTeacher = asyncHandler(async (req, res) => {
 
   console.log(assessments, "assessment");
 
-  return res.status(200).json({
-    success: true,
-    data: assessments
-  });
+  res.status(200).json(assessments);
 });
 
 export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
@@ -642,10 +629,7 @@ export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
     return a.isSubmitted ? 1 : -1;
   });
 
-  return res.status(200).json({
-    success: true,
-    data: combined
-  });
+  res.status(200).json(combined);
 });
 
 export const editAssessmentInfo = asyncHandler(async (req, res) => {
@@ -671,7 +655,6 @@ export const editAssessmentInfo = asyncHandler(async (req, res) => {
 
   await assessment.save();
   return res.status(200).json({ 
-    success: true,
     message: "Assessment updated successfully" 
   });
 });
@@ -705,14 +688,11 @@ export const getAssessmentStats = asyncHandler(async (req, res) => {
   const notSubmittedCount = Math.max(0, totalEnrolled - submittedCount);
 
   return res.status(200).json({
-    success: true,
-    data: {
-      totalEnrolled,
-      onTimeCount,
-      lateCount,
-      submittedCount,
-      notSubmittedCount,
-      completionRate: totalEnrolled > 0 ? ((submittedCount / totalEnrolled) * 100).toFixed(1) : 0
-    }
+    totalEnrolled,
+    onTimeCount,
+    lateCount,
+    submittedCount,
+    notSubmittedCount,
+    completionRate: totalEnrolled > 0 ? ((submittedCount / totalEnrolled) * 100).toFixed(1) : 0
   });
 });

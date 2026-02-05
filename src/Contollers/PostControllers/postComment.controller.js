@@ -33,9 +33,8 @@ export const sendPostComment = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json({
-    success: true,
-    message: "Comment sent successfully",
-    data: populatedComment,
+    comment: populatedComment,
+    message: "Comment sent successfully"
   });
 });
 
@@ -59,11 +58,8 @@ export const getPostComment = asyncHandler(async (req, res) => {
   const totalComments = await PostComments.countDocuments({ post: id });
 
   return res.status(200).json({
-    success: true,
-    message: "Comments fetched successfully",
-    data: {
-      comments,
-      totalComments, // ✅ include this
-    }
+    comments,
+    totalComments,
+    message: "Comments fetched successfully"
   });
 });

@@ -92,18 +92,16 @@ export const errorHandler = (err, req, res, next) => {
     message = "Database server unreachable - check internet connection";
   }
 
-  // Build error response
+  // Build error response (frontend-compatible format with error codes)
   const errorResponse = {
-    success: false,
-    error: {
-      code: errorCode,
-      message,
-      statusCode,
-      ...(details && { details }),
-      ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
-    },
-    timestamp: new Date().toISOString(),
-    path: req.path,
+    message,
+    errorCode,
+    ...(details && { details }),
+    ...(process.env.NODE_ENV === "development" && { 
+      stack: err.stack,
+      timestamp: new Date().toISOString(),
+      path: req.path,
+    }),
   };
 
   // Send response

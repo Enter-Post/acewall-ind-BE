@@ -8,99 +8,84 @@ import { asyncHandler } from '../middlewares/errorHandler.middleware.js';
 
 // Get Teacher Earnings
 export const getTeacherEarnings = asyncHandler(async (req, res, next) => {
-  try {
-    const teacherId = req.user._id;
+  const teacherId = req.user._id;
 
-    const earnings = await Purchase.aggregate([
-      {
-        $match: {
-          teacher: new mongoose.Types.ObjectId(teacherId),
-          status: 'completed'
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalEarnings: { $sum: '$teacherEarning' },
-          totalSales: { $sum: 1 },
-          totalRevenue: { $sum: '$amount' }
-        }
+  const earnings = await Purchase.aggregate([
+    {
+      $match: {
+        teacher: new mongoose.Types.ObjectId(teacherId),
+        status: 'completed'
       }
-    ]);
+    },
+    {
+      $group: {
+        _id: null,
+        totalEarnings: { $sum: '$teacherEarning' },
+        totalSales: { $sum: 1 },
+        totalRevenue: { $sum: '$amount' }
+      }
+    }
+  ]);
 
-    const recentTransactions = await Purchase.find({
-      teacher: new mongoose.Types.ObjectId(teacherId),
-      status: 'completed'
-    })
-      .populate('student', 'firstName lastName email')
-      .populate('course', 'title')
-      .sort({ createdAt: -1 })
-      .limit(10);
+  const recentTransactions = await Purchase.find({
+    teacher: new mongoose.Types.ObjectId(teacherId),
+    status: 'completed'
+  })
+    .populate('student', 'firstName lastName email')
+    .populate('course', 'title')
+    .sort({ createdAt: -1 })
+    .limit(10);
 
-    res.status(200).json({
-      success: true,
-      data: {
-        earnings: earnings[0] || { totalEarnings: 0, totalSales: 0, totalRevenue: 0 },
-        recentTransactions
-      },
-      message: 'Teacher earnings retrieved successfully'
-    });
-  } catch (error) {
-    next(error);
-  }
+  res.status(200).json({
+    earnings: earnings[0] || { totalEarnings: 0, totalSales: 0, totalRevenue: 0 },
+    recentTransactions,
+    message: 'Teacher earnings retrieved successfully'
+  });
 });
 
 // Get Teacher Transactions
 export const getTeacherTransactions = asyncHandler(async (req, res, next) => {
-  try {
-    const teacherId = new mongoose.Types.ObjectId(req.user._id);
-    const { page = 1, limit = 10, status = 'all' } = req.query;
+  const teacherId = new mongoose.Types.ObjectId(req.user._id);
+  const { page = 1, limit = 10, status = 'all' } = req.query;
 
-    const filter = { teacher: teacherId };
-    if (status !== 'all') {
-      filter.status = status;
-    }
-
-    const transactions = await Purchase.find(filter)
-      .populate('student', 'firstName lastName email')
-      .populate('course', 'title price')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const total = await Purchase.countDocuments(filter);
-
-    res.status(200).json({
-      success: true,
-      data: {
-        transactions,
-        totalPages: Math.ceil(total / limit),
-        currentPage: page,
-        total
-      },
-      message: 'Teacher transactions retrieved successfully'
-    });
-  } catch (error) {
-    next(error);
+  const filter = { teacher: teacherId };
+  if (status !== 'all') {
+    filter.status = status;
   }
+
+  const transactions = await Purchase.find(filter)
+    .populate('student', 'firstName lastName email')
+    .populate('course', 'title price')
+    .sort({ createdAt: -1 })
+    .limit(limit * 1)
+    .skip((page - 1) * limit);
+
+  const total = await Purchase.countDocuments(filter);
+
+  res.status(200).json({
+    transactions,
+    totalPages: Math.ceil(total / limit),
+    currentPage: page,
+    total,
+    message: 'Teacher transactions retrieved successfully'
+  });
 });
 
 export const getTeacherPaymentStats = asyncHandler(async (req, res, next) => {
-  try {
-    const teacherId = new mongoose.Types.ObjectId(req.user._id);
+  const teacherId = new mongoose.Types.ObjectId(req.user._id);
 
-    // Extract pagination parameters from query string (default to page 1 and pageSize 10)
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 16;
+  // Extract pagination parameters from query string (default to page 1 and pageSize 10)
+  const page = parseInt(req.query.page) || 1;
+  const pageSize = parseInt(req.query.pageSize) || 16;
 
-    const skip = (page - 1) * pageSize;
-    const limit = pageSize;
+  const skip = (page - 1) * pageSize;
+  const limit = pageSize;
 
-    // Today date range
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+  // Today date range
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
 
     // Fetch all completed purchases
     const purchases = await Purchase.find({
@@ -164,55 +149,48 @@ export const getTeacherPaymentStats = asyncHandler(async (req, res, next) => {
     ]);
 
     res.status(200).json({
-      success: true,
-      data: {
-        stats: {
-          totalRevenue,
-          totalEarnings,
-          totalWithdrawals,
-          currentBalance,
-          todayRevenue,
-        },
-        revenueOverTime,
-        recentWithdrawals,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(totalWithdrawalsCount / pageSize),
-          totalWithdrawalsCount,
-        },
+      stats: {
+        totalRevenue,
+        totalEarnings,
+        totalWithdrawals,
+        currentBalance,
+        todayRevenue,
+      },
+      revenueOverTime,
+      recentWithdrawals,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalWithdrawalsCount / pageSize),
+        totalWithdrawalsCount,
       },
       message: 'Payment stats retrieved successfully'
     });
-  } catch (err) {
-    next(err);
-  }
 });
 
 
 export const requestWithdrawal = asyncHandler(async (req, res, next) => {
-  try {
-    const teacherId = req.user._id;
-    const { amount, method, stripeAccountId } = req.body;
+  const teacherId = req.user._id;
+  const { amount, method, stripeAccountId } = req.body;
 
-    // Validate required fields
-    if (!amount) {
-      throw new ValidationError("Amount is required", "VAL_001");
-    }
+  // Validate required fields
+  if (!amount) {
+    throw new ValidationError("Amount is required", "VAL_001");
+  }
 
-    if (!method) {
-      throw new ValidationError("Payment method is required", "VAL_001");
-    }
+  if (!method) {
+    throw new ValidationError("Payment method is required", "VAL_001");
+  }
 
-    if (method === "stripe" && !stripeAccountId) {
-      throw new ValidationError("Stripe Account ID is required for Stripe withdrawals", "VAL_001");
-    }
+  if (method === "stripe" && !stripeAccountId) {
+    throw new ValidationError("Stripe Account ID is required for Stripe withdrawals", "VAL_001");
+  }
 
-    if (amount <= 0) {
-      throw new ValidationError("Amount must be greater than zero", "VAL_001");
-    }
+  if (amount <= 0) {
+    throw new ValidationError("Amount must be greater than zero", "VAL_001");
+  }
 
-    // Get teacher's total earnings and withdrawals
-    const purchases = await Purchase.find({ teacher: new mongoose.Types.ObjectId(teacherId), status: "completed" });
+  // Get teacher's total earnings and withdrawals
+  const purchases = await Purchase.find({ teacher: new mongoose.Types.ObjectId(teacherId), status: "completed" });
     const totalEarnings = purchases.reduce((acc, tx) => acc + tx.teacherEarning, 0);
 
     const withdrawals = await Withdrawal.find({ teacher: new mongoose.Types.ObjectId(teacherId), status: "approved" });
@@ -233,20 +211,15 @@ export const requestWithdrawal = asyncHandler(async (req, res, next) => {
     });
 
     res.status(201).json({
-      success: true,
-      data: { withdrawal },
+      withdrawal,
       message: "Withdrawal request submitted successfully"
     });
-  } catch (err) {
-    next(err);
-  }
 });
 export const getAllWithdrawals = asyncHandler(async (req, res, next) => {
-  try {
-    // Get the page and limit from the query params, default to page 1 and limit 10 if not provided
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+  // Get the page and limit from the query params, default to page 1 and limit 10 if not provided
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
 
     // Fetch total number of withdrawals for statistics
     const totalWithdrawalsCount = await Withdrawal.countDocuments();
@@ -293,63 +266,56 @@ export const getAllWithdrawals = asyncHandler(async (req, res, next) => {
     const totalPages = Math.ceil(totalWithdrawalsCount / limit);
 
     res.status(200).json({
-      success: true,
-      data: {
-        withdrawals,
-        stats,
-        pagination: {
-          currentPage: page,
-          totalPages,
-          totalWithdrawalsCount,
-        },
+      withdrawals,
+      stats,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalWithdrawalsCount,
       },
       message: 'Withdrawals retrieved successfully'
     });
-  } catch (err) {
-    next(err);
-  }
 });
 
 
 
 export const updateStripeId = asyncHandler(async (req, res, next) => {
-  try {
-    const { stripeAccountId, action } = req.body;
-    const { id } = req.params;
+  const { stripeAccountId, action } = req.body;
+  const { id } = req.params;
 
-    // Validate required fields
-    if (!action) {
-      throw new ValidationError("Action is required (approved/rejected)", "VAL_001");
-    }
+  // Validate required fields
+  if (!action) {
+    throw new ValidationError("Action is required (approved/rejected)", "VAL_001");
+  }
 
-    if (!['approved', 'rejected'].includes(action)) {
-      throw new ValidationError("Action must be either 'approved' or 'rejected'", "VAL_001");
-    }
+  if (!['approved', 'rejected'].includes(action)) {
+    throw new ValidationError("Action must be either 'approved' or 'rejected'", "VAL_001");
+  }
 
-    // Get current date for processedAt
-    const processedAt = new Date();
+  // Get current date for processedAt
+  const processedAt = new Date();
 
-    // Build update object
-    const updateData = {
-      status: action,
-      processedAt,
-    };
+  // Build update object
+  const updateData = {
+    status: action,
+    processedAt,
+  };
 
-    // Only update stripeAccountId if provided
-    if (stripeAccountId) {
-      updateData.stripeAccountId = stripeAccountId;
-    }
+  // Only update stripeAccountId if provided
+  if (stripeAccountId) {
+    updateData.stripeAccountId = stripeAccountId;
+  }
 
-    const withdrawal = await Withdrawal.findByIdAndUpdate(id, updateData, {
-      new: true,
-    }).populate("teacher", "firstName lastName email");
+  const withdrawal = await Withdrawal.findByIdAndUpdate(id, updateData, {
+    new: true,
+  }).populate("teacher", "firstName lastName email");
 
-    if (!withdrawal) {
-      throw new NotFoundError("Withdrawal not found", "RES_001");
-    }
+  if (!withdrawal) {
+    throw new NotFoundError("Withdrawal not found", "RES_001");
+  }
 
-    // Send email to teacher
-    const { firstName, email } = withdrawal.teacher;
+  // Send email to teacher
+  const { firstName, email } = withdrawal.teacher;
 
     const transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST,
@@ -395,13 +361,9 @@ export const updateStripeId = asyncHandler(async (req, res, next) => {
     await transporter.sendMail(mailOptions);
 
     res.status(200).json({
-      success: true,
-      data: { withdrawal },
+      withdrawal,
       message: "Withdrawal updated successfully and email sent"
     });
-  } catch (err) {
-    next(err);
-  }
 });
 
 

@@ -32,11 +32,7 @@ export const getMyEnrolledCourses = asyncHandler(async (req, res, next) => {
                 .map(e => e.course);
         }
 
-        res.status(200).json({
-            success: true,
-            data: { courses },
-            message: 'Enrolled courses retrieved successfully'
-        });
+        res.status(200).json(courses);
     } catch (error) {
         next(error);
     }
@@ -60,8 +56,7 @@ export const enrollmentforTeacher = asyncHandler(async (req, res, next) => {
     }
 
     res.status(200).json({
-      success: true,
-      data: { enrollment },
+      enrollment,
       message: "Enrollments fetched successfully"
     });
   } catch (error) {
@@ -110,8 +105,7 @@ export const isEnrolled = asyncHandler(async (req, res, next) => {
     });
 
     res.status(200).json({
-      success: true,
-      data: { enrolled: !!exists },
+      enrolled: !!exists,
       message: 'Enrollment status checked'
     });
   } catch (err) {
@@ -150,8 +144,7 @@ export const studenCourses = asyncHandler(async (req, res, next) => {
     }
 
     res.status(200).json({
-      success: true,
-      data: { enrolledCourses },
+      enrolledCourses,
       message: "Enrolled courses retrieved successfully"
     });
   } catch (err) {
@@ -171,11 +164,7 @@ export const studentsEnrolledinCourse = asyncHandler(async (req, res, next) => {
       course: courseId,
     }).populate("student", "firstName middleName lastName profileImg");
 
-    res.status(200).json({
-      success: true,
-      data: { enrolledStudents },
-      message: 'Enrolled students retrieved successfully'
-    });
+    res.status(200).json(enrolledStudents);
   } catch (err) {
     next(err);
   }
@@ -199,11 +188,7 @@ export const unEnrollment = asyncHandler(async (req, res, next) => {
       throw new NotFoundError("Enrollment not found", "RES_001");
     }
 
-    res.status(200).json({
-      success: true,
-      data: { enrollment },
-      message: 'Successfully unenrolled from course'
-    });
+    res.status(200).json(enrollment);
   } catch (err) {
     next(err);
   }
@@ -350,8 +335,7 @@ export const studentCourseDetails = asyncHandler(async (req, res, next) => {
     }
 
     res.status(200).json({
-      success: true,
-      data: { enrolledCourse: enrolledData[0] },
+      enrolledCourse: enrolledData[0],
       message: "Course overview fetched successfully"
     });
   } catch (error) {
@@ -470,8 +454,7 @@ export const chapterDetails = asyncHandler(async (req, res, next) => {
     }
 
     res.status(200).json({
-      success: true,
-      data: { chapterDetails: chapterData[0] },
+      chapterDetails: chapterData[0],
       message: "Chapter details fetched successfully"
     });
   } catch (error) {
@@ -502,8 +485,7 @@ export const getStudentEnrolledCourses = asyncHandler(async (req, res, next) => 
     });
 
     res.status(200).json({
-      success: true,
-      data: { enrolledCourses },
+      enrolledCourses,
       message: "Student's enrolled courses retrieved successfully"
     });
   } catch (err) {
@@ -609,8 +591,7 @@ export const chapterDetailsStdPre = asyncHandler(async (req, res, next) => {
     }
 
     res.status(200).json({
-      success: true,
-      data: { chapterDetails: chapterData[0] },
+      chapterDetails: chapterData[0],
       message: "Chapter details fetched successfully"
     });
   } catch (error) {

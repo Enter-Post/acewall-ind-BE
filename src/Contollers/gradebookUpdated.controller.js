@@ -238,16 +238,13 @@ export const getStudentGradebooksFormatted = asyncHandler(async (req, res) => {
     }
 
     return res.json({
-      success: true,
-      data: {
-        studentId,
-        totalCourses,
-        overallGPA: Number((overallGPA / totalCourses).toFixed(2)),
-        overallStandardGrade,
-        currentPage: 1,
-        totalPages: 1,
-        courses,
-      }
+      studentId,
+      totalCourses,
+      overallGPA: Number((overallGPA / totalCourses).toFixed(2)),
+      overallStandardGrade,
+      currentPage: 1,
+      totalPages: 1,
+      courses,
     });
 });
 
@@ -272,13 +269,10 @@ export const getStudentCourseAnalytics = asyncHandler(async (req, res) => {
 
   if (allItems.length === 0) {
     return res.json({
-      success: true,
+      summary: { currentPercentage: 0 },
+      insights: null,
+      charts: { lineChart: [], categoryPerformance: [] },
       message: "No assessments completed yet.",
-      data: {
-        summary: { currentPercentage: 0 },
-        insights: null,
-        charts: { lineChart: [], categoryPerformance: [] },
-      }
     });
   }
 
@@ -321,36 +315,33 @@ export const getStudentCourseAnalytics = asyncHandler(async (req, res) => {
   const best = categoryPerformance[0];
 
   return res.json({
-    success: true,
-    data: {
-      courseName: gradebook.courseTitle,
-      summary: {
-        currentPercentage: currentOverallAvg.toFixed(1),
-        totalAssessments: allItems.length,
-        pointsEarned: totalEarned,
-        pointsPossible: totalPossible,
-      },
-      insights: {
-        trendStatus: trendDiff >= 0 ? "increasing" : "decreasing",
-        percentageChange: Math.abs(trendDiff).toFixed(1),
-        recentAverage: recentAvg.toFixed(1),
-        overallAverage: currentOverallAvg.toFixed(1),
-        projectedFinalScore: Math.min(100, projectedScore).toFixed(1),
-        sampleSize: trendItems.length,
-        weakestCategory: weakest ? {
-          name: weakest.category,
-          average: weakest.average.toFixed(1),
-          gap: (best.average - weakest.average).toFixed(1),
-        } : null,
-      },
-      charts: {
-        lineChart: allItems.map((item, i) => ({
-          name: item.title || `Task ${i + 1}`,
-          score: ((item.studentPoints / (item.maxPoints || 1)) * 100).toFixed(1),
-        })),
-        categoryPerformance,
-      },
-    }
+    courseName: gradebook.courseTitle,
+    summary: {
+      currentPercentage: currentOverallAvg.toFixed(1),
+      totalAssessments: allItems.length,
+      pointsEarned: totalEarned,
+      pointsPossible: totalPossible,
+    },
+    insights: {
+      trendStatus: trendDiff >= 0 ? "increasing" : "decreasing",
+      percentageChange: Math.abs(trendDiff).toFixed(1),
+      recentAverage: recentAvg.toFixed(1),
+      overallAverage: currentOverallAvg.toFixed(1),
+      projectedFinalScore: Math.min(100, projectedScore).toFixed(1),
+      sampleSize: trendItems.length,
+      weakestCategory: weakest ? {
+        name: weakest.category,
+        average: weakest.average.toFixed(1),
+        gap: (best.average - weakest.average).toFixed(1),
+      } : null,
+    },
+    charts: {
+      lineChart: allItems.map((item, i) => ({
+        name: item.title || `Task ${i + 1}`,
+        score: ((item.studentPoints / (item.maxPoints || 1)) * 100).toFixed(1),
+      })),
+      categoryPerformance,
+    },
   });
 });
 
@@ -510,12 +501,9 @@ export const getGradebooksOfCourseFormatted = asyncHandler(async (req, res) => {
     }
 
     return res.status(200).json({
-      success: true,
-      data: {
-        gradebook: formatted,
-        gradingSystem: gradingType,
-        courseType: isSemesterBased ? "semester-based" : "chapter-based",
-      }
+      gradebook: formatted,
+      gradingSystem: gradingType,
+      courseType: isSemesterBased ? "semester-based" : "chapter-based",
     });
 });
 
@@ -722,12 +710,9 @@ export const getTeacherStudentAnalytics = asyncHandler(async (req, res) => {
 
   if (allItems.length === 0) {
     return res.json({ 
-      success: true,
+      summary: { currentPercentage: 0 }, 
+      charts: { lineChart: [], categoryPerformance: [] },
       message: "No graded items found.", 
-      data: { 
-        summary: { currentPercentage: 0 }, 
-        charts: { lineChart: [], categoryPerformance: [] } 
-      }
     });
   }
 
@@ -769,36 +754,33 @@ export const getTeacherStudentAnalytics = asyncHandler(async (req, res) => {
   const best = categoryPerformance[0];
 
   return res.json({
-    success: true,
-    data: {
-      studentId,
-      courseName: course.courseTitle,
-      summary: {
-        currentPercentage: currentOverallAvg.toFixed(1),
-        totalAssessments: allItems.length,
-        pointsEarned: totalEarned,
-        pointsPossible: totalPossible
-      },
-      insights: {
-        trendStatus: trendDiff >= 0 ? "increasing" : "decreasing",
-        percentageChange: Math.abs(trendDiff).toFixed(1),
-        recentAverage: recentAvg.toFixed(1),
-        overallAverage: currentOverallAvg.toFixed(1),
-        projectedFinalScore: Math.min(100, projectedScore).toFixed(1),
-        sampleSize: trendItems.length,
-        weakestCategory: weakest ? {
-          name: weakest.category,
-          average: weakest.average.toFixed(1),
-          gap: (best.average - weakest.average).toFixed(1)
-        } : null
-      },
-      charts: {
-        lineChart: allItems.map((item, i) => ({
-          name: item.title || `Item ${i + 1}`,
-          score: ((item.studentPoints / (item.maxPoints || 1)) * 100).toFixed(1)
-        })),
-        categoryPerformance
-      }
+    studentId,
+    courseName: course.courseTitle,
+    summary: {
+      currentPercentage: currentOverallAvg.toFixed(1),
+      totalAssessments: allItems.length,
+      pointsEarned: totalEarned,
+      pointsPossible: totalPossible
+    },
+    insights: {
+      trendStatus: trendDiff >= 0 ? "increasing" : "decreasing",
+      percentageChange: Math.abs(trendDiff).toFixed(1),
+      recentAverage: recentAvg.toFixed(1),
+      overallAverage: currentOverallAvg.toFixed(1),
+      projectedFinalScore: Math.min(100, projectedScore).toFixed(1),
+      sampleSize: trendItems.length,
+      weakestCategory: weakest ? {
+        name: weakest.category,
+        average: weakest.average.toFixed(1),
+        gap: (best.average - weakest.average).toFixed(1)
+      } : null
+    },
+    charts: {
+      lineChart: allItems.map((item, i) => ({
+        name: item.title || `Item ${i + 1}`,
+        score: ((item.studentPoints / (item.maxPoints || 1)) * 100).toFixed(1)
+      })),
+      categoryPerformance
     }
   });
 });

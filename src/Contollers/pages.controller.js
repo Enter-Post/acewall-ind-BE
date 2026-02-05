@@ -68,9 +68,8 @@ export const createpage = asyncHandler(async (req, res) => {
     await newPage.save();
 
     return res.status(201).json({
-        success: true,
         message: "Page created successfully",
-        data: newPage,
+        page: newPage,
     });
 });
 
@@ -90,9 +89,8 @@ export const getAllPages = asyncHandler(async (req, res) => {
     }
 
     return res.status(200).json({
-        success: true,
-        message: "pages found successfully.",
-        data: pages,
+        pages,
+        message: "Pages found successfully"
     });
 });
 
@@ -108,9 +106,8 @@ export const deletePage = asyncHandler(async (req, res) => {
     }
 
     return res.status(200).json({ 
-        success: true,
-        message: "Page deleted successfully", 
-        data: deletedPage 
+        page: deletedPage,
+        message: "Page deleted successfully"
     });
 });
 
@@ -124,9 +121,8 @@ export const ChapterPagesforStudent = asyncHandler(async (req, res) => {
     }
 
     return res.status(200).json({
-        success: true,
-        message: "Pages found successfully",
-        data: pages,
+        pages,
+        message: "Pages found successfully"
     });
 });
 
@@ -140,8 +136,7 @@ export const lessonPagesforStudent = asyncHandler(async (req, res) => {
     }
 
     return res.status(200).json({
-        success: true,
-        message: "Pages found successfully",
-        data: pages,
+        pages,
+        message: "Pages found successfully"
     });
 });

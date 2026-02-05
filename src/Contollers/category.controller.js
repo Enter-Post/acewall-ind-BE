@@ -15,8 +15,7 @@ export const getAllCategories = asyncHandler(async (req, res) => {
   const categories = await Category.find({});
   
   return res.status(200).json({
-    success: true,
-    data: categories,
+    categories,
     message: "Categories fetched successfully",
   });
 });
@@ -36,8 +35,7 @@ export const createCategory = asyncHandler(async (req, res) => {
   const category = await Category.create({ title });
   
   return res.status(201).json({
-    success: true,
-    data: category,
+    category,
     message: "Category created successfully",
   });
 });
@@ -69,8 +67,7 @@ export const deleteCategory = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json({
-    success: true,
-    data: category,
+    category,
     message: "Category deleted successfully",
   });
 });
@@ -96,8 +93,7 @@ export const getSubcategoriesByCategoryId = asyncHandler(async (req, res) => {
   }).populate("category", "title");
 
   return res.status(200).json({
-    success: true,
-    data: subcategories,
+    subcategories,
     message: subcategories.length > 0
       ? "Subcategories fetched successfully"
       : "No subcategories found for this category",
@@ -142,8 +138,7 @@ export const editCategory = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json({
-    success: true,
-    data: updatedCategory,
+    category: updatedCategory,
     message: "Category updated successfully",
   });
 });
@@ -162,8 +157,7 @@ export const getCategoriesforAdmin = asyncHandler(async (req, res) => {
   ]);
   
   return res.status(200).json({
-    success: true,
-    data: categories,
+    categories,
     message: "Categories with subcategories fetched successfully",
   });
 });

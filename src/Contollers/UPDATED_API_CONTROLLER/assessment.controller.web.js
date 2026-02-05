@@ -182,8 +182,7 @@ export const createAssessment_updated = asyncHandler(async (req, res) => {
     await newAssessment.save();
 
     return res.status(201).json({
-      success: true,
-      data: newAssessment,
+      assessment: newAssessment,
       message: "Assessment created successfully"
     });
 });

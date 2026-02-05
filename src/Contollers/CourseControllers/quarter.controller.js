@@ -149,9 +149,8 @@ export const editQuarter = async (req, res) => {
     }
 
     res.status(200).json({
-      success: true,
-      message: "Quarter edited successfully",
-      updatedQuarter
+      updatedQuarter,
+      message: "Quarter edited successfully"
     });
 
   } catch (error) {

@@ -123,7 +123,6 @@ export const deleteUser = asyncHandler(async (req, res) => {
         });
 
         return res.status(200).json({
-            success: true,
             message: "User and all related data deleted successfully",
         });
     } catch (error) {

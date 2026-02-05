@@ -38,9 +38,8 @@ export const createConversation = asyncHandler(async (req, res) => {
   });
   await newConversation.save();
   return res.status(200).json({
-    success: true,
-    message: "conversation created successfully",
-    data: newConversation,
+    conversation: newConversation,
+    message: "Conversation created successfully"
   });
 });
 
@@ -84,9 +83,8 @@ export const getMyConversations = asyncHandler(async (req, res) => {
     );
 
   return res.status(200).json({
-    success: true,
-    message: "Conversations fetched successfully",
-    data: formattedConversations,
+    conversations: formattedConversations,
+    message: "Conversations fetched successfully"
   });
 });
 
@@ -99,7 +97,6 @@ export const updateLastSeen = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json({ 
-    success: true,
     message: "Last seen updated" 
   });
 });
@@ -165,9 +162,8 @@ export const getTeacherforStudent = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json({
-    success: true,
-    message: "Teachers fetched successfully",
-    data: teachers
+    teachers,
+    message: "Teachers fetched successfully"
   });
 });
 
@@ -241,13 +237,10 @@ export const getStudentsByOfTeacher = asyncHandler(async (req, res) => {
     ]);
 
   return res.status(200).json({
-    success: true,
-    message: "Students fetched successfully",
-    data: {
-      courseId,
-      courseTitle: course.courseTitle,
-      totalStudents: students.length,
-      students,
-    }
+    courseId,
+    courseTitle: course.courseTitle,
+    totalStudents: students.length,
+    students,
+    message: "Students fetched successfully"
   });
 });

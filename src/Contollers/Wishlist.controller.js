@@ -23,7 +23,6 @@ export const wishlist = asyncHandler(async (req, res) => {
 
     // Send success response
     return res.status(201).json({ 
-        success: true,
         message: "Subscribed successfully!" 
     });
 });
@@ -31,8 +30,5 @@ export const wishlist = asyncHandler(async (req, res) => {
 // Controller to get all subscriptions (for admin panel)
 export const wishlistget = asyncHandler(async (req, res) => {
     const subscribers = await Wishlist.find();
-    return res.status(200).json({ 
-        success: true,
-        data: subscribers 
-    });
+    return res.status(200).json(subscribers);
 });

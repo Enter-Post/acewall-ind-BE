@@ -51,9 +51,8 @@ export const createMessage = asyncHandler(async (req, res) => {
 
   // 4. Respond
   return res.status(200).json({
-    success: true,
-    message: "Message created successfully",
-    data: populatedMessage,
+    newMessage: populatedMessage,
+    message: "Message created successfully"
   });
 });
 
@@ -82,9 +81,8 @@ export const getConversationMessages = asyncHandler(async (req, res) => {
   }));
 
   return res.status(200).json({
-    success: true,
-    message: "messages fetched successfully",
-    data: enhancedMessages,
+    messages: enhancedMessages,
+    message: "Messages fetched successfully"
   });
 });
 
@@ -104,7 +102,6 @@ export const markMessagesAsRead = asyncHandler(async (req, res) => {
   );
 
   return res.status(200).json({ 
-    success: true,
     message: "Messages marked as read" 
   });
 });
@@ -130,8 +127,5 @@ export const getAllUnreadCounts = asyncHandler(async (req, res) => {
     })
   );
 
-  return res.status(200).json({ 
-    success: true,
-    data: results 
-  });
+  res.status(200).json(results);
 });

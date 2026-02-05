@@ -41,11 +41,9 @@ export const likePost = asyncHandler(async (req, res) => {
   await post.save();
 
   return res.status(200).json({
-    success: true,
-    data: {
-      userReaction: currentUserReaction, 
-      totalLikes,
-    }
+    userReaction: currentUserReaction, 
+    totalLikes,
+    message: "Reaction updated successfully"
   });
 });
 
@@ -62,11 +60,9 @@ export const isPostLiked = asyncHandler(async (req, res) => {
   const totalLikes = await PostLike.countDocuments({ post: id });
 
   return res.status(200).json({
-    success: true,
-    data: {
-      // Return the reaction type (e.g., "love") or null if they haven't reacted
-      userReaction: reaction ? reaction.type : null,
-      totalLikes,
-    }
+    // Return the reaction type (e.g., "love") or null if they haven't reacted
+    userReaction: reaction ? reaction.type : null,
+    totalLikes,
+    message: "Reaction status fetched successfully"
   });
 });

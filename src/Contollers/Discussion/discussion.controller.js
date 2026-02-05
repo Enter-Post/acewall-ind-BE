@@ -74,9 +74,8 @@ export const createDiscussion = asyncHandler(async (req, res) => {
   return res
     .status(201)
     .json({ 
-      success: true,
-      message: "Discussion created successfully", 
-      data: discussion 
+      discussion,
+      message: "Discussion created successfully"
     });
 });
 
@@ -93,9 +92,8 @@ export const getDiscussionsOfTeacher = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json({ 
-      success: true,
-      message: "Discussions fetched successfully here", 
-      data: discussion 
+      discussions: discussion,
+      message: "Discussions fetched successfully here"
     });
 });
 
@@ -116,9 +114,8 @@ export const getDiscussionbyId = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json({ 
-      success: true,
-      message: "Discussion fetched successfully", 
-      data: discussion 
+      discussion,
+      message: "Discussion fetched successfully"
     });
 });
 
@@ -148,12 +145,9 @@ export const discussionforStudent = asyncHandler(async (req, res) => {
     .select("-files");
 
   return res.status(200).json({
-    success: true,
-    message: "Discussions fetched successfully",
-    data: {
-      discussionCount: discussions.length,
-      discussions
-    }
+    discussionCount: discussions.length,
+    discussions,
+    message: "Discussions fetched successfully"
   });
 });
 
@@ -166,9 +160,8 @@ export const chapterDiscussions = asyncHandler(async (req, res) => {
     throw new NotFoundError("No discussions found for this chapter", "DISC_003");
   }
   return res.status(200).json({ 
-    success: true,
-    message: "Discussions fetched successfully", 
-    data: discussion 
+    discussions: discussion,
+    message: "Discussions fetched successfully"
   });
 });
 
@@ -180,9 +173,8 @@ export const lessonDiscussions = asyncHandler(async (req, res) => {
     throw new NotFoundError("No discussions found for this lesson", "DISC_004");
   }
   return res.status(200).json({ 
-    success: true,
-    message: "Discussions fetched successfully", 
-    data: discussion 
+    discussions: discussion,
+    message: "Discussions fetched successfully"
   });
 });
 
@@ -194,9 +186,8 @@ export const courseDiscussions = asyncHandler(async (req, res) => {
     throw new NotFoundError("No discussions found for this course", "DISC_005");
   }
   return res.status(200).json({ 
-    success: true,
-    message: "Discussions fetched successfully", 
-    data: discussion 
+    discussions: discussion,
+    message: "Discussions fetched successfully"
   });
 });
 

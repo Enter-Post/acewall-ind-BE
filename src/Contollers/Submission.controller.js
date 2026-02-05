@@ -206,9 +206,8 @@ export const submission = asyncHandler(async (req, res) => {
     }
 
     return res.status(201).json({
-      success: true,
+      submission,
       message: "Submission recorded successfully",
-      data: submission,
     });
 });
 
@@ -219,10 +218,7 @@ export const getSubmissionsforStudent = asyncHandler(async (req, res) => {
     .populate("assessment")
     .sort({ submittedAt: -1 });
 
-  return res.status(200).json({
-    success: true,
-    data: submissions
-  });
+  res.json(submissions);
 });
 
 export const getSubmissionforAssessmentbyId = asyncHandler(async (req, res) => {
@@ -234,9 +230,8 @@ export const getSubmissionforAssessmentbyId = asyncHandler(async (req, res) => {
   });
 
   return res.status(200).json({ 
-    success: true,
+    submission,
     message: "Submission found", 
-    data: submission 
   });
 });
 
@@ -266,12 +261,11 @@ export const getSubmissionById = asyncHandler(async (req, res) => {
     }));
 
   return res.status(200).json({
-    success: true,
-    message: "Submission found",
-    data: {
+    submission: {
       ...submission.toObject(),
       answers: answersWithDetails,
     },
+    message: "Submission found",
   });
 });
 
@@ -311,9 +305,8 @@ export const getSubmissionsofAssessment_forTeacher = asyncHandler(async (req, re
     });
 
   return res.status(200).json({
-    success: true,
+    submissions: submissionsWithDetails,
     message: "Submissions found",
-    data: submissionsWithDetails,
   });
 });
 
@@ -470,9 +463,8 @@ export const teacherGrading = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json({ 
-    success: true,
+    submission,
     message: "Submission graded", 
-    data: submission 
   });
 });
 

@@ -41,9 +41,8 @@ export const createPost = asyncHandler(async (req, res) => {
     await post.save();
 
     return res.status(201).json({ 
-        success: true,
-        message: 'Post created successfully', 
-        data: post 
+        post,
+        message: 'Post created successfully'
     });
 });
 export const getPosts = asyncHandler(async (req, res) => {
@@ -99,14 +98,12 @@ export const getPosts = asyncHandler(async (req, res) => {
     const totalPages = Math.ceil(totalPosts / limit);
 
     return res.json({
-        success: true,
-        data: {
-            currentPage: page,
-            totalPages,
-            totalPosts,
-            limit,
-            posts,
-        }
+        currentPage: page,
+        totalPages,
+        totalPosts,
+        limit,
+        posts,
+        message: "Posts fetched successfully"
     });
 });
 
@@ -129,14 +126,12 @@ export const specificUserPosts = asyncHandler(async (req, res) => {
     const totalPages = Math.ceil(totalPosts / limit);
 
     return res.json({
-        success: true,
-        data: {
-            currentPage: page,
-            totalPages,
-            totalPosts,
-            limit,
-            posts,
-        }
+        currentPage: page,
+        totalPages,
+        totalPosts,
+        limit,
+        posts,
+        message: "Posts fetched successfully"
     });
 });
 
@@ -150,7 +145,6 @@ export const deletePost = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json({ 
-    success: true,
     message: "Post deleted successfully" 
   });
 });

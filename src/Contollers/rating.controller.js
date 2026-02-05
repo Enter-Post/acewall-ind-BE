@@ -24,8 +24,9 @@ export const getSingleCourseRating = asyncHandler(async (req, res) => {
   const averageStar = totalStars / ratings.length;
 
   return res.status(200).json({ 
-    success: true,
-    data: { count: ratings.length, averageStar } 
+    count: ratings.length,
+    averageStar,
+    message: "Course ratings fetched successfully"
   });
 });
 
@@ -66,9 +67,8 @@ export const createRating = asyncHandler(async (req, res) => {
   await newRating.save();
 
   return res.status(201).json({ 
-    success: true,
     message: "Rating created successfully", 
-    data: newRating 
+    rating: newRating 
   });
 });
 
@@ -96,12 +96,13 @@ export const isRatedbyUser = asyncHandler(async (req, res) => {
 
   if (!isRated) {
     return res.status(200).json({ 
-      success: true,
-      data: { rating: false } 
+      rating: false,
+      message: "Course not rated by user"
     });
   }
   return res.status(200).json({ 
-    success: true,
-    data: { rating: true, star: isRated.star } 
+    rating: true,
+    star: isRated.star,
+    message: "Course rated by user"
   });
 });
