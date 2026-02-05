@@ -162,8 +162,13 @@ export const unEnrollment = async (req, res) => {
 
 export const studentCourseDetails = async (req, res) => {
   const { enrollmentId } = req.params;
-
   try {
+    const checkEnrollment = await Enrollment.findById(enrollmentId)
+
+    if (checkEnrollment.status === "CANCELLED") {
+      return res.status(403).json({ message: "Access denied to cancelled enrollment", enrolledCourse: [] });
+    }
+
     const enrolledData = await Enrollment.aggregate([
       {
         $match: { _id: new mongoose.Types.ObjectId(enrollmentId) },
