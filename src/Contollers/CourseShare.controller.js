@@ -54,21 +54,38 @@ export const trackShare = async (req, res) => {
   }
 };
 
-// Admin endpoint for analytics
-export const getShareAnalytics = async (req, res) => {
+// Admin endpoint for total shares by course with breakdown
+export const getCourseShareAnalytics = async (req, res) => {
   try {
-    const { courseId } = req.query; // Changed from params to query for flexibility
+    const { courseId } = req.params;
+    const { startDate, endDate, utm_source, utm_campaign } = req.query;
 
-    const query = courseId ? { courseId } : {};
+    if (!courseId) {
+      return res
+        .status(400)
+        .json({ error: true, message: "Course ID is required" });
+    }
 
-    const totalShares = await CourseShare.countDocuments(query);
+    const matchQuery = { courseId: new mongoose.Types.ObjectId(courseId) };
+
+    // Date filters
+    if (startDate || endDate) {
+      matchQuery.timestamp = {};
+      if (startDate) matchQuery.timestamp.$gte = new Date(startDate);
+      if (endDate) matchQuery.timestamp.$lte = new Date(endDate);
+    }
+
+    // UTM filters
+    if (utm_source) matchQuery.utm_source = utm_source;
+    if (utm_campaign) matchQuery.utm_campaign = utm_campaign;
+
+    const totalShares = await CourseShare.countDocuments(matchQuery);
 
     const breakdown = await CourseShare.aggregate([
-      { $match: query },
+      { $match: matchQuery },
       {
         $group: {
           _id: {
-            ref: "$ref",
             utm_source: "$utm_source",
             utm_medium: "$utm_medium",
             utm_campaign: "$utm_campaign",
@@ -79,7 +96,6 @@ export const getShareAnalytics = async (req, res) => {
       {
         $project: {
           _id: 0,
-          ref: "$_id.ref",
           utm_source: "$_id.utm_source",
           utm_medium: "$_id.utm_medium",
           utm_campaign: "$_id.utm_campaign",
@@ -91,11 +107,101 @@ export const getShareAnalytics = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      courseId,
       totalShares,
       breakdown,
     });
   } catch (error) {
-    console.error("Error fetching share analytics:", error);
+    console.error("Error fetching course share analytics:", error);
+    return res
+      .status(500)
+      .json({ error: true, message: "Failed to fetch course analytics" });
+  }
+};
+
+// Admin endpoint for global analytics across all courses
+export const getGlobalShareAnalytics = async (req, res) => {
+  try {
+    const { startDate, endDate, utm_source, utm_campaign } = req.query;
+
+    const matchQuery = {};
+
+    // Date filters
+    if (startDate || endDate) {
+      matchQuery.timestamp = {};
+      if (startDate) matchQuery.timestamp.$gte = new Date(startDate);
+      if (endDate) matchQuery.timestamp.$lte = new Date(endDate);
+    }
+
+    // UTM filters
+    if (utm_source) matchQuery.utm_source = utm_source;
+    if (utm_campaign) matchQuery.utm_campaign = utm_campaign;
+
+    const totalShares = await CourseShare.countDocuments(matchQuery);
+
+    // Breakdown by Source
+    const bySource = await CourseShare.aggregate([
+      { $match: matchQuery },
+      {
+        $group: {
+          _id: "$utm_source",
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          utm_source: "$_id",
+          count: 1,
+        },
+      },
+      { $sort: { count: -1 } },
+    ]);
+
+    // Breakdown by Campaign
+    const byCampaign = await CourseShare.aggregate([
+      { $match: matchQuery },
+      {
+        $group: {
+          _id: "$utm_campaign",
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          utm_campaign: "$_id",
+          count: 1,
+        },
+      },
+      { $sort: { count: -1 } },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      totalShares,
+      bySource,
+      byCampaign,
+    });
+  } catch (error) {
+    console.error("Error fetching global share analytics:", error);
+    return res
+      .status(500)
+      .json({ error: true, message: "Failed to fetch global analytics" });
+  }
+};
+
+// Backward compatibility or legacy support (can be removed later)
+export const getShareAnalytics = async (req, res) => {
+  try {
+    const { courseId } = req.query;
+    if (courseId) {
+      req.params.courseId = courseId;
+      return getCourseShareAnalytics(req, res);
+    }
+    return getGlobalShareAnalytics(req, res);
+  } catch (error) {
+    console.error("Error in getShareAnalytics:", error);
     return res
       .status(500)
       .json({ error: true, message: "Failed to fetch analytics" });
