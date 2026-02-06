@@ -13,6 +13,11 @@ import DiscussionComment from "../Models/discussionComment.model.js";
 import mongoose from "mongoose";
 import Discussion from "../Models/discussion.model.js";
 import GPA from "../Models/GPA.model.js";
+import {
+  ValidationError,
+  NotFoundError,
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
 const getLetterGrade = (gradingScale, percentage) => {
   const match = gradingScale.find(
@@ -54,256 +59,255 @@ const percentageToGPA = async (percentage, courseId) => {
 
 };
 
-export const getStudentGradebook = async (req, res) => {
+export const getStudentGradebook = asyncHandler(async (req, res) => {
   const { courseId, studentId } = req.params;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
 
-  try {
-    // Fetch grading scale
-    const gradingScaleDoc = await GradingScale.findOne({ course: courseId }).lean();
-    const gradingScale = gradingScaleDoc?.scale || [];
+  // Fetch grading scale
+  const gradingScaleDoc = await GradingScale.findOne({ course: courseId }).lean();
+  const gradingScale = gradingScaleDoc?.scale || [];
 
-    // Categories for the course
-    const categories = await AssessmentCategory.find({ course: courseId });
-    const course = await CourseSch.findById(courseId)
-      .lean()
-      .select("courseTitle courseDescription thumbnail");
+  // Categories for the course
+// Categories for the course
+  const categories = await AssessmentCategory.find({ course: courseId });
+  const course = await CourseSch.findById(courseId)
+    .lean()
+    .select("courseTitle courseDescription thumbnail");
 
-    // Fetch student's graded submissions first
-    const submissionDocs = await Submission.find({
-      studentId,
-      graded: true,
-    }).lean();
+  // Fetch student's graded submissions first
+  const submissionDocs = await Submission.find({
+    studentId,
+    graded: true,
+  }).lean();
 
-    const submissionMap = new Map();
-    const gradedAssessmentIds = [];
-    submissionDocs.forEach(sub => {
-      submissionMap.set(sub.assessment.toString(), sub);
-      gradedAssessmentIds.push(sub.assessment);
-    });
+  const submissionMap = new Map();
+  const gradedAssessmentIds = [];
+  submissionDocs.forEach(sub => {
+    submissionMap.set(sub.assessment.toString(), sub);
+    gradedAssessmentIds.push(sub.assessment);
+  });
 
-    // Fetch student's graded discussion comments
-    const discussionComments = await DiscussionComment.find({
-      createdby: studentId,
-      isGraded: true,
-    }).lean();
+  // Fetch student's graded discussion comments
+  const discussionComments = await DiscussionComment.find({
+    createdby: studentId,
+    isGraded: true,
+  }).lean();
 
-    const discussionCommentMap = new Map();
-    const gradedDiscussionIds = [];
-    discussionComments.forEach(dc => {
-      discussionCommentMap.set(dc.discussion.toString(), dc);
-      gradedDiscussionIds.push(dc.discussion);
-    });
+  const discussionCommentMap = new Map();
+  const gradedDiscussionIds = [];
+  discussionComments.forEach(dc => {
+    discussionCommentMap.set(dc.discussion.toString(), dc);
+    gradedDiscussionIds.push(dc.discussion);
+  });
 
-    // Fetch only assessments that have graded submissions for this course
-    const gradedAssessments = await Assessment.find({
-      course: courseId,
-      _id: { $in: gradedAssessmentIds }
-    })
-      .populate("category semester quarter")
-      .lean();
+  // Fetch only assessments that have graded submissions for this course
+  const gradedAssessments = await Assessment.find({
+    course: courseId,
+    _id: { $in: gradedAssessmentIds }
+  })
+    .populate("category semester quarter")
+    .lean();
 
-    // Fetch only discussions that have graded comments for this course
-    const gradedDiscussions = await Discussion.find({
-      course: courseId,
-      _id: { $in: gradedDiscussionIds }
-    })
-      .populate("category semester quarter")
-      .lean();
+  // Fetch only discussions that have graded comments for this course
+  const gradedDiscussions = await Discussion.find({
+    course: courseId,
+    _id: { $in: gradedDiscussionIds }
+  })
+    .populate("category semester quarter")
+    .lean();
 
-    // Combine only graded items
-    const allGradedItems = [...gradedAssessments, ...gradedDiscussions];
-    const totalAssessments = allGradedItems.length;
-    const totalPages = Math.ceil(totalAssessments / limit);
-    const paginatedItems = allGradedItems.slice((page - 1) * limit, page * limit);
+  // Combine only graded items
+  const allGradedItems = [...gradedAssessments, ...gradedDiscussions];
+  const totalAssessments = allGradedItems.length;
+  const totalPages = Math.ceil(totalAssessments / limit);
+  const paginatedItems = allGradedItems.slice((page - 1) * limit, page * limit);
 
-    // Separate items with and without semester/quarter
-    const itemsWithSemesterQuarter = [];
-    const directCourseItems = [];
+  // Separate items with and without semester/quarter
+  const itemsWithSemesterQuarter = [];
+  const directCourseItems = [];
 
-    for (const item of paginatedItems) {
-      let studentScore = 0;
-      let maxPoints = 0;
-      let isDiscussion = false;
-      let title = "";
+  for (const item of paginatedItems) {
+    let studentScore = 0;
+    let maxPoints = 0;
+    let isDiscussion = false;
+    let title = "";
 
-      if (item.questions) {
-        // Assessment - we know submission exists because we filtered for it
-        const submission = submissionMap.get(item._id.toString());
-        studentScore = submission.totalScore || 0;
-        maxPoints = item.questions.reduce((sum, q) => sum + q.points, 0);
-        title = item.title;
-      } else if (item.totalMarks) {
-        // Discussion - we know comment exists because we filtered for it
-        const comment = discussionCommentMap.get(item._id.toString());
-        studentScore = comment.marksObtained || 0;
-        maxPoints = item.totalMarks;
-        title = item.topic;
-        isDiscussion = true;
-      }
-
-      const assessmentData = {
-        assessmentId: item._id,
-        assessmentTitle: title,
-        categoryId: item.category?._id?.toString() || item.category?.toString(),
-        categoryName: item.category?.name || "Unknown Category",
-        maxPoints,
-        studentPoints: studentScore,
-        isDiscussion,
-      };
-
-      // Check if item has valid semester AND quarter
-      if (item.semester && item.quarter &&
-        item.semester._id && item.quarter._id) {
-        itemsWithSemesterQuarter.push({
-          ...item,
-          assessmentData
-        });
-      } else {
-        directCourseItems.push(assessmentData);
-      }
+    if (item.questions) {
+      // Assessment - we know submission exists because we filtered for it
+      const submission = submissionMap.get(item._id.toString());
+      studentScore = submission.totalScore || 0;
+      maxPoints = item.questions.reduce((sum, q) => sum + q.points, 0);
+      title = item.title;
+    } else if (item.totalMarks) {
+      // Discussion - we know comment exists because we filtered for it
+      const comment = discussionCommentMap.get(item._id.toString());
+      studentScore = comment.marksObtained || 0;
+      maxPoints = item.totalMarks;
+      title = item.topic;
+      isDiscussion = true;
     }
 
-    // Group items with semester/quarter
-    const groupedBySemesterQuarter = {};
-
-    for (const item of itemsWithSemesterQuarter) {
-      const semesterId = item.semester._id.toString();
-      const quarterId = item.quarter._id.toString();
-
-      if (!groupedBySemesterQuarter[semesterId]) {
-        groupedBySemesterQuarter[semesterId] = {
-          semesterId,
-          semesterTitle: item.semester.title,
-          quarters: {}
-        };
-      }
-      if (!groupedBySemesterQuarter[semesterId].quarters[quarterId]) {
-        groupedBySemesterQuarter[semesterId].quarters[quarterId] = {
-          quarterId,
-          quarterTitle: item.quarter.title,
-          assessments: [],
-        };
-      }
-
-      groupedBySemesterQuarter[semesterId].quarters[quarterId].assessments.push(
-        item.assessmentData
-      );
-    }
-
-    // Calculate grades for quarters and semesters
-    let semesterQuarterScoreSum = 0;
-    let totalQuartersCount = 0;
-
-    for (const semesterId of Object.keys(groupedBySemesterQuarter)) {
-      const semesterData = groupedBySemesterQuarter[semesterId];
-      for (const quarterId of Object.keys(semesterData.quarters)) {
-        const quarterData = semesterData.quarters[quarterId];
-        const quarterItems = quarterData.assessments;
-
-        // Calculate quarter grade
-        const quarterGrade = calculateWeightedGrade(quarterItems, categories);
-
-        quarterData.grade = quarterGrade;
-        quarterData.gpa = await percentageToGPA(quarterGrade, courseId);
-        quarterData.letterGrade = getLetterGrade(gradingScale, quarterGrade);
-
-        semesterQuarterScoreSum += quarterGrade;
-        totalQuartersCount++;
-      }
-    }
-
-    // Calculate grade for direct course items (no semester/quarter)
-    let directCourseGrade = 0;
-    let directCourseGPA = null;
-    let directCourseLetterGrade = null;
-
-    if (directCourseItems.length > 0) {
-      directCourseGrade = calculateWeightedGrade(directCourseItems, categories);
-      directCourseGPA = await percentageToGPA(directCourseGrade, courseId);
-      directCourseLetterGrade = getLetterGrade(gradingScale, directCourseGrade);
-    }
-
-    // Calculate final course grade
-    let finalCoursePercentage = 0;
-
-    if (totalQuartersCount > 0 && directCourseItems.length > 0) {
-      // If we have both semester/quarter items and direct items, average them
-      const avgSemesterQuarter = semesterQuarterScoreSum / totalQuartersCount;
-      finalCoursePercentage = parseFloat(
-        ((avgSemesterQuarter + directCourseGrade) / 2).toFixed(2)
-      );
-    } else if (totalQuartersCount > 0) {
-      // Only semester/quarter items
-      finalCoursePercentage = parseFloat(
-        (semesterQuarterScoreSum / totalQuartersCount).toFixed(2)
-      );
-    } else if (directCourseItems.length > 0) {
-      // Only direct course items
-      finalCoursePercentage = directCourseGrade;
-    }
-
-    const gpa = await percentageToGPA(finalCoursePercentage, courseId);
-    const letterGrade = getLetterGrade(gradingScale, finalCoursePercentage);
-
-    // Format semesters for response
-    const semesterList = Object.entries(groupedBySemesterQuarter).map(
-      ([semesterId, semesterData]) => {
-        const quartersArray = Object.entries(semesterData.quarters).map(
-          ([quarterId, quarterData]) => ({
-            quarterId,
-            quarterTitle: quarterData.quarterTitle,
-            grade: quarterData.grade,
-            gpa: quarterData.gpa,
-            letterGrade: quarterData.letterGrade,
-            assessments: quarterData.assessments,
-          })
-        );
-
-        return {
-          semesterId,
-          semesterTitle: semesterData.semesterTitle,
-          quarters: quartersArray,
-        };
-      }
-    );
-
-    // Build response
-    const response = {
-      studentId,
-      course,
-      courseName: course?.courseTitle || "Unknown Course",
-      grade: finalCoursePercentage,
-      gpa,
-      letterGrade,
-      totalAssessments,
-      page,
-      limit,
-      totalPages,
+    const assessmentData = {
+      assessmentId: item._id,
+      assessmentTitle: title,
+      categoryId: item.category?._id?.toString() || item.category?.toString(),
+      categoryName: item.category?.name || "Unknown Category",
+      maxPoints,
+      studentPoints: studentScore,
+      isDiscussion,
     };
 
-    // Add semesters if they exist
-    if (semesterList.length > 0) {
-      response.semesters = semesterList;
+    // Check if item has valid semester AND quarter
+    if (item.semester && item.quarter &&
+      item.semester._id && item.quarter._id) {
+      itemsWithSemesterQuarter.push({
+        ...item,
+        assessmentData
+      });
+    } else {
+      directCourseItems.push(assessmentData);
     }
+  }
 
-    // Add direct course assessments if they exist
-    if (directCourseItems.length > 0) {
-      response.directAssessments = {
-        grade: directCourseGrade,
-        gpa: directCourseGPA,
-        letterGrade: directCourseLetterGrade,
-        assessments: directCourseItems,
+  // Group items with semester/quarter
+  const groupedBySemesterQuarter = {};
+
+  for (const item of itemsWithSemesterQuarter) {
+    const semesterId = item.semester._id.toString();
+    const quarterId = item.quarter._id.toString();
+
+    if (!groupedBySemesterQuarter[semesterId]) {
+      groupedBySemesterQuarter[semesterId] = {
+        semesterId,
+        semesterTitle: item.semester.title,
+        quarters: {}
+      };
+    }
+    if (!groupedBySemesterQuarter[semesterId].quarters[quarterId]) {
+      groupedBySemesterQuarter[semesterId].quarters[quarterId] = {
+        quarterId,
+        quarterTitle: item.quarter.title,
+        assessments: [],
       };
     }
 
-    res.json(response);
-  } catch (error) {
-    console.error("Gradebook error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    groupedBySemesterQuarter[semesterId].quarters[quarterId].assessments.push(
+      item.assessmentData
+    );
   }
-};
+
+  // Calculate grades for quarters and semesters
+  let semesterQuarterScoreSum = 0;
+  let totalQuartersCount = 0;
+
+  for (const semesterId of Object.keys(groupedBySemesterQuarter)) {
+    const semesterData = groupedBySemesterQuarter[semesterId];
+    for (const quarterId of Object.keys(semesterData.quarters)) {
+      const quarterData = semesterData.quarters[quarterId];
+      const quarterItems = quarterData.assessments;
+
+      // Calculate quarter grade
+      const quarterGrade = calculateWeightedGrade(quarterItems, categories);
+
+      quarterData.grade = quarterGrade;
+      quarterData.gpa = await percentageToGPA(quarterGrade, courseId);
+      quarterData.letterGrade = getLetterGrade(gradingScale, quarterGrade);
+
+      semesterQuarterScoreSum += quarterGrade;
+      totalQuartersCount++;
+    }
+  }
+
+  // Calculate grade for direct course items (no semester/quarter)
+  let directCourseGrade = 0;
+  let directCourseGPA = null;
+  let directCourseLetterGrade = null;
+
+  if (directCourseItems.length > 0) {
+    directCourseGrade = calculateWeightedGrade(directCourseItems, categories);
+    directCourseGPA = await percentageToGPA(directCourseGrade, courseId);
+    directCourseLetterGrade = getLetterGrade(gradingScale, directCourseGrade);
+  }
+
+  // Calculate final course grade
+  let finalCoursePercentage = 0;
+
+  if (totalQuartersCount > 0 && directCourseItems.length > 0) {
+    // If we have both semester/quarter items and direct items, average them
+    const avgSemesterQuarter = semesterQuarterScoreSum / totalQuartersCount;
+    finalCoursePercentage = parseFloat(
+      ((avgSemesterQuarter + directCourseGrade) / 2).toFixed(2)
+    );
+  } else if (totalQuartersCount > 0) {
+    // Only semester/quarter items
+    finalCoursePercentage = parseFloat(
+      (semesterQuarterScoreSum / totalQuartersCount).toFixed(2)
+    );
+  } else if (directCourseItems.length > 0) {
+    // Only direct course items
+    finalCoursePercentage = directCourseGrade;
+  }
+
+  const gpa = await percentageToGPA(finalCoursePercentage, courseId);
+  const letterGrade = getLetterGrade(gradingScale, finalCoursePercentage);
+
+  // Format semesters for response
+  const semesterList = Object.entries(groupedBySemesterQuarter).map(
+    ([semesterId, semesterData]) => {
+      const quartersArray = Object.entries(semesterData.quarters).map(
+        ([quarterId, quarterData]) => ({
+          quarterId,
+          quarterTitle: quarterData.quarterTitle,
+          grade: quarterData.grade,
+          gpa: quarterData.gpa,
+          letterGrade: quarterData.letterGrade,
+          assessments: quarterData.assessments,
+        })
+      );
+
+      return {
+        semesterId,
+        semesterTitle: semesterData.semesterTitle,
+        quarters: quartersArray,
+      };
+    }
+  );
+
+  // Build response
+  const response = {
+    studentId,
+    course,
+    courseName: course?.courseTitle || "Unknown Course",
+    grade: finalCoursePercentage,
+    gpa,
+    letterGrade,
+    totalAssessments,
+    page,
+    limit,
+    totalPages,
+  };
+
+  // Add semesters if they exist
+  if (semesterList.length > 0) {
+    response.semesters = semesterList;
+  }
+
+  // Add direct course assessments if they exist
+  if (directCourseItems.length > 0) {
+    response.directAssessments = {
+      grade: directCourseGrade,
+      gpa: directCourseGPA,
+      letterGrade: directCourseLetterGrade,
+      assessments: directCourseItems,
+    };
+  }
+
+  return res.json({
+    ...response,
+    message: "Student gradebook fetched successfully"
+  });
+});
 
 // Helper function to calculate weighted grade
 function calculateWeightedGrade(items, categories) {
@@ -343,140 +347,139 @@ function calculateWeightedGrade(items, categories) {
 }
 
 
-export const getStudentGradeReport = async (req, res) => {
+export const getStudentGradeReport = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 5;
   const skip = (page - 1) * limit;
 
-  try {
-    /** 1️⃣ Fetch student's assessment submissions */
-    const submissions = await Submission.find({ studentId, graded: true });
-    const assessmentIds = submissions.map(s => s.assessment);
+  /** 1️⃣ Fetch student's assessment submissions */
+  const submissions = await Submission.find({ studentId, graded: true });
+  const assessmentIds = submissions.map(s => s.assessment);
 
-    /** 2️⃣ Fetch assessments with course info */
-    const assessments = await Assessment.find({ _id: { $in: assessmentIds } })
-      .populate("course category semester quarter")
-      .lean();
+  /** 2️⃣ Fetch assessments with course info */
+  const assessments = await Assessment.find({ _id: { $in: assessmentIds } })
+    .populate("course category semester quarter")
+    .lean();
 
-    /** 3️⃣ Fetch student's graded discussion comments (any course) */
-    const discussionComments = await DiscussionComment.find({
-      createdby: studentId,
-      isGraded: true
+  /** 3️⃣ Fetch student's graded discussion comments (any course) */
+  const discussionComments = await DiscussionComment.find({
+    createdby: studentId,
+    isGraded: true
+  })
+    .populate({
+      path: "discussion",
+      populate: { path: "course category semester quarter" }
     })
-      .populate({
-        path: "discussion",
-        populate: { path: "course category semester quarter" }
-      })
+    .lean();
+
+  /** 4️⃣ Extract unique discussions from comments */
+  const discussions = discussionComments.map(c => {
+    const d = c.discussion;
+    return { ...d, studentPoints: c.marksObtained || 0 };
+  });
+
+  /** 5️⃣ Build combined course list from assessments + discussions */
+  const assessmentCourseIds = assessments.map(a => a.course._id.toString());
+  const discussionCourseIds = discussions.map(d => d.course._id.toString());
+  const allCourseIds = [...new Set([...assessmentCourseIds, ...discussionCourseIds])];
+
+  /** 5.1️⃣ NEW: Fetch course info for discussion-only courses */
+  const discussionOnlyCourseIds = discussionCourseIds.filter(id => !assessmentCourseIds.includes(id));
+  let discussionOnlyCourses = [];
+  if (discussionOnlyCourseIds.length > 0) {
+    discussionOnlyCourses = await CourseSch.find({ _id: { $in: discussionOnlyCourseIds } })
+      .populate("category semester quarter")
       .lean();
+  }
 
-    /** 4️⃣ Extract unique discussions from comments */
-    const discussions = discussionComments.map(c => {
-      const d = c.discussion;
-      return { ...d, studentPoints: c.marksObtained || 0 };
-    });
+  /** 6️⃣ Build course -> semester -> quarter -> records OR direct course records */
+  const courseMap = new Map();
 
-    /** 5️⃣ Build combined course list from assessments + discussions */
-    const assessmentCourseIds = assessments.map(a => a.course._id.toString());
-    const discussionCourseIds = discussions.map(d => d.course._id.toString());
-    const allCourseIds = [...new Set([...assessmentCourseIds, ...discussionCourseIds])];
+  // Add assessments
+  for (const submission of submissions) {
+    const assessment = assessments.find(a => a._id.toString() === submission.assessment.toString());
+    if (!assessment) continue;
 
-    /** 5.1️⃣ NEW: Fetch course info for discussion-only courses */
-    const discussionOnlyCourseIds = discussionCourseIds.filter(id => !assessmentCourseIds.includes(id));
-    let discussionOnlyCourses = [];
-    if (discussionOnlyCourseIds.length > 0) {
-      discussionOnlyCourses = await CourseSch.find({ _id: { $in: discussionOnlyCourseIds } })
-        .populate("category semester quarter")
-        .lean();
+    const courseId = assessment.course._id.toString();
+    const semesterId = assessment.semester?._id?.toString();
+    const quarterId = assessment.quarter?._id?.toString();
+
+    if (!courseMap.has(courseId)) {
+      courseMap.set(courseId, {
+        hasStructure: false,
+        semesters: new Map(),
+        directAssessments: []
+      });
     }
 
-    /** 6️⃣ Build course -> semester -> quarter -> records OR direct course records */
-    const courseMap = new Map();
+    const courseData = courseMap.get(courseId);
 
-    // Add assessments
-    for (const submission of submissions) {
-      const assessment = assessments.find(a => a._id.toString() === submission.assessment.toString());
-      if (!assessment) continue;
+    // If semester and quarter exist, use hierarchical structure
+    if (semesterId && quarterId) {
+      courseData.hasStructure = true;
 
-      const courseId = assessment.course._id.toString();
-      const semesterId = assessment.semester?._id?.toString();
-      const quarterId = assessment.quarter?._id?.toString();
-
-      if (!courseMap.has(courseId)) {
-        courseMap.set(courseId, {
-          hasStructure: false,
-          semesters: new Map(),
-          directAssessments: []
-        });
+      if (!courseData.semesters.has(semesterId)) {
+        courseData.semesters.set(semesterId, new Map());
       }
+      const semesterMap = courseData.semesters.get(semesterId);
 
-      const courseData = courseMap.get(courseId);
-
-      // If semester and quarter exist, use hierarchical structure
-      if (semesterId && quarterId) {
-        courseData.hasStructure = true;
-
-        if (!courseData.semesters.has(semesterId)) {
-          courseData.semesters.set(semesterId, new Map());
-        }
-        const semesterMap = courseData.semesters.get(semesterId);
-
-        if (!semesterMap.has(quarterId)) {
-          semesterMap.set(quarterId, []);
-        }
-        semesterMap.get(quarterId).push({ type: "assessment", assessment, submission });
-      } else {
-        // If semester/quarter missing, add directly to course
-        courseData.directAssessments.push({ type: "assessment", assessment, submission });
+      if (!semesterMap.has(quarterId)) {
+        semesterMap.set(quarterId, []);
       }
+      semesterMap.get(quarterId).push({ type: "assessment", assessment, submission });
+    } else {
+      // If semester/quarter missing, add directly to course
+      courseData.directAssessments.push({ type: "assessment", assessment, submission });
+    }
+  }
+
+  // Add discussions
+  for (const discussion of discussions) {
+    const courseId = discussion.course._id.toString();
+    const semesterId = discussion.semester?._id?.toString();
+    const quarterId = discussion.quarter?._id?.toString();
+
+    if (!courseMap.has(courseId)) {
+      courseMap.set(courseId, {
+        hasStructure: false,
+        semesters: new Map(),
+        directAssessments: []
+      });
     }
 
-    // Add discussions
-    for (const discussion of discussions) {
-      const courseId = discussion.course._id.toString();
-      const semesterId = discussion.semester?._id?.toString();
-      const quarterId = discussion.quarter?._id?.toString();
+    const courseData = courseMap.get(courseId);
 
-      if (!courseMap.has(courseId)) {
-        courseMap.set(courseId, {
-          hasStructure: false,
-          semesters: new Map(),
-          directAssessments: []
-        });
+    // If semester and quarter exist, use hierarchical structure
+    if (semesterId && quarterId) {
+      courseData.hasStructure = true;
+
+      if (!courseData.semesters.has(semesterId)) {
+        courseData.semesters.set(semesterId, new Map());
       }
+      const semesterMap = courseData.semesters.get(semesterId);
 
-      const courseData = courseMap.get(courseId);
-
-      // If semester and quarter exist, use hierarchical structure
-      if (semesterId && quarterId) {
-        courseData.hasStructure = true;
-
-        if (!courseData.semesters.has(semesterId)) {
-          courseData.semesters.set(semesterId, new Map());
-        }
-        const semesterMap = courseData.semesters.get(semesterId);
-
-        if (!semesterMap.has(quarterId)) {
-          semesterMap.set(quarterId, []);
-        }
-        semesterMap.get(quarterId).push({ type: "discussion", discussion });
-      } else {
-        // If semester/quarter missing, add directly to course
-        courseData.directAssessments.push({ type: "discussion", discussion });
+      if (!semesterMap.has(quarterId)) {
+        semesterMap.set(quarterId, []);
       }
+      semesterMap.get(quarterId).push({ type: "discussion", discussion });
+    } else {
+      // If semester/quarter missing, add directly to course
+      courseData.directAssessments.push({ type: "discussion", discussion });
     }
+  }
 
-    /** 7️⃣ Fetch grading scales for all courses */
-    const gradingScaleDocs = await GradingScale.find({ course: { $in: allCourseIds } }).lean();
-    const gradingScaleMap = new Map();
-    gradingScaleDocs.forEach(doc => gradingScaleMap.set(doc.course.toString(), doc.scale));
+  /** 7️⃣ Fetch grading scales for all courses */
+  const gradingScaleDocs = await GradingScale.find({ course: { $in: allCourseIds } }).lean();
+  const gradingScaleMap = new Map();
+  gradingScaleDocs.forEach(doc => gradingScaleMap.set(doc.course.toString(), doc.scale));
 
-    /** 8️⃣ Paginate courses */
-    const paginatedCourseIds = allCourseIds.slice(skip, skip + limit);
+  /** 8️⃣ Paginate courses */
+  const paginatedCourseIds = allCourseIds.slice(skip, skip + limit);
 
-    let totalGPA = 0;
-    let totalQuarters = 0;
-    const courseGrades = [];
+  let totalGPA = 0;
+  let totalQuarters = 0;
+  const courseGrades = [];
 
     /** 9️⃣ Helper function to calculate grade for a set of records */
     const calculateGradeForRecords = async (records, courseId) => {
@@ -647,80 +650,67 @@ export const getStudentGradeReport = async (req, res) => {
       });
     }
 
-    /** 1️⃣1️⃣ Final overall GPA */
-    const overallGPA = totalQuarters > 0 ? parseFloat((totalGPA / totalQuarters).toFixed(2)) : 0;
+  /** 1️⃣1️⃣ Final overall GPA */
+  const overallGPA = totalQuarters > 0 ? parseFloat((totalGPA / totalQuarters).toFixed(2)) : 0;
 
-    res.json({
-      studentId,
-      overallGPA,
-      totalCourses: allCourseIds.length,
-      currentPage: page,
-      totalPages: Math.ceil(allCourseIds.length / limit),
-      courses: courseGrades,
-    });
-
-  } catch (err) {
-    console.error("Error generating grade report:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  return res.json({
+    studentId,
+    overallGPA,
+    totalCourses: allCourseIds.length,
+    currentPage: page,
+    totalPages: Math.ceil(allCourseIds.length / limit),
+    courses: courseGrades,
+    message: "Student grade report fetched successfully"
+  });
+});
 
 
-export const setGradingScale = async (req, res) => {
+export const setGradingScale = asyncHandler(async (req, res) => {
   const { scale } = req.body;
   const createdby = req.user._id;
   const { courseId } = req.params;
 
   if (!Array.isArray(scale) || scale.length === 0) {
-    return res.status(400).json({ error: "Scale must be a non-empty array." });
+    throw new ValidationError("Scale must be a non-empty array.", "GRD_001");
   }
-
-  try {
     const existing = await GradingScale.findOne({ course: courseId });
 
     if (existing) {
       await GradingScale.findOneAndUpdate({ _id: existing._id }, { scale });
 
       return res.status(200).json({
-        message: "Grading scale updated successfully",
-        scale,
-      });
-    }
-
-    const newScale = await GradingScale.create({
       scale,
-      createdby,
-      course: courseId,
+      message: "Grading scale updated successfully"
     });
-
-    res.status(200).json({
-      message: "Grading scale saved successfully",
-      scale: newScale.scale,
-    });
-  } catch (err) {
-    console.error("Error saving grading scale:", err);
-    res.status(500).json({ error: "Internal server error" });
   }
-};
 
-export const getGradingScale = async (req, res) => {
+  const newScale = await GradingScale.create({
+    scale,
+    createdby,
+    course: courseId,
+  });
+
+  return res.status(200).json({
+    scale: newScale.scale,
+    message: "Grading scale saved successfully"
+  });
+});
+export const getGradingScale = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
   const createdby = req.user._id;
 
-  try {
-    const scaleDoc = await GradingScale.findOne({ course: courseId });
-    const scale = scaleDoc?.scale
-      ? [...scaleDoc.scale].sort((a, b) => b.max - a.max)
-      : null;
-    if (!scale) {
-      return res.status(404).json({ message: "Grading scale not found" });
-    }
-    return res.status(201).json({ message: "Grading scale found", scale });
-  } catch (err) {
-    console.error("Error fetching grading scale:", err);
-    return null;
+  const scaleDoc = await GradingScale.findOne({ course: courseId });
+  const scale = scaleDoc?.scale
+    ? [...scaleDoc.scale].sort((a, b) => b.max - a.max)
+    : null;
+  if (!scale) {
+    throw new NotFoundError("Grading scale not found", "GRD_002");
   }
-};
+  return res.status(200).json({ 
+    scale,
+    message: "Grading scale found"
+  });
+});
 
 // export const getGradebookForCourse = async (req, res) => {
 //   const { courseId } = req.params;
@@ -954,12 +944,11 @@ export const getGradingScale = async (req, res) => {
 // };
 
 
-export const getGradebookForCourse = async (req, res) => {
+export const getGradebookForCourse = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
   const { page = 1, limit = 10 } = req.query;
 
-  try {
-    const gradingScaleDoc = await GradingScale.findOne({ course: courseId }).lean();
+  const gradingScaleDoc = await GradingScale.findOne({ course: courseId }).lean();
     const gradingScale = gradingScaleDoc?.scale || [];
 
     const categories = await AssessmentCategory.find({ course: courseId });
@@ -1032,13 +1021,10 @@ export const getGradebookForCourse = async (req, res) => {
       page: Number(page),
       limit: Number(limit),
       hasSemesterStructure,
-      gradebook
+      gradebook,
+      message: "Gradebook fetched successfully"
     });
-  } catch (error) {
-    console.error("Error generating gradebook:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+});
 
 // Function to calculate grades for courses WITH semester/quarter structure
 const calculateSemesterBasedGrades = async (

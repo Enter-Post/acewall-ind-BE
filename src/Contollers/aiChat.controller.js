@@ -5,6 +5,8 @@ import PDFDocument from "pdfkit";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import ExcelJS from "exceljs";
 import path from "path";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+import { ValidationError } from "../Utiles/errors.js";
 
 // Function to clean Markdown and unwanted characters
 function cleanText(text) {
@@ -15,12 +17,11 @@ function cleanText(text) {
     .trim();
 }
 
-export const askAI = async (req, res) => {
+export const askAI = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
-  try {
-    const { question, difficulty, context } = req.body;
-    const file = req.file; // <-- multer diskStorage file
+  const { question, difficulty, context } = req.body;
+  const file = req.file; // <-- multer diskStorage file
 
     let conversationContext = "";
     let shouldUseContext = false;
@@ -158,41 +159,32 @@ One per line, plain English, no bullets.
       difficulty,
     });
 
-    // ------------------------------------------
-    // 9. Return response
-    // ------------------------------------------
-    res.json({
-      success: true,
-      question,
-      answer,
-      suggestedQuestions,
-      fileUsed: file ? file.originalname : null,
-    });
-  } catch (err) {
-    console.error("AI Error", err);
-    res.status(500).json({ error: "AI Processing Failed" });
-  }
-};
+  // ------------------------------------------
+  // 9. Return response
+  // ------------------------------------------
+  return res.json({
+    question,
+    answer,
+    suggestedQuestions,
+    fileUsed: file ? file.originalname : null,
+  });
+});
 
-export const getChatHistory = async (req, res) => {
-  try {
-    const limit = req.query.limit ? parseInt(req.query.limit) : 10;
-    const userId = req.user._id;
-    const chats = await AIChat.find({ userId }).limit(limit);
+export const getChatHistory = asyncHandler(async (req, res) => {
+  const limit = req.query.limit ? parseInt(req.query.limit) : 10;
+  const userId = req.user._id;
+  const chats = await AIChat.find({ userId }).limit(limit);
 
-    res.json({ success: true, chats });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "getChatHistory" });
-  }
-};
+  return res.json({ 
+    chats 
+  });
+});
 
-export const askAIupdated = async (req, res) => {
+export const askAIupdated = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
-  try {
-    const { question, difficulty, context } = req.body;
-    const file = req.file; // <-- multer diskStorage file
+  const { question, difficulty, context } = req.body;
+  const file = req.file; // <-- multer diskStorage file
 
     let conversationContext = "";
     let shouldUseContext = false;
@@ -478,8 +470,7 @@ One per line, plain English, no bullets.
 
     await AIChat.create(chatData);
 
-    res.json({
-      success: true,
+    return res.json({
       question,
       answer,
       suggestedQuestions,
@@ -493,11 +484,7 @@ One per line, plain English, no bullets.
           }
         : null,
     });
-  } catch (err) {
-    console.error("AI Error", err);
-    res.status(500).json({ error: "AI Processing Failed" });
-  }
-};
+});
 
 async function generatePDF(content, filePath) {
   return new Promise((resolve, reject) => {
@@ -658,9 +645,8 @@ async function generateExcel(content, filePath) {
   return filePath;
 }
 
-export const generateContentForTeacher = async (req, res) => {
-  try {
-    const { command, usedfor, difficulty } = req.body;
+export const generateContentForTeacher = asyncHandler(async (req, res) => {
+  const { command, usedfor, difficulty } = req.body;
 
     const prompt = `
 You are EduMentor AI, an expert educational content creator for a Learning Management System (LMS).
@@ -739,46 +725,28 @@ Generate content now.
 
     const aiResponse = await model.generateContent(prompt);
 
-    res.json({
-      success: true,
+    return res.json({
       usedfor,
       content: aiResponse.response.text().trim(),
     });
-  } catch (error) {
-    console.error("error in generateContentForTeacher", error);
-    res.status(500).json({ message: "Failed to generate content for teacher" });
+});
+
+
+export const generateImage = asyncHandler(async (req, res) => {
+  const { prompt, aspectRatio, numberOfImages } = req.body;
+
+  if (!prompt) {
+    throw new ValidationError("Prompt is required", "AI_001");
   }
-};
 
+  // Call our utility function
+  const result = await model.generateImage({ prompt, aspectRatio, numberOfImages });
 
-export const generateImage = async (req, res) => {
-  try {
-    const { prompt, aspectRatio, numberOfImages } = req.body;
+  console.log(result, "result from gemini image");
 
-    if (!prompt) {
-      return res.status(400).json({
-        success: false,
-        message: "Prompt is required",
-      });
-    }
-
-    // Call our utility function
-    const result = await model.generateImage({ prompt, aspectRatio, numberOfImages });
-
-    console.log(result, "result from gemini image");
-
-    // Send back the first image (or adjust logic to send an array if result has many)
-    res.status(200).json({
-      success: true,
-      mimeType: result.mimeType,
-      imageBase64: result.imageBase64,
-    });
-  } catch (error) {
-    console.error("Image generation error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to generate image",
-      error: error.message,
-    });
-  }
-};
+  // Send back the first image (or adjust logic to send an array if result has many)
+  return res.status(200).json({
+    mimeType: result.mimeType,
+    imageBase64: result.imageBase64,
+  });
+});

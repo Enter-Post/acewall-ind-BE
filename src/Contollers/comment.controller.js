@@ -1,44 +1,40 @@
 import Comment from "../Models/comment.model.js";
 import CourseSch from "../Models/courses.model.sch.js";
 import { login } from "./auth.controller.js";
+import {
+  ValidationError,
+  NotFoundError,
+  AuthenticationError,
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
-export const getCourseComments = async (req, res) => {
+export const getCourseComments = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  try {
-    const comments = await Comment.find({ course: id }).populate(
-      "createdby",
-      "firstName lastName profileImg role"
-    );
+  const comments = await Comment.find({ course: id }).populate(
+    "createdby",
+    "firstName lastName profileImg role"
+  );
 
-    if (comments.length == 0) {
-      return res.status(404).json({
-        message: "No comment found",
-      });
-    }
-
-    res.status(200).json({
-      message: "Comments found successfully",
-      comments,
-    });
-  } catch (error) {
-    console.error("Error getting course comments:", error.message);
-    res.status(500).json({ error: "Something went wrong" });
+  if (comments.length == 0) {
+    throw new NotFoundError("No comment found", "CMT_001");
   }
-};
 
-export const sendComment = async (req, res) => {
+  return res.status(200).json({
+    comments,
+    message: "Comments found successfully",
+  });
+});
+
+export const sendComment = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const createdby = req.user._id;
   const { text } = req.body;
 
-  try {
-    const isExist = await CourseSch.findById(id);
-    if (!isExist) {
-      return res.status(404).json({
-        message: "Course does not exist",
-      });
-    }
+  const isExist = await CourseSch.findById(id);
+  if (!isExist) {
+    throw new NotFoundError("Course does not exist", "CMT_002");
+  }
 
     const newComment = new Comment({
       text,
@@ -61,26 +57,19 @@ export const sendComment = async (req, res) => {
       { new: true }
     );
 
-    res.status(201).json({
-      comment: populatedComment,
-      message: "Comment added successfully",
-    });
-  } catch (error) {
-    console.error("Error sending comment:", error.message);
-    return res.status(500).json({ error: "Something went wrong" });
-  }
-};
+  return res.status(201).json({
+    comment: populatedComment,
+    message: "Comment added successfully",
+  });
+});
 
-export const allCommentsofTeacher = async (req, res) => {
+export const allCommentsofTeacher = asyncHandler(async (req, res) => {
   const teacherId = req.user._id;
-  try {
-    const TeacherCourse = await CourseSch.find({ createdby: teacherId });
+  const TeacherCourse = await CourseSch.find({ createdby: teacherId });
 
-    if (TeacherCourse.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "No course found for this teacher" });
-    }
+  if (TeacherCourse.length === 0) {
+    throw new NotFoundError("No course found for this teacher", "CMT_003");
+  }
 
     const courseIds = TeacherCourse.map((course) => course._id);
 
@@ -91,51 +80,41 @@ export const allCommentsofTeacher = async (req, res) => {
     .sort({ createdAt: -1 })
     .populate("createdby", "firstName middleName lastName profileImg");
 
-    if (comments.length === 0) {
-      return res.status(404).json({ message: "No comments found" });
-    }
-
-    const recentComments = comments.slice(0, 5);
-
-    res.status(200).json({
-      recentComments,
-    });
-  } catch (error) {
-    console.error("Error getting comments:", error.message);
-    res.status(500).json({ error: "Something went wrong" });
+  if (comments.length === 0) {
+    throw new NotFoundError("No comments found", "CMT_004");
   }
-};
+
+  const recentComments = comments.slice(0, 5);
+
+  return res.status(200).json({
+    recentComments,
+  });
+});
 
 
-
-
-
-export const deleteComment = async (req, res) => {
+export const deleteComment = asyncHandler(async (req, res) => {
   const { courseId, commentId } = req.params;
 
-  try {
-    // Check if the comment exists
-    const comment = await Comment.findById(commentId);
-    if (!comment) {
-      return res.status(404).json({ message: "Comment not found" });
-    }
+  // Check if the comment exists
+  const comment = await Comment.findById(commentId);
+  if (!comment) {
+    throw new NotFoundError("Comment not found", "CMT_005");
+  }
 
-    // Check if the comment belongs to the user
-    if (comment.createdby.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Unauthorized to delete this comment" });
-    }
+  // Check if the comment belongs to the user
+  if (comment.createdby.toString() !== req.user._id.toString()) {
+    throw new AuthenticationError("Unauthorized to delete this comment", "CMT_006");
+  }
 
     // Remove the comment
     await Comment.findByIdAndDelete(commentId);
 
-    // Optionally, remove comment reference from the course
-    await CourseSch.findByIdAndUpdate(courseId, {
-      $pull: { comment: commentId },
-    });
+  // Optionally, remove comment reference from the course
+  await CourseSch.findByIdAndUpdate(courseId, {
+    $pull: { comment: commentId },
+  });
 
-    res.status(200).json({ message: "Comment deleted successfully" });
-  } catch (error) {
-    console.error("Error deleting comment:", error.message);
-    res.status(500).json({ error: "Something went wrong" });
-  }
-};
+  return res.status(200).json({ 
+    message: "Comment deleted successfully" 
+  });
+});

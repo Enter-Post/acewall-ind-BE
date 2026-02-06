@@ -24,15 +24,17 @@ import PostComments from "../Models/PostModels/postComment.model.js";
 import PostLike from "../Models/PostModels/postLikes.model.js";
 import Conversation from "../Models/conversation.model.js";
 import User from "../Models/user.model.js";
+import { NotFoundError, AuthenticationError } from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
 
-export const deleteUser = async (req, res) => {
+export const deleteUser = asyncHandler(async (req, res) => {
     const session = await mongoose.startSession();
     try {
         const userId = req.user._id;
 
         if (!req.user) {
-            return res.status(403).json({ message: "Unauthorized" });
+            throw new AuthenticationError("Unauthorized", "UDEL_001");
         }
 
         session.startTransaction();
@@ -40,7 +42,7 @@ export const deleteUser = async (req, res) => {
         const user = await User.findById(userId).session(session);
         if (!user) {
             await session.abortTransaction();
-            return res.status(404).json({ message: "User not found" });
+            throw new NotFoundError("User not found", "UDEL_002");
         }
 
         /** OPTIONAL: Delete profile image */
@@ -120,14 +122,13 @@ export const deleteUser = async (req, res) => {
             path: "/", // Must match original cookie path
         });
 
-        res.status(200).json({
+        return res.status(200).json({
             message: "User and all related data deleted successfully",
         });
     } catch (error) {
         await session.abortTransaction();
-        console.error("Delete user failed:", error);
-        res.status(500).json({ message: "Internal server error" });
+        throw error;
     } finally {
         session.endSession();
     }
-};
+});

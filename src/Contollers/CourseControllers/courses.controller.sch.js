@@ -14,279 +14,252 @@ import Semester from "../../Models/semester.model.js";
 import Quarter from "../../Models/quarter.model.js";
 import Discussion from "../../Models/discussion.model.js";
 import stripe from "../../config/stripe.js";
-import { ZoomMeeting } from "../../Models/ZoomMeeting.model.js";
+import { ValidationError, NotFoundError } from "../../Utiles/errors.js";
+import { asyncHandler } from "../../middlewares/errorHandler.middleware.js";
 
 
-export const importCourseFromJSON = async (req, res) => {
-  try {
-    const data = req.body;
-    const userId = req.user._id;
 
-    // --- STEP 0: NORMALIZE DATA DIFFERENCES ---
-    // School data has 'quarters' array, Learning Vault export has 'semesters[i].quarters'
-    // We handle both to ensure the import is robust.
-    let rawSemesters = data.semesters || data.semester || [];
-    const rawCurriculum = data.curriculum || [];
-    const rawAssessments = data.assessments || [];
-    const rawDiscussions = data.discussions || [];
+export const importCourseFromJSON = asyncHandler(async (req, res) => {
+  const data = req.body;
+  const userId = req.user._id;
 
-    // --- STEP 1: Create the Course with Mandatory Defaults ---
-    const {
-      _id: oldCourseId,
-      curriculum, assessments, discussions, assessmentCategories,
-      semesters, semester, quarter, quarters, // Remove all variations of sem/qtr
-      category, subcategory,
-      createdAt, updatedAt, __v, createdby,
-      ...courseBody
-    } = data;
+  if (!data || Object.keys(data).length === 0) {
+    throw new ValidationError("Course data is required");
+  }
 
-    const newCourse = await CourseSch.create({
-      ...courseBody,
-      courseTitle: `${courseBody.courseTitle || 'Untitled'} (Imported)`,
-      category: category?._id || category || null,
-      subcategory: subcategory?._id || subcategory || null,
+  let rawSemesters = data.semesters || data.semester || [];
+  const rawCurriculum = data.curriculum || [];
+  const rawAssessments = data.assessments || [];
+  const rawDiscussions = data.discussions || [];
+
+  const {
+    _id: oldCourseId,
+    curriculum, assessments, discussions, assessmentCategories,                                  
+    semesters, semester, quarter, quarters,
+    category, subcategory,
+    createdAt, updatedAt, __v, createdby,                          
+    ...courseBody
+  } = data;
+
+  const newCourse = await CourseSch.create({
+    ...courseBody,
+    courseTitle: `${courseBody.courseTitle || 'Untitled'} (Imported)`,
+    category: category?._id || category || null,
+    subcategory: subcategory?._id || subcategory || null,
+    createdby: userId,
+    semesterbased: true,
+    price: 0,
+    published: false,
+    isVerified: "pending",
+    semester: [],
+    quarter: [],
+  });
+
+  const semesterMap = {};
+  const quarterMap = {};
+  const categoryMap = {};
+  const chapterMap = {};
+  const lessonMap = {};
+
+  const newSemesterIds = [];
+  const newQuarterIds = [];
+
+  for (const sem of rawSemesters) {
+    const { _id: oldSemId, quarters: nestedQuarters, ...semBody } = sem;
+
+    const newSem = await Semester.create({
+      ...semBody,
+      course: newCourse._id,
       createdby: userId,
-      // Mandatory Learning Vault Defaults
-      semesterbased: true,        // Always true
-      price: 0,                   // Always 2$
-      published: false,
-      isVerified: "pending",      // Learning vault uses "pending"/"approved"
-      semester: [],               // Will populate after creation
-      quarter: [],                // Will populate after creation
+      isArchived: false
     });
 
-    // ID Maps for relational integrity
-    const semesterMap = {};
-    const quarterMap = {};
-    const categoryMap = {};
-    const chapterMap = {};
-    const lessonMap = {};
+    semesterMap[oldSemId] = newSem._id;
+    newSemesterIds.push(newSem._id);
 
-    // --- STEP 2: Recreate Semesters and Quarters ---
-    const newSemesterIds = [];
-    const newQuarterIds = [];
+    const sourceQuarters = nestedQuarters || (data.quarters ? data.quarters.filter(q => q.semester === oldSemId) : []);
 
-    for (const sem of rawSemesters) {
-      const { _id: oldSemId, quarters: nestedQuarters, ...semBody } = sem;
-
-      const newSem = await Semester.create({
-        ...semBody,
-        course: newCourse._id,
-        createdby: userId,
-        isArchived: false
-      });
-
-      semesterMap[oldSemId] = newSem._id;
-      newSemesterIds.push(newSem._id);
-
-      // Handle Quarters: School version uses data.quarters, Vault uses sem.quarters
-      const sourceQuarters = nestedQuarters || (data.quarters ? data.quarters.filter(q => q.semester === oldSemId) : []);
-
-      if (sourceQuarters.length > 0) {
-        for (const qtr of sourceQuarters) {
-          const { _id: oldQtrId, ...qtrBody } = qtr;
-          const newQtr = await Quarter.create({
-            ...qtrBody,
-            semester: newSem._id,
-            isArchived: false
-          });
-          quarterMap[oldQtrId] = newQtr._id;
-          newQuarterIds.push(newQtr._id);
-        }
-      }
-    }
-
-    // Update course with reconstructed references
-    await CourseSch.findByIdAndUpdate(newCourse._id, {
-      semester: newSemesterIds,
-      quarter: newQuarterIds
-    });
-
-    // --- STEP 3: Assessment Categories ---
-    if (assessmentCategories && assessmentCategories.length > 0) {
-      for (const cat of assessmentCategories) {
-        const { _id: oldCatId, ...catBody } = cat;
-        const newCat = await AssessmentCategory.create({
-          ...catBody,
-          course: newCourse._id,
-          createdBy: userId
+    if (sourceQuarters.length > 0) {
+      for (const qtr of sourceQuarters) {
+        const { _id: oldQtrId, ...qtrBody } = qtr;
+        const newQtr = await Quarter.create({
+          ...qtrBody,
+          semester: newSem._id,
+          isArchived: false
         });
-        categoryMap[oldCatId] = newCat._id;
+        quarterMap[oldQtrId] = newQtr._id;
+        newQuarterIds.push(newQtr._id);
       }
     }
+  }
 
-    // --- STEP 4: Chapters & Lessons (Strip Concepts) ---
-    for (const chap of rawCurriculum) {
-      const { _id: oldChapId, lessons, ...chapBody } = chap;
-      const newQuarterId = quarterMap[chapBody.quarter?._id || chapBody.quarter] || null;
+  await CourseSch.findByIdAndUpdate(newCourse._id, {
+    semester: newSemesterIds,
+    quarter: newQuarterIds
+  });
 
-      const newChapter = await Chapter.create({
-        ...chapBody,
+  if (assessmentCategories && assessmentCategories.length > 0) {
+    for (const cat of assessmentCategories) {
+      const { _id: oldCatId, ...catBody } = cat;
+      const newCat = await AssessmentCategory.create({
+        ...catBody,
         course: newCourse._id,
-        createdby: userId,
-        quarter: newQuarterId
+        createdBy: userId
       });
+      categoryMap[oldCatId] = newCat._id;
+    }
+  }
 
-      chapterMap[oldChapId] = newChapter._id;
+  for (const chap of rawCurriculum) {
+    const { _id: oldChapId, lessons, ...chapBody } = chap;
+    const newQuarterId = quarterMap[chapBody.quarter?._id || chapBody.quarter] || null;
 
-      if (lessons && lessons.length > 0) {
-        for (const lesson of lessons) {
-          const { _id: oldLessonId, ...lessonBody } = lesson;
-          await Lesson.create({
-            ...lessonBody,
-            chapter: newChapter._id,
-            createdby: userId
-          });
-        }
+    const newChapter = await Chapter.create({
+      ...chapBody,
+      course: newCourse._id,
+      createdby: userId,
+      quarter: newQuarterId
+    });
+
+    chapterMap[oldChapId] = newChapter._id;
+
+    if (lessons && lessons.length > 0) {
+      for (const lesson of lessons) {
+        const { _id: oldLessonId, ...lessonBody } = lesson;
+        await Lesson.create({
+          ...lessonBody,
+          chapter: newChapter._id,
+          createdby: userId
+        });
       }
     }
-
-    // --- STEP 5: Assessments (Strip Concepts) ---
-    for (const asmt of rawAssessments) {
-      const { _id: oldAsmtId, questions, ...asmtBody } = asmt;
-
-      // Filter out the 'concept' field from questions as requested
-      const cleanedQuestions = questions?.map(({ _id, concept, ...q }) => ({
-        ...q,
-        files: q.files?.map(({ _id: fId, ...f }) => f) || []
-      })) || [];
-
-      await Assessment.create({
-        ...asmtBody,
-        course: newCourse._id,
-        createdby: userId,
-        category: categoryMap[asmtBody.category?._id || asmtBody.category] || null,
-        chapter: chapterMap[asmtBody.chapter?._id || asmtBody.chapter] || null,
-        questions: cleanedQuestions
-      });
-    }
-
-    res.status(201).json({ success: true, courseId: newCourse._id });
-
-  } catch (error) {
-    console.error("Import Error:", error);
-    res.status(500).json({ success: false, message: error.message });
   }
-};
 
+  for (const asmt of rawAssessments) {
+    const { _id: oldAsmtId, questions, ...asmtBody } = asmt;
 
-export const getFullCourseData = async (req, res) => {
-  try {
-    const { courseId } = req.params;
+    const cleanedQuestions = questions?.map(({ _id, concept, ...q }) => ({
+      ...q,
+      files: q.files?.map(({ _id: fId, ...f }) => f) || []
+    })) || [];
 
-    // 1. Fetch Course Data with nested Semesters and Quarters using Aggregation
-    const courseAggregation = await CourseSch.aggregate([
-      {
-        $match: { _id: new mongoose.Types.ObjectId(courseId) },
-      },
-      // Join Category
-      {
-        $lookup: {
-          from: "categories",
-          localField: "category",
-          foreignField: "_id",
-          as: "category",
-        },
-      },
-      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
-      // Join Subcategory
-      {
-        $lookup: {
-          from: "subcategories",
-          localField: "subcategory",
-          foreignField: "_id",
-          as: "subcategory",
-        },
-      },
-      { $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true } },
-      // Join Semesters AND their nested Quarters
-      {
-        $lookup: {
-          from: "semesters",
-          let: { courseId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$course", "$$courseId"] },
-                    { $eq: ["$isArchived", false] },
-                  ],
-                },
-              },
-            },
-            {
-              $lookup: {
-                from: "quarters",
-                localField: "_id",
-                foreignField: "semester",
-                as: "quarters",
-              },
-            },
-            { $sort: { startDate: 1 } },
-          ],
-          as: "semesterData", // Using a different key to avoid conflicts with existing fields
-        },
-      },
-      // Join Creator info
-      {
-        $lookup: {
-          from: "users",
-          localField: "createdby",
-          foreignField: "_id",
-          as: "createdby",
-          pipeline: [{ $project: { firstName: 1, lastName: 1, email: 1 } }],
-        },
-      },
-      { $unwind: { path: "$createdby", preserveNullAndEmptyArrays: true } },
-    ]);
-
-    const course = courseAggregation[0];
-
-    if (!course) {
-      return res.status(404).json({ success: false, message: "Course not found" });
-    }
-
-    // 2. Fetch Curriculum (Chapters + Lessons)
-    const chapters = await Chapter.find({ course: courseId }).sort({ createdAt: 1 }).lean();
-    const curriculum = await Promise.all(
-      chapters.map(async (chapter) => {
-        const lessons = await Lesson.find({ chapter: chapter._id }).sort({ createdAt: 1 }).lean();
-        return { ...chapter, lessons };
-      })
-    );
-
-    // 3. Fetch Metadata (Categories, Assessments, Discussions)
-    const assessmentCategories = await AssessmentCategory.find({ course: courseId }).lean();
-    const assessments = await Assessment.find({ course: courseId }).populate("category").lean();
-    const discussions = await Discussion.find({ course: courseId }).populate("category").lean();
-
-    // 4. Final Data Assembly
-    const fullCourseData = {
-      ...course,
-      semesters: course.semesterData, // Map aggregated data to the expected key
-      curriculum,
-      assessmentCategories,
-      assessments,
-      discussions,
-    };
-
-    // Clean up temporary aggregation keys if necessary
-    delete fullCourseData.semesterData;
-
-    res.status(200).json({
-      success: true,
-      data: fullCourseData,
-    });
-  } catch (error) {
-    console.error("Export Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to gather course data",
-      error: error.message,
+    await Assessment.create({
+      ...asmtBody,
+      course: newCourse._id,
+      createdby: userId,
+      category: categoryMap[asmtBody.category?._id || asmtBody.category] || null,
+      chapter: chapterMap[asmtBody.chapter?._id || asmtBody.chapter] || null,
+      questions: cleanedQuestions
     });
   }
-};
+
+  res.status(201).json({ 
+    courseId: newCourse._id,
+    message: "Course imported successfully"
+  });
+});
+
+
+export const getFullCourseData = asyncHandler(async (req, res) => {
+  const { courseId } = req.params;
+
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
+  }
+
+  const courseAggregation = await CourseSch.aggregate([
+    {
+      $match: { _id: new mongoose.Types.ObjectId(courseId) },
+    },
+    {
+      $lookup: {
+        from: "categories",
+        localField: "category",
+        foreignField: "_id",
+        as: "category",
+      },
+    },
+    { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "subcategories",
+        localField: "subcategory",
+        foreignField: "_id",
+        as: "subcategory",
+      },
+    },
+    { $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "semesters",
+        let: { courseId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$course", "$$courseId"] },
+                  { $eq: ["$isArchived", false] },
+                ],
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: "quarters",
+              localField: "_id",
+              foreignField: "semester",
+              as: "quarters",
+            },
+          },
+          { $sort: { startDate: 1 } },
+        ],
+        as: "semesterData",
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "createdby",
+        foreignField: "_id",
+        as: "createdby",
+        pipeline: [{ $project: { firstName: 1, lastName: 1, email: 1 } }],
+      },
+    },
+    { $unwind: { path: "$createdby", preserveNullAndEmptyArrays: true } },
+  ]);
+
+  const course = courseAggregation[0];
+
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
+
+  const chapters = await Chapter.find({ course: courseId }).sort({ createdAt: 1 }).lean();
+  const curriculum = await Promise.all(
+    chapters.map(async (chapter) => {
+      const lessons = await Lesson.find({ chapter: chapter._id }).sort({ createdAt: 1 }).lean();
+      return { ...chapter, lessons };
+    })
+  );
+
+  const assessmentCategories = await AssessmentCategory.find({ course: courseId }).lean();
+  const assessments = await Assessment.find({ course: courseId }).populate("category").lean();
+  const discussions = await Discussion.find({ course: courseId }).populate("category").lean();
+
+  const fullCourseData = {
+    ...course,
+    semesters: course.semesterData,
+    curriculum,
+    assessmentCategories,
+    assessments,
+    discussions,
+  };
+
+  delete fullCourseData.semesterData;
+
+  res.status(200).json(fullCourseData);
+});
 
 export const getCoursesWithMeetings = async (req, res) => {
   try {
@@ -327,7 +300,6 @@ export const getCoursesWithMeetings = async (req, res) => {
     }));
 
     res.status(200).json({
-      success: true,
       count: coursesWithCounts.length,
       courses: coursesWithCounts,
       message: "Courses with meetings fetched successfully",
@@ -417,35 +389,35 @@ export const getCoursesWithMeetings = async (req, res) => {
 //   }
 // };
 
-export const toggleGradingSystem = async (req, res) => {
-  try {
-    const { courseId } = req.params;
 
-    // Find course
-    const course = await CourseSch.findById(courseId);
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
+export const toggleGradingSystem = asyncHandler(async (req, res) => {
+  const { courseId } = req.params;
 
-    // Toggle logic
-    course.gradingSystem =
-      course.gradingSystem === "normalGrading"
-        ? "StandardGrading"
-        : "normalGrading";
 
-    await course.save();
-
-    res.status(200).json({
-      message: "Grading system updated successfully",
-      gradingSystem: course.gradingSystem,
-    });
-  } catch (error) {
-    console.error("Toggle grading error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
   }
-};
 
-export const createCourseSch = async (req, res) => {
+  const course = await CourseSch.findById(courseId);
+
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
+
+  course.gradingSystem =
+    course.gradingSystem === "normalGrading"
+      ? "StandardGrading"
+      : "normalGrading";
+
+  await course.save();
+
+  res.status(200).json({
+    message: "Grading system updated successfully",
+    gradingSystem: course.gradingSystem,
+  });
+});
+
+export const createCourseSch = asyncHandler(async (req, res) => {
   const createdby = req.user._id;
   const {
     courseTitle,
@@ -464,79 +436,90 @@ export const createCourseSch = async (req, res) => {
 
   const files = req.files;
 
-  try {
-    // 1. Handle Thumbnail Upload
-    let thumbnail = { url: "", filename: "" };
-    if (files?.thumbnail && files.thumbnail[0]) {
-      const uploadResult = await uploadToCloudinary(files.thumbnail[0].buffer, "course_thumbnails");
-      thumbnail = {
-        url: uploadResult.secure_url,
-        filename: files.thumbnail[0].originalname,
-      };
+  if (!courseTitle) {
+    throw new ValidationError("Course title is required");
+  }
+
+  if (!category) {
+    throw new ValidationError("Category is required");
+  }
+
+  if (!paymentType || !["FREE", "ONETIME", "SUBSCRIPTION"].includes(paymentType)) {
+    throw new ValidationError("Valid payment type is required (FREE, ONETIME, SUBSCRIPTION)");
+  }
+
+  let thumbnail = { url: "", filename: "" };
+  if (files?.thumbnail && files.thumbnail[0]) {
+    const uploadResult = await uploadToCloudinary(files.thumbnail[0].buffer, "course_thumbnails");
+    thumbnail = {
+      url: uploadResult.secure_url,
+      filename: files.thumbnail[0].originalname,
+    };
+  }
+
+  const parsedTeachingPoints = teachingPoints ? JSON.parse(teachingPoints) : [];
+  const parsedRequirements = requirements ? JSON.parse(requirements) : [];
+
+  const courseData = {
+    courseTitle,
+    category,
+    subcategory,
+    thumbnail,
+    language,
+    courseDescription,
+    semesterbased,
+    teachingPoints: parsedTeachingPoints,
+    requirements: parsedRequirements,
+    createdby,
+    published,
+    paymentType,
+  };
+
+  if (paymentType !== "FREE") {
+    if (!price || parseFloat(price) <= 0) {
+      throw new ValidationError("Valid price is required for paid courses");
     }
 
-    // 2. Prepare Base Course Data
-    const parsedTeachingPoints = teachingPoints ? JSON.parse(teachingPoints) : [];
-    const parsedRequirements = requirements ? JSON.parse(requirements) : [];
+    const product = await stripe.products.create({
+      name: courseTitle,
+      description: courseDescription,
+    });
 
-    const courseData = {
-      courseTitle,
-      category,
-      subcategory,
-      thumbnail,
-      language,
-      courseDescription,
-      semesterbased,
-      teachingPoints: parsedTeachingPoints,
-      requirements: parsedRequirements,
-      createdby,
-      published,
-      paymentType,
+    const priceInCents = Math.round(parseFloat(price) * 100);
+    const stripePriceConfig = {
+      product: product.id,
+      unit_amount: priceInCents,
+      currency: 'usd',
     };
 
-    // 3. Conditional Stripe and Pricing Logic
-    if (paymentType !== "FREE") {
-      // Create Stripe Product
-      const product = await stripe.products.create({
-        name: courseTitle,
-        description: courseDescription,
-      });
-
-      // Prepare Stripe Price configuration
-      const priceInCents = Math.round(parseFloat(price) * 100);
-      const stripePriceConfig = {
-        product: product.id,
-        unit_amount: priceInCents,
-        currency: 'usd',
-      };
-
-      if (paymentType === "SUBSCRIPTION") {
-        stripePriceConfig.recurring = { interval: "month" };
-        courseData.freeTrialMonths = Number(freeTrialMonths || 0);
-      }
-
-      const stripePrice = await stripe.prices.create(stripePriceConfig);
-
-      // Map Stripe/Price info to course data
-      courseData.price = parseFloat(price);
-      courseData.stripeProductId = product.id;
-      courseData.stripePriceId = stripePrice.id;
+    if (paymentType === "SUBSCRIPTION") {
+      stripePriceConfig.recurring = { interval: "month" };
+      courseData.freeTrialMonths = Number(freeTrialMonths || 0);
     }
-    // 4. Save Course to Database
-    const course = new CourseSch(courseData);
-    await course.save();
+
+    const stripePrice = await stripe.prices.create(stripePriceConfig);
 
     // 5. Auto-enroll creator
     await Enrollment.create({ student: createdby, course: course._id, enrollmentType: "TEACHERENROLLMENT", status: "ACTIVE" });
 
-    res.status(201).json({ course, message: "Course created successfully" });
-  } catch (error) {
-    console.error("Error in createCourseSch:", error);
-    res.status(500).json({ error: error.message });
-  }
-};
 
-export const getAllCoursesSch = async (req, res) => {
+    courseData.price = parseFloat(price);
+    courseData.stripeProductId = product.id;
+    courseData.stripePriceId = stripePrice.id;
+  }
+
+  const course = new CourseSch(courseData);
+  await course.save();
+
+  await Enrollment.create({ student: createdby, course: course._id });
+
+  res.status(201).json({ 
+    course, 
+    message: "Course created successfully" 
+  });
+});
+
+export const getAllCoursesSch = asyncHandler(async (req, res) => {
   const { isVerified, search } = req.query;
 
   const query = {
@@ -544,905 +527,850 @@ export const getAllCoursesSch = async (req, res) => {
   };
 
   if (search) {
-    query["courseTitle"] = { $regex: search, $options: "i" }; // Case-insensitive
+    query["courseTitle"] = { $regex: search, $options: "i" };
   }
 
-  try {
-    const courses = await CourseSch.find(query)
-      .populate(
-        "createdby",
-        "firstName middleName lastName Bio email profileImg"
-      ) // only include necessary fields
-      .populate("category", "title") // populate category name only
-      .populate("subcategory", "title"); // if you want to include subcategory too
+  const courses = await CourseSch.find(query)
+    .populate(
+      "createdby",
+      "firstName middleName lastName Bio email profileImg"
+    )
+    .populate("category", "title")
+    .populate("subcategory", "title");
 
-    if (!courses || courses.length === 0) {
-      return res.status(200).json({ courses: [], message: "No courses found" });
-    }
+  res.status(200).json({ 
+    courses, 
+    message: courses.length === 0 ? "No courses found" : "All courses fetched successfully" 
+  });
+});
 
-    res
-      .status(200)
-      .json({ courses, message: "All courses fetched successfully" });
-  } catch (error) {
-    console.error("Error fetching all courses:", error);
-    res.status(500).json({ error: error.message });
-  }
-};
-
-export const getCoursesbySubcategorySch = async (req, res) => {
+export const getCoursesbySubcategorySch = asyncHandler(async (req, res) => {
   const { search } = req.query;
   const { subCategoryId } = req.params;
 
-  try {
-    const query = {
-      subcategory: subCategoryId,
-      isVerified: "approved",
-      published: true,
-    };
-
-    if (search) {
-      query.courseTitle = { $regex: search, $options: "i" };
-    }
-
-    const courses = await CourseSch.find(query, {
-      courseTitle: 1,
-      thumbnail: 1,
-      category: 1,
-      subcategory: 1,
-      createdby: 1,
-      language: 1,
-    })
-      .populate("createdby", "firstName lastName Bio profileImg isVarified")
-      .populate("category", "title")
-      .populate("subcategory", "title");
-
-    // Filter courses by verified teachers only
-    const filteredCourses = courses.filter(
-      (course) => course.createdby?.isVarified === true
-    );
-
-    if (filteredCourses.length === 0) {
-      return res.status(200).json({ courses: [], message: "No courses found" });
-    }
-
-    res.status(200).json({
-      courses: filteredCourses,
-      message: "Courses fetched successfully",
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  if (!subCategoryId || !mongoose.Types.ObjectId.isValid(subCategoryId)) {
+    throw new ValidationError("Valid subcategory ID is required");
   }
-};
 
-export const courseDetailsStdPre = async (req, res) => {
-  const { courseId } = req.params;  // Assuming you now pass a courseId instead of an enrollmentId
+  const query = {
+    subcategory: subCategoryId,
+    isVerified: "approved",
+    published: true,
+  };
 
-  try {
-    const courseData = await Courseschema.aggregate([ // Assuming 'Courseschema' is the collection where courses are stored
-      {
-        $match: { _id: new mongoose.Types.ObjectId(courseId) },
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "createdby",
-          foreignField: "_id",
-          as: "createdby",
-        },
-      },
-      { $unwind: "$createdby" },
-      {
-        $lookup: {
-          from: "categories",
-          localField: "category",
-          foreignField: "_id",
-          as: "category",
-        },
-      },
-      { $unwind: "$category" },
-      {
-        $lookup: {
-          from: "subcategories",
-          localField: "subcategory",
-          foreignField: "_id",
-          as: "subcategory",
-        },
-      },
-      { $unwind: "$subcategory" },
-      {
-        $lookup: {
-          from: "semesters",
-          let: { courseId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$isArchived", false] },
-                    { $eq: ["$course", "$$courseId"] },
-                  ],
-                },
-              },
-            },
-          ],
-          as: "semester",
-        },
-      },
-      {
-        $lookup: {
-          from: "assessments",
-          let: { courseId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$course", "$$courseId"] },
-                    { $eq: ["$type", "final-assessment"] },
-                  ],
-                },
-              },
-            },
-            {
-              $project: {
-                _id: 1,
-                title: 1,
-                description: 1,
-              },
-            },
-          ],
-          as: "finalAssessments",
-        },
-      },
-      {
-        $project: {
-          courseTitle: 1,
-          courseDescription: 1,
-          language: 1,
-          thumbnail: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          teachingPoints: 1,
-          semester: 1,
-          quarter: 1,
-          requirements: 1,
-          createdby: {
-            _id: "$createdby._id",
-            firstName: "$createdby.firstName",
-            middleName: "$createdby.middleName",
-            lastName: "$createdby.lastName",
-            profileImg: "$createdby.profileImg",
-          },
-          category: {
-            _id: "$category._id",
-            title: "$category.title",
-          },
-          subcategory: {
-            _id: "$subcategory._id",
-            title: "$subcategory.title",
-          },
-          chapters: 1,
-          finalAssessments: 1,
-        },
-      },
-    ]);
-
-    if (!courseData || courseData.length === 0) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-
-    res.status(200).json({
-      message: "Course details fetched successfully",
-      course: courseData[0],
-    });
-  } catch (error) {
-    console.error("Error in courseDetails:", error);
-    res.status(500).json({ message: "Internal Server Error", error: error.message });
+  if (search) {
+    query.courseTitle = { $regex: search, $options: "i" };
   }
-};
 
+  const courses = await CourseSch.find(query, {
+    courseTitle: 1,
+    thumbnail: 1,
+    category: 1,
+    subcategory: 1,
+    createdby: 1,
+    language: 1,
+  })
+    .populate("createdby", "firstName lastName Bio profileImg isVarified")
+    .populate("category", "title")
+    .populate("subcategory", "title");
 
+  const filteredCourses = courses.filter(
+    (course) => course.createdby?.isVarified === true
+  );
 
+  res.status(200).json({
+    courses: filteredCourses,
+    message: filteredCourses.length === 0 ? "No courses found" : "Courses fetched successfully"
+  });
+});
 
+export const courseDetailsStdPre = asyncHandler(async (req, res) => {
+  const { courseId } = req.params;
 
-export const getunPurchasedCourseByIdStdPrew = async (req, res) => {
-  try {
-    const courseId = req.params.id;
-
-    const courseData = await CourseSch.aggregate([
-      {
-        $match: { _id: new mongoose.Types.ObjectId(courseId) },
-      },
-      {
-        $lookup: {
-          from: "categories",
-          localField: "category",
-          foreignField: "_id",
-          as: "category",
-          pipeline: [
-            { $project: { _id: 1, title: 1 } },
-          ],
-        },
-      },
-      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: "subcategories",
-          localField: "subcategory",
-          foreignField: "_id",
-          as: "subcategory",
-          pipeline: [
-            { $project: { _id: 1, title: 1 } },
-          ],
-        },
-      },
-      { $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: "semesters",
-          let: { courseId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$isArchived", false] },
-                    { $eq: ["$course", "$$courseId"] },
-                  ],
-                },
-              },
-            },
-          ],
-          as: "semester",
-        },
-      },
-      {
-        $lookup: {
-          from: "chapters",
-          localField: "_id",
-          foreignField: "course",
-          as: "chapters",
-        },
-      },
-      {
-        $lookup: {
-          from: "assessments",
-          let: { courseId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$course", "$$courseId"] },
-                    { $eq: ["$type", "Course-assessment"] },
-                  ],
-                },
-              },
-            },
-            {
-              $lookup: {
-                from: "assessmentcategories",
-                localField: "category",
-                foreignField: "_id",
-                as: "category",
-              },
-            },
-            {
-              $unwind: {
-                path: "$category",
-                preserveNullAndEmptyArrays: true,
-              },
-            },
-          ],
-          as: "CourseAssessments",
-        },
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "createdby",
-          foreignField: "_id",
-          as: "createdby",
-          pipeline: [
-            {
-              $project: {
-                firstName: 1,
-                middleName: 1,
-                lastName: 1,
-                profileImg: 1,
-                isVarified: 1,
-                email: 1,
-              },
-            },
-          ],
-        },
-      },
-      {
-        $unwind: {
-          path: "$createdby",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-    ]);
-
-
-    if (!courseData || courseData.length === 0) {
-      return res.status(404).json({ error: "Course not found" });
-    }
-
-    res.status(200).json({
-      course: courseData[0],
-      message: "Course fetched successfully",
-    });
-  } catch (error) {
-    console.error("Error in getunPurchasedCourseByIdStdPrew:", error);
-    res.status(500).json({ error: error.message });
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
   }
-};
 
-
-
-
-
-
-export const getunPurchasedCourseByIdSch = async (req, res) => {
-  try {
-    const courseId = req.params.id;
-
-    const courseData = await CourseSch.aggregate([
-      {
-        $match: { _id: new mongoose.Types.ObjectId(courseId) },
+  const courseData = await CourseSch.aggregate([
+    {
+      $match: { _id: new mongoose.Types.ObjectId(courseId) },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "createdby",
+        foreignField: "_id",
+        as: "createdby",
       },
-      {
-        $lookup: {
-          from: "chapters",
-          let: { courseId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ["$course", "$$courseId"] },
-              },
-            },
-            {
-              $lookup: {
-                from: "lessons",
-                let: { chapterId: "$_id" },
-                pipeline: [
-                  {
-                    $match: {
-                      $expr: { $eq: ["$chapter", "$$chapterId"] },
-                    },
-                  },
-                  {
-                    $project: {
-                      title: 1,
-                      description: 1,
-                      chapter: 1,
-                    },
-                  },
+    },
+    { $unwind: "$createdby" },
+    {
+      $lookup: {
+        from: "categories",
+        localField: "category",
+        foreignField: "_id",
+        as: "category",
+      },
+    },
+    { $unwind: "$category" },
+    {
+      $lookup: {
+        from: "subcategories",
+        localField: "subcategory",
+        foreignField: "_id",
+        as: "subcategory",
+      },
+    },
+    { $unwind: "$subcategory" },
+    {
+      $lookup: {
+        from: "semesters",
+        let: { courseId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$isArchived", false] },
+                  { $eq: ["$course", "$$courseId"] },
                 ],
-                as: "lessons",
               },
             },
-            {
-              $project: {
-                title: 1,
-                description: 1,
-                lessons: 1,
-              },
-            },
-          ],
-          as: "chapters",
-        },
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "createdby",
-          foreignField: "_id",
-          as: "createdby",
-        },
-      },
-      { $unwind: { path: "$createdby", preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: "categories",
-          localField: "category",
-          foreignField: "_id",
-          as: "category",
-        },
-      },
-      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          courseTitle: 1,
-          thumbnail: 1,
-          category: 1,
-          subcategory: 1,
-          createdby: {
-            firstName: 1,
-            middleName: 1,
-            lastName: 1,
-            Bio: 1,
-            profileImg: 1,
           },
-          language: 1,
-          courseDescription: 1,
-          teachingPoints: 1,
-          requirements: 1,
-          chapters: 1,
-          price: 1,
-          paymentType: 1,
-          freeTrialMonths: 1,
-        },
+        ],
+        as: "semester",
       },
-    ]);
+    },
+    {
+      $lookup: {
+        from: "assessments",
+        let: { courseId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$course", "$$courseId"] },
+                  { $eq: ["$type", "final-assessment"] },
+                ],
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+              title: 1,
+              description: 1,
+            },
+          },
+        ],
+        as: "finalAssessments",
+      },
+    },
+    {
+      $project: {
+        courseTitle: 1,
+        courseDescription: 1,
+        language: 1,
+        thumbnail: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        teachingPoints: 1,
+        semester: 1,
+        quarter: 1,
+        requirements: 1,
+        createdby: {
+          _id: "$createdby._id",
+          firstName: "$createdby.firstName",
+          middleName: "$createdby.middleName",
+          lastName: "$createdby.lastName",
+          profileImg: "$createdby.profileImg",
+        },
+        category: {
+          _id: "$category._id",
+          title: "$category.title",
+        },
+        subcategory: {
+          _id: "$subcategory._id",
+          title: "$subcategory.title",
+        },
+        chapters: 1,
+        finalAssessments: 1,
+      },
+    },
+  ]);
 
-    if (!courseData || courseData.length === 0) {
-      return res.status(404).json({ error: "Course not found" });
-    }
-
-    res
-      .status(200)
-      .json({ course: courseData[0], message: "Course fetched successfully" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+  if (!courseData || courseData.length === 0) {
+    throw new NotFoundError("Course not found");
   }
-};
 
-export const getCourseDetails = async (req, res) => {
+  res.status(200).json({
+    course: courseData[0],
+    message: "Course details fetched successfully"
+  });
+});
+
+
+
+
+
+export const getunPurchasedCourseByIdStdPrew = asyncHandler(async (req, res) => {
+  const courseId = req.params.id;
+
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
+  }
+
+  const courseData = await CourseSch.aggregate([
+    {
+      $match: { _id: new mongoose.Types.ObjectId(courseId) },
+    },
+    {
+      $lookup: {
+        from: "categories",
+        localField: "category",
+        foreignField: "_id",
+        as: "category",
+        pipeline: [
+          { $project: { _id: 1, title: 1 } },
+        ],
+      },
+    },
+    { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "subcategories",
+        localField: "subcategory",
+        foreignField: "_id",
+        as: "subcategory",
+        pipeline: [
+          { $project: { _id: 1, title: 1 } },
+        ],
+      },
+    },
+    { $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "semesters",
+        let: { courseId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$isArchived", false] },
+                  { $eq: ["$course", "$$courseId"] },
+                ],
+              },
+            },
+          },
+        ],
+        as: "semester",
+      },
+    },
+    {
+      $lookup: {
+        from: "chapters",
+        localField: "_id",
+        foreignField: "course",
+        as: "chapters",
+      },
+    },
+    {
+      $lookup: {
+        from: "assessments",
+        let: { courseId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$course", "$$courseId"] },
+                  { $eq: ["$type", "Course-assessment"] },
+                ],
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: "assessmentcategories",
+              localField: "category",
+              foreignField: "_id",
+              as: "category",
+            },
+          },
+          {
+            $unwind: {
+              path: "$category",
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+        ],
+        as: "CourseAssessments",
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "createdby",
+        foreignField: "_id",
+        as: "createdby",
+        pipeline: [
+          {
+            $project: {
+              firstName: 1,
+              middleName: 1,
+              lastName: 1,
+              profileImg: 1,
+              isVarified: 1,
+              email: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$createdby",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+  ]);
+
+  if (!courseData || courseData.length === 0) {
+    throw new NotFoundError("Course not found");
+  }
+
+  res.status(200).json({
+    course: courseData[0],
+    message: "Course fetched successfully"
+  });
+});
+
+
+
+
+
+
+export const getunPurchasedCourseByIdSch = asyncHandler(async (req, res) => {
+  const courseId = req.params.id;
+
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
+  }
+
+  const courseData = await CourseSch.aggregate([
+    {
+      $match: { _id: new mongoose.Types.ObjectId(courseId) },
+    },
+    {
+      $lookup: {
+        from: "chapters",
+        let: { courseId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$course", "$$courseId"] },
+            },
+          },
+          {
+            $lookup: {
+              from: "lessons",
+              let: { chapterId: "$_id" },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ["$chapter", "$$chapterId"] },
+                  },
+                },
+                {
+                  $project: {
+                    title: 1,
+                    description: 1,
+                    chapter: 1,
+                  },
+                },
+              ],
+              as: "lessons",
+            },
+          },
+          {
+            $project: {
+              title: 1,
+              description: 1,
+              lessons: 1,
+            },
+          },
+        ],
+        as: "chapters",
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "createdby",
+        foreignField: "_id",
+        as: "createdby",
+      },
+    },
+    { $unwind: { path: "$createdby", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "categories",
+        localField: "category",
+        foreignField: "_id",
+        as: "category",
+      },
+    },
+    { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        courseTitle: 1,
+        thumbnail: 1,
+        category: 1,
+        subcategory: 1,
+        createdby: {
+          firstName: 1,
+          middleName: 1,
+          lastName: 1,
+          Bio: 1,
+          profileImg: 1,
+        },
+        language: 1,
+        courseDescription: 1,
+        teachingPoints: 1,
+        requirements: 1,
+        chapters: 1,
+        price: 1,
+        paymentType: 1,
+        freeTrialMonths: 1,
+      },
+    },
+  ]);
+
+  if (!courseData || courseData.length === 0) {
+    throw new NotFoundError("Course not found");
+  }
+
+  res.status(200).json({ 
+    course: courseData[0], 
+    message: "Course fetched successfully" 
+  });
+});
+
+export const getCourseDetails = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
 
-  try {
-    const course = await CourseSch.aggregate([
-      {
-        $match: { _id: new mongoose.Types.ObjectId(courseId) },
-      },
-      {
-        $lookup: {
-          from: "categories",
-          localField: "category",
-          foreignField: "_id",
-          as: "category",
-          pipeline: [
-            {
-              $project: {
-                _id: 1,
-                title: 1,
-              },
-            },
-          ],
-        },
-      },
-      {
-        $unwind: {
-          path: "$category",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $lookup: {
-          from: "subcategories",
-          localField: "subcategory",
-          foreignField: "_id",
-          as: "subcategory",
-          pipeline: [
-            {
-              $project: {
-                _id: 1,
-                title: 1,
-              },
-            },
-          ],
-        },
-      },
-      {
-        $unwind: {
-          path: "$subcategory",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      // Get semester by matching courseId in semester's courses array
-      {
-        $lookup: {
-          from: "semesters",
-          let: { courseId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$isArchived", false] },
-                    { $eq: ["$course", "$$courseId"] },
-                  ],
-                },
-              },
-            },
-          ],
-          as: "semester",
-        },
-      },
-      {
-        $lookup: {
-          from: "assessments",
-          let: { courseId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$course", "$$courseId"] },
-                    { $eq: ["$type", "Course-assessment"] },
-                  ],
-                },
-              },
-            },
-            {
-              $lookup: {
-                from: "assessmentcategories",
-                localField: "category",
-                foreignField: "_id",
-                as: "category",
-              },
-            },
-            {
-              $unwind: {
-                path: "$category",
-                preserveNullAndEmptyArrays: true,
-              },
-            },
-          ],
-          as: "CourseAssessments",
-        },
-      },
-      {
-        $lookup: {
-          from: "enrollments",
-          let: { courseId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $eq: ["$course", "$$courseId"],
-                },
-              },
-            },
-          ],
-          as: "enrollments",
-        },
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "createdby",
-          foreignField: "_id",
-          as: "createdby",
-          pipeline: [
-            {
-              $project: {
-                firstName: 1,
-                middleName: 1,
-                lastName: 1,
-                profileImg: 1,
-                isVarified: 1,
-                email: 1,
-              },
-            },
-          ]
-        }
-      },
-      {
-        $unwind: {
-          path: "$createdby",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-    ]);
-
-    if (!course || course.length === 0) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-
-    res.status(200).json({
-      message: "Course fetched successfully",
-      course: course[0],
-    });
-  } catch (error) {
-    console.error("error in getCourseHierarchy", error);
-    res
-      .status(500)
-      .json({ message: "Internal Server Error", error: error.message });
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
   }
-};
-export const deleteCourseSch = async (req, res) => {
+
+  const course = await CourseSch.aggregate([
+    {
+      $match: { _id: new mongoose.Types.ObjectId(courseId) },
+    },
+    {
+      $lookup: {
+        from: "categories",
+        localField: "category",
+        foreignField: "_id",
+        as: "category",
+        pipeline: [
+          {
+            $project: {
+              _id: 1,
+              title: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$category",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "subcategories",
+        localField: "subcategory",
+        foreignField: "_id",
+        as: "subcategory",
+        pipeline: [
+          {
+            $project: {
+              _id: 1,
+              title: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$subcategory",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "semesters",
+        let: { courseId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$isArchived", false] },
+                  { $eq: ["$course", "$$courseId"] },
+                ],
+              },
+            },
+          },
+        ],
+        as: "semester",
+      },
+    },
+    {
+      $lookup: {
+        from: "assessments",
+        let: { courseId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$course", "$$courseId"] },
+                  { $eq: ["$type", "Course-assessment"] },
+                ],
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: "assessmentcategories",
+              localField: "category",
+              foreignField: "_id",
+              as: "category",
+            },
+          },
+          {
+            $unwind: {
+              path: "$category",
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+        ],
+        as: "CourseAssessments",
+      },
+    },
+    {
+      $lookup: {
+        from: "enrollments",
+        let: { courseId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: ["$course", "$$courseId"],
+              },
+            },
+          },
+        ],
+        as: "enrollments",
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "createdby",
+        foreignField: "_id",
+        as: "createdby",
+        pipeline: [
+          {
+            $project: {
+              firstName: 1,
+              middleName: 1,
+              lastName: 1,
+              profileImg: 1,
+              isVarified: 1,
+              email: 1,
+            },
+          },
+        ]
+      }
+    },
+    {
+      $unwind: {
+        path: "$createdby",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+  ]);
+
+  if (!course || course.length === 0) {
+    throw new NotFoundError("Course not found");
+  }
+
+  res.status(200).json({
+    message: "Course fetched successfully",
+    course: course[0]
+  });
+});
+export const deleteCourseSch = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
 
-  try {
-    const courseObjectId = new mongoose.Types.ObjectId(courseId);
-
-    // Delete the course
-    const deletedCourse = await CourseSch.findByIdAndDelete(courseObjectId);
-    if (!deletedCourse) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-
-    // Delete all comments related to the course
-    await Comment.deleteMany({ course: courseObjectId });
-
-    // Delete related chapters
-    const chapters = await Chapter.find({ course: courseObjectId });
-    const chapterIds = chapters.map((ch) => ch._id);
-
-    // Delete related lessons
-    const lessons = await Lesson.find({ chapter: { $in: chapterIds } });
-    const lessonIds = lessons.map((ls) => ls._id);
-
-    // Delete all related chapters and lessons
-    await Chapter.deleteMany({ _id: { $in: chapterIds } });
-    await Lesson.deleteMany({ _id: { $in: lessonIds } });
-
-    // Delete assessments related to the course, chapters, and lessons
-    await Assessment.deleteMany({
-      $or: [
-        { course: courseObjectId, type: "final-assessment" },
-        { chapter: { $in: chapterIds }, type: "chapter-assessment" },
-        { lesson: { $in: lessonIds }, type: "lesson-assessment" },
-      ],
-    });
-
-    // Delete announcements related to the course
-    await Announcement.deleteMany({ course: courseObjectId });
-
-    // Delete assessment categories related to the course
-    await AssessmentCategory.deleteMany({
-      course: courseObjectId,
-    });
-
-    // Delete enrollments related to the course
-    await Enrollment.deleteMany({ course: courseObjectId });
-
-    res.status(200).json({
-      message:
-        "Course and all related data, including comments, deleted successfully",
-    });
-  } catch (error) {
-    console.error("Error deleting course and related data:", error);
-    res
-      .status(500)
-      .json({ message: "Internal Server Error", error: error.message });
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
   }
-};
 
-export const getCoursesByTeacherSch = async (req, res) => {
+  const courseObjectId = new mongoose.Types.ObjectId(courseId);
+
+  const deletedCourse = await CourseSch.findByIdAndDelete(courseObjectId);
+
+  if (!deletedCourse) {
+    throw new NotFoundError("Course not found");
+  }
+
+  await Comment.deleteMany({ course: courseObjectId });
+
+  const chapters = await Chapter.find({ course: courseObjectId });
+  const chapterIds = chapters.map((ch) => ch._id);
+
+  const lessons = await Lesson.find({ chapter: { $in: chapterIds } });
+  const lessonIds = lessons.map((ls) => ls._id);
+
+  await Chapter.deleteMany({ _id: { $in: chapterIds } });
+  await Lesson.deleteMany({ _id: { $in: lessonIds } });
+
+  await Assessment.deleteMany({
+    $or: [
+      { course: courseObjectId, type: "final-assessment" },
+      { chapter: { $in: chapterIds }, type: "chapter-assessment" },
+      { lesson: { $in: lessonIds }, type: "lesson-assessment" },
+    ],
+  });
+
+  await Announcement.deleteMany({ course: courseObjectId });
+
+  await AssessmentCategory.deleteMany({
+    course: courseObjectId,
+  });
+
+  await Enrollment.deleteMany({ course: courseObjectId });
+
+  res.status(200).json({
+    deletedCourseId: courseId,
+    message: "Course and all related data, including comments, deleted successfully"
+  });
+});
+
+export const getCoursesByTeacherSch = asyncHandler(async (req, res) => {
   const teacherId = req.user._id;
   const search = req.query.search?.trim();
-  const published = req.query.published; // "true", "false", or undefined
-  const verified = req.query.isVerified; // "true", "false", or undefined
+  const published = req.query.published;
+  const verified = req.query.isVerified;
 
-  console.log(published, "published");
-  console.log(verified, "verified");
+  const query = {
+    createdby: teacherId,
+    isVerified: verified,
+  };
 
-  try {
-    // Construct filter based on teacherId
-    const query = {
-      createdby: teacherId,
-      isVerified: verified,
-    };
-
-    // Add search filter if provided
-    if (search) {
-      query["courseTitle"] = { $regex: search, $options: "i" }; // Case-insensitive
-    }
-
-    // Add published filter only if it's explicitly provided
-    if (published !== undefined) {
-      query["published"] = published === "true"; // Convert to boolean
-    }
-
-    // Find courses with filters
-    const courses = await CourseSch.find(query)
-      .sort({ createdAt: -1 })
-      .populate({
-        path: "createdby",
-        select: "firstName middleName lastName profileImg",
-      })
-      .populate({
-        path: "category",
-        select: "title",
-      });
-
-    if (!courses || courses.length === 0) {
-      return res
-        .status(200)
-        .json({ courses: [], message: "No courses found for this teacher" });
-    }
-
-    res.status(200).json({ courses, message: "Courses fetched successfully" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  if (search) {
+    query["courseTitle"] = { $regex: search, $options: "i" };
   }
-};
 
-export const getCoursesforadminofteacher = async (req, res) => {
+  if (published !== undefined) {
+    query["published"] = published === "true";
+  }
+
+  const courses = await CourseSch.find(query)
+    .sort({ createdAt: -1 })
+    .populate({
+      path: "createdby",
+      select: "firstName middleName lastName profileImg",
+    })
+    .populate({
+      path: "category",
+      select: "title",
+    });
+
+  res.status(200).json({ 
+    courses, 
+    message: courses.length === 0 ? "No courses found for this teacher" : "Courses fetched successfully" 
+  });
+});
+
+export const getCoursesforadminofteacher = asyncHandler(async (req, res) => {
   const teacherId = req.query.teacherId;
   const { search } = req.query;
 
-  console.log(teacherId, "teacherId");
-
-  try {
-    const query = {
-      $and: [
-        { createdby: teacherId },
-        search
-          ? { "basics.courseTitle": { $regex: search, $options: "i" } }
-          : {},
-      ],
-    };
-
-    const courses = await CourseSch.find(query)
-      .populate("createdby")
-      .populate("category");
-
-    if (!courses || courses.length === 0) {
-      return res
-        .status(200)
-        .json({ courses: [], message: "No courses found for this teacher" });
-    }
-
-    res.status(200).json({ courses, message: "Courses fetched successfully" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  if (!teacherId || !mongoose.Types.ObjectId.isValid(teacherId)) {
+    throw new ValidationError("Valid teacher ID is required");
   }
-};
 
-export const getallcoursesforteacher = async (req, res) => {
+  const query = {
+    $and: [
+      { createdby: teacherId },
+      search
+        ? { "basics.courseTitle": { $regex: search, $options: "i" } }
+        : {},
+    ],
+  };
+
+  const courses = await CourseSch.find(query)
+    .populate("createdby")
+    .populate("category");
+
+  res.status(200).json({ 
+    courses, 
+    message: courses.length === 0 ? "No courses found for this teacher" : "Courses fetched successfully" 
+  });
+});
+
+export const getallcoursesforteacher = asyncHandler(async (req, res) => {
   const teacherId = req.user._id;
 
-  try {
-    6
-    const studentsWithCourses = await Enrollment.aggregate([
-
-      // 1. Lookup course details
-      {
-        $lookup: {
-          from: "coursesches",
-          localField: "course",
-          foreignField: "_id",
-          as: "courseDetails",
-        },
+  const studentsWithCourses = await Enrollment.aggregate([
+    {
+      $lookup: {
+        from: "coursesches",
+        localField: "course",
+        foreignField: "_id",
+        as: "courseDetails",
       },
-      { $unwind: "$courseDetails" },
-      // 2. Match only courses that are created by teacher and isVerified: "approved"
-      {
-        $match: {
-          "courseDetails.createdby": new mongoose.Types.ObjectId(teacherId),
-          "courseDetails.isVerified": "approved",
-        },
+    },
+    { $unwind: "$courseDetails" },
+    {
+      $match: {
+        "courseDetails.createdby": new mongoose.Types.ObjectId(teacherId),
+        "courseDetails.isVerified": "approved",
       },
-      // 3. Lookup student details
-      {
-        $lookup: {
-          from: "users",
-          localField: "student",
-          foreignField: "_id",
-          as: "studentDetails",
-        },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "student",
+        foreignField: "_id",
+        as: "studentDetails",
       },
-      { $unwind: "$studentDetails" },
-      {
-        $match: {
-          "studentDetails._id": { $ne: new mongoose.Types.ObjectId(teacherId) },
-        },
+    },
+    { $unwind: "$studentDetails" },
+    {
+      $match: {
+        "studentDetails._id": { $ne: new mongoose.Types.ObjectId(teacherId) },
       },
-      // 4. Group by student
-      {
-        $group: {
-          _id: "$studentDetails._id",
-          firstName: { $first: "$studentDetails.firstName" },
-          middleName: { $first: "$studentDetails.middleName" },
-          lastName: { $first: "$studentDetails.lastName" },
-          Bio: { $first: "$studentDetails.Bio" },
-          profileImg: { $first: "$studentDetails.profileImg" },
-          gender: { $first: "$studentDetails.gender" },
-          email: { $first: "$studentDetails.email" },
-          createdAt: { $first: "$studentDetails.createdAt" },
-          courses: {
-            $push: {
-              _id: "$courseDetails._id",
-              courseTitle: "$courseDetails.courseTitle",
-              description: "$courseDetails.courseDescription",
-              thumbnail: "$courseDetails.thumbnail",
-              category: "$courseDetails.category",
-              subcategory: "$courseDetails.subcategory",
-            },
+    },
+    {
+      $group: {
+        _id: "$studentDetails._id",
+        firstName: { $first: "$studentDetails.firstName" },
+        middleName: { $first: "$studentDetails.middleName" },
+        lastName: { $first: "$studentDetails.lastName" },
+        Bio: { $first: "$studentDetails.Bio" },
+        profileImg: { $first: "$studentDetails.profileImg" },
+        gender: { $first: "$studentDetails.gender" },
+        email: { $first: "$studentDetails.email" },
+        createdAt: { $first: "$studentDetails.createdAt" },
+        courses: {
+          $push: {
+            _id: "$courseDetails._id",
+            courseTitle: "$courseDetails.courseTitle",
+            description: "$courseDetails.courseDescription",
+            thumbnail: "$courseDetails.thumbnail",
+            category: "$courseDetails.category",
+            subcategory: "$courseDetails.subcategory",
           },
         },
       },
-    ]);
+    },
+  ]);
 
-    return res.status(200).json({
-      students: studentsWithCourses,
-      message:
-        "Students with their teacher's approved courses fetched successfully",
-    });
-  } catch (error) {
-    console.error("Aggregation error:", error);
-    res.status(500).json({ error: error.message });
-  }
-};
+  res.status(200).json({
+    students: studentsWithCourses,
+    message: "Students with their teacher's approved courses fetched successfully"
+  });
+});
 
-export const getDueDate = async (req, res) => {
+export const getDueDate = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
-  try {
-    const course = await CourseSch.findById(courseId).select(
-      "startingDate endingDate"
-    );
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-    res.status(200).json({
-      startingDate: course.startingDate,
-      endingDate: course.endingDate,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
 
-export const thumnailChange = async (req, res) => {
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
+  }
+
+  const course = await CourseSch.findById(courseId).select(
+    "startingDate endingDate"
+  );
+
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
+
+  res.status(200).json({
+    startingDate: course.startingDate,
+    endingDate: course.endingDate
+  });
+});
+
+export const thumnailChange = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
   const thumbnail = req.file;
 
-  try {
-    const course = await CourseSch.findById(courseId);
-
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-
-    if (thumbnail) {
-      const result = await uploadToCloudinary(
-        thumbnail.buffer,
-        "course_thumbnails"
-      );
-      course.thumbnail = {
-        url: result.secure_url,
-        publicId: result.public_id,
-        filename: thumbnail.originalname, // use original filename as alt text
-      };
-
-      course.save();
-    }
-    res.status(200).json({ message: "Thumbnail updated successfully" });
-  } catch (error) {
-    console.log("error in thumnail change", error);
-    res.status(500).json({ message: "Something went wrong" });
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
   }
-};
 
-export const getCourseBasics = async (req, res) => {
+  if (!thumbnail) {
+    throw new ValidationError("Thumbnail file is required");
+  }
+
+  const course = await CourseSch.findById(courseId);
+
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
+
+  const result = await uploadToCloudinary(
+    thumbnail.buffer,
+    "course_thumbnails"
+  );
+
+  course.thumbnail = {
+    url: result.secure_url,
+    publicId: result.public_id,
+    filename: thumbnail.originalname,
+  };
+
+  await course.save();
+
+  res.status(200).json({
+    thumbnail: course.thumbnail,
+    message: "Thumbnail updated successfully"
+  });
+});
+
+export const getCourseBasics = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
-  try {
-    const course = await CourseSch.findById(courseId);
 
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-
-    // console.log(course, "course");
-
-    res.status(200).json({
-      message: "Course found successfully",
-      course,
-    });
-  } catch (error) {
-    console.log("error in getting course basics", error);
-    res.status(500).json({ message: "Internal Server Error" });
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
   }
-};
 
-export const editCourseInfo = async (req, res) => {
+  const course = await CourseSch.findById(courseId);
+
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
+
+  res.status(200).json({
+    message: "Course found successfully",
+    course
+  });
+});
+
+export const editCourseInfo = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
   const {
     courseTitle,
@@ -1455,64 +1383,78 @@ export const editCourseInfo = async (req, res) => {
     courseDescription,
   } = req.body;
 
-  try {
-    const course = await CourseSch.findById(courseId);
-
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-
-    const parsedTeachingPoints = JSON.parse(teachingPoints);
-    const parsedRequirements = JSON.parse(requirements);
-
-    course.courseTitle = courseTitle;
-    course.category = category;
-    course.price = price;
-    course.subcategory = subcategory;
-    course.language = language;
-    course.teachingPoints = parsedTeachingPoints;
-    course.requirements = parsedRequirements;
-    course.courseDescription = courseDescription;
-
-    course.save();
-
-    res.status(200).json({ message: "Course updated successfully" });
-  } catch (error) {
-    console.error("Error updating course:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
   }
-};
 
-export const verifyCourse = async (req, res) => {
+  if (!courseTitle) {
+    throw new ValidationError("Course title is required");
+  }
+
+  const course = await CourseSch.findById(courseId);
+
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
+
+  let parsedTeachingPoints = [];
+  let parsedRequirements = [];
+
+  if (teachingPoints) {
+    try {
+      parsedTeachingPoints = JSON.parse(teachingPoints);
+    } catch (error) {
+      throw new ValidationError("Invalid teaching points format");
+    }
+  }
+
+  if (requirements) {
+    try {
+      parsedRequirements = JSON.parse(requirements);
+    } catch (error) {
+      throw new ValidationError("Invalid requirements format");
+    }
+  }
+
+  course.courseTitle = courseTitle;
+  course.category = category;
+  course.price = price;
+  course.subcategory = subcategory;
+  course.language = language;
+  course.teachingPoints = parsedTeachingPoints;
+  course.requirements = parsedRequirements;
+  course.courseDescription = courseDescription;
+
+  await course.save();
+
+  res.status(200).json({ message: "Course updated successfully" });
+});
+
+export const verifyCourse = asyncHandler(async (req, res) => {
   const { isVerified } = req.body;
   const { courseId } = req.params;
 
-  if (!["approved", "rejected", "pending"].includes(isVerified)) {
-    return res.status(400).json({
-      message: "Invalid verification status. Must be 'approved', 'rejected', or 'pending'.",
-    });
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
   }
 
-  try {
-    const course = await CourseSch.findById(
-      courseId,
-    ).populate("createdby");
+  if (!isVerified || !["approved", "rejected", "pending"].includes(isVerified)) {
+    throw new ValidationError("Invalid verification status. Must be 'approved', 'rejected', or 'pending'.");
+  }
 
-    if (!course) {
-      return res.status(404).json({ message: "Course not found." });
-    }
+  const course = await CourseSch.findById(courseId).populate("createdby");
 
-    console.log(isVerified, "isVerified")
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
 
-    course.isVerified = isVerified;
-    course.isAppliedReverified = {
-      status: false,
-      request: null,
-    };
+  course.isVerified = isVerified;
+  course.isAppliedReverified = {
+    status: false,
+    request: null,
+  };
 
-    console.log(course, "course");
-
-    await course.save();
+  await course.save();
 
     const teacherEmail = course.createdby?.email;
     const teacherName = course.createdby?.firstName || "Instructor";
@@ -1627,58 +1569,59 @@ export const verifyCourse = async (req, res) => {
           ? "Course rejected successfully."
           : "Course verification status updated.";
 
-    return res.status(200).json({ message });
-  } catch (error) {
-    console.error("Error verifying course:", error);
-    return res.status(500).json({ message: "Internal Server Error." });
-  }
-};
+  res.status(200).json({
+    courseId: course._id,
+    isVerified: course.isVerified,
+    message
+  });
+});
 
-
-export const rejectCourse = async (req, res) => {
+export const rejectCourse = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
   const { remark } = req.body;
 
-  try {
-    const course = await CourseSch.findByIdAndUpdate(
-      courseId,
-      { isVerified: "rejected", remarks: remark },
-      { new: true }
-    ).populate("createdby");
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
+  }
 
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
+  const course = await CourseSch.findByIdAndUpdate(
+    courseId,
+    { isVerified: "rejected", remarks: remark },
+    { new: true }
+  ).populate("createdby");
 
-    course.isAppliedReverified = {
-      status: false,
-      request: null,
-    };
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
 
-    await course.save();
+  course.isAppliedReverified = {
+    status: false,
+    request: null,
+  };
 
-    const teacherEmail = course.createdby?.email;
-    const teacherName = course.createdby?.firstName || "Instructor";
-    const courseTitle = course.courseTitle;
+  await course.save();
 
-    // Send rejection email
-    if (teacherEmail) {
-      const transporter = nodemailer.createTransport({
-        host: process.env.MAIL_HOST,
-        port: Number(process.env.MAIL_PORT),
-        secure: Number(process.env.MAIL_PORT) === 465,
-        auth: {
-          user: process.env.MAIL_USER,
-          pass: process.env.MAIL_PASS,
-        },
-      });
+  const teacherEmail = course.createdby?.email;
+  const teacherName = course.createdby?.firstName || "Instructor";
+  const courseTitle = course.courseTitle;
 
-      try {
-        await transporter.sendMail({
-          from: `"Admin Team" <${process.env.MAIL_USER}>`,
-          to: teacherEmail,
-          subject: "Your Course Has Been Rejected ❌",
-          html: `
+  if (teacherEmail) {
+    const transporter = nodemailer.createTransport({
+      host: process.env.MAIL_HOST,
+      port: Number(process.env.MAIL_PORT),
+      secure: Number(process.env.MAIL_PORT) === 465,
+      auth: {
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
+      },
+    });
+
+    try {
+      await transporter.sendMail({
+        from: `"Admin Team" <${process.env.MAIL_USER}>`,
+        to: teacherEmail,
+        subject: "Your Course Has Been Rejected ❌",
+        html: `
   <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
     <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
       
@@ -1700,9 +1643,9 @@ export const rejectCourse = async (req, res) => {
         <p style="font-size: 16px;">Your course titled <strong>"${courseTitle}"</strong> has been <strong>rejected</strong> after review.</p>
         
         ${remark
-              ? `<p style="font-size: 16px; color: #b71c1c;"><strong>Reason:</strong> ${remark}</p>`
-              : `<p style="font-size: 16px;">No specific remarks were provided.</p>`
-            }
+            ? `<p style="font-size: 16px; color: #b71c1c;"><strong>Reason:</strong> ${remark}</p>`
+            : `<p style="font-size: 16px;">No specific remarks were provided.</p>`
+          }
 
         <p style="font-size: 16px;">You may revise and resubmit your course after making the required changes.</p>
         <p style="font-size: 16px; margin-top: 15px;">If you have any questions, feel free to contact our support team.</p>
@@ -1716,514 +1659,484 @@ export const rejectCourse = async (req, res) => {
     </div>
   </div>
   `,
-        });
-
-      } catch (emailError) {
-        console.error("Error sending rejection email:", emailError);
-      }
+      });
+    } catch (emailError) {
+      console.error("Error sending rejection email:", emailError);
     }
-
-    res.status(200).json({ message: "Course rejected successfully" });
-  } catch (error) {
-    console.error("Error rejecting course:", error);
-    res.status(500).json({ message: "Internal Server Error" });
   }
-};
+
+  res.status(200).json({
+    courseId: course._id,
+    isVerified: course.isVerified,
+    remarks: course.remarks,
+    message: "Course rejected successfully"
+  });
+});
 
 
-export const applyCourseReverification = async (req, res) => {
+export const applyCourseReverification = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
   const { request } = req.body;
 
-  try {
-    const course = await CourseSch.findById(courseId);
-
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-
-    course.isAppliedReverified = {
-      status: true,
-      request: request || null,
-    };
-
-    course.isVerified = "pending";
-
-    await course.save();
-
-    res.status(200).json({
-      message: "Course re-verification request applied successfully",
-      isAppliedReverified: course.isAppliedReverified,
-    });
-  } catch (error) {
-    console.error("Error applying course re-verification:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
   }
-};
 
-export const teacherCourseForDesboard = async (req, res) => {
+  const course = await CourseSch.findById(courseId);
+
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
+
+  course.isAppliedReverified = {
+    status: true,
+    request: request || null,
+  };
+
+  course.isVerified = "pending";
+
+  await course.save();
+
+  res.status(200).json({
+    courseId: course._id,
+    isAppliedReverified: course.isAppliedReverified,
+    isVerified: course.isVerified,
+    message: "Course re-verification request applied successfully"
+  });
+});
+
+export const teacherCourseForDesboard = asyncHandler(async (req, res) => {
   const teacherId = req.user._id;
 
-  try {
-    // Count published courses
-    // Get the 5 most recently created published courses
-    const recentPublishedCourses = await CourseSch.find({
-      createdby: teacherId,
-      published: true,
-      isVerified: "approved",
-    })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .select("courseTitle thumbnail category courseDescription createdAt");
+  // Get the 5 most recently created published courses
+  const recentPublishedCourses = await CourseSch.find({
+    createdby: teacherId,
+    published: true,
+    isVerified: "approved",
+  })
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .select("courseTitle thumbnail category courseDescription createdAt");
 
-    const publishedCount = await CourseSch.countDocuments({
-      createdby: teacherId,
-      isVerified: "approved",
-    });
+  const publishedCount = await CourseSch.countDocuments({
+    createdby: teacherId,
+    isVerified: "approved",
+  });
 
-    // Count unpublished courses
-    const unpublishedCount = await CourseSch.countDocuments({
-      createdby: teacherId,
-      published: false,
-    });
+  const unpublishedCount = await CourseSch.countDocuments({
+    createdby: teacherId,
+    published: false,
+  });
 
-    const approvedCount = await CourseSch.countDocuments({
-      createdby: teacherId,
-      isVerified: "approved",
-    });
+  const approvedCount = await CourseSch.countDocuments({
+    createdby: teacherId,
+    isVerified: "approved",
+  });
 
-    const pendingCount = await CourseSch.countDocuments({
-      createdby: teacherId,
-      isVerified: "pending",
-    });
-    const rejectedCount = await CourseSch.countDocuments({
-      createdby: teacherId,
-      isVerified: "rejected",
-    });
+  const pendingCount = await CourseSch.countDocuments({
+    createdby: teacherId,
+    isVerified: "pending",
+  });
 
-    // Count total courses
-    const totalCount = await CourseSch.countDocuments({
-      createdby: teacherId,
-    });
+  const rejectedCount = await CourseSch.countDocuments({
+    createdby: teacherId,
+    isVerified: "rejected",
+  });
 
-    res.status(200).json({
-      published: recentPublishedCourses,
-      unpublished: unpublishedCount,
-      publishedCount: publishedCount,
-      approved: approvedCount,
-      pending: pendingCount,
-      rejected: rejectedCount,
-      total: totalCount,
-      message: "Course counts fetched successfully",
-    });
-  } catch (error) {
-    console.error("Error fetching teacher's course counts:", error);
-    res.status(500).json({ error: error.message });
-  }
-};
+  const totalCount = await CourseSch.countDocuments({
+    createdby: teacherId,
+  });
 
-export const archivedCourse = async (req, res) => {
+  res.status(200).json({
+    published: recentPublishedCourses,
+    unpublished: unpublishedCount,
+    publishedCount: publishedCount,
+    approved: approvedCount,
+    pending: pendingCount,
+    rejected: rejectedCount,
+    total: totalCount,
+    message: "Course counts fetched successfully"
+  });
+});
+
+export const archivedCourse = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
 
-  try {
-    // Fetch the course first
-    const course = await CourseSch.findById(courseId);
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-
-    course.published = !course.published;
-    course.archivedDate = new Date();
-    await course.save();
-
-    res.status(200).json({
-      message: "Course updated successfully",
-      published: course.published,
-      archivedDate: course.archivedDate,
-    });
-  } catch (error) {
-    console.error("Error updating course:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+  if (!mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Invalid course ID format");
   }
-};
+
+  const course = await CourseSch.findById(courseId);
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
+
+  course.published = !course.published;
+  course.archivedDate = course.published ? null : new Date();
+  await course.save();
+
+  res.status(200).json({
+    course,
+    message: course.published
+      ? "Course published successfully"
+      : "Course archived successfully"
+  });
+});
 
 ///for teacher only
-export const getVerifiedCourses = async (req, res) => {
+export const getVerifiedCourses = asyncHandler(async (req, res) => {
   const teacherId = req.user._id;
-  try {
-    const courses = await CourseSch.find({
-      createdby: teacherId,
-      published: true,
-      isVerified: "approved",
-    }).select("courseTitle thumbnail");
 
-    if (!courses || courses.length === 0) {
-      return res.status(200).json({ courses: [], message: "No courses found" });
-    }
+  const courses = await CourseSch.find({
+    createdby: teacherId,
+    published: true,
+    isVerified: "approved",
+  }).select("courseTitle thumbnail");
 
-    res.status(200).json({ courses, message: "Courses fetched successfully" });
-  } catch (error) {
-    console.error("Error fetching courses for announcement:", error);
-    res
-      .status(500)
-      .json({ message: "Internal Server Error", error: error.message });
-  }
-};
+  res.status(200).json({
+    courses,
+    message: courses.length > 0 ? "Courses fetched successfully" : "No courses found"
+  });
+});
 
-export const getCoursesforAdmin = async (req, res) => {
-  try {
-    // Count published courses
-    // Get the 5 most recently created published courses
-    const recentPublishedCourses = await CourseSch.find({
-      published: true,
-      isVerified: "approved",
-    })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .select("courseTitle thumbnail category courseDescription createdAt");
+export const getCoursesforAdmin = asyncHandler(async (req, res) => {
+  const recentPublishedCourses = await CourseSch.find({
+    published: true,
+    isVerified: "approved",
+  })
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .select("courseTitle thumbnail category courseDescription createdAt");
 
-    const publishedCount = await CourseSch.countDocuments({
-      isVerified: "approved",
-    });
+  const publishedCount = await CourseSch.countDocuments({
+    isVerified: "approved",
+  });
 
-    // Count unpublished courses
-    const unpublishedCount = await CourseSch.countDocuments({
-      published: false,
-    });
+  const unpublishedCount = await CourseSch.countDocuments({
+    published: false,
+  });
 
-    const approvedCount = await CourseSch.countDocuments({
-      isVerified: "approved",
-    });
+  const approvedCount = await CourseSch.countDocuments({
+    isVerified: "approved",
+  });
 
-    const pendingCount = await CourseSch.countDocuments({
-      isVerified: "pending",
-    });
-    const rejectedCount = await CourseSch.countDocuments({
-      isVerified: "rejected",
-    });
+  const pendingCount = await CourseSch.countDocuments({
+    isVerified: "pending",
+  });
 
-    // Count total courses
-    const totalCount = await CourseSch.countDocuments({});
+  const rejectedCount = await CourseSch.countDocuments({
+    isVerified: "rejected",
+  });
 
-    res.status(200).json({
-      published: recentPublishedCourses,
-      unpublished: unpublishedCount,
-      publishedCount: publishedCount,
-      approved: approvedCount,
-      pending: pendingCount,
-      rejected: rejectedCount,
-      total: totalCount,
-      message: "Course counts fetched successfully",
-    });
-  } catch (error) {
-    console.error("Error fetching admin's course counts:", error);
-    res.status(500).json({ error: error.message });
-  }
-};
+  const totalCount = await CourseSch.countDocuments({});
+
+  res.status(200).json({
+    published: recentPublishedCourses,
+    unpublished: unpublishedCount,
+    publishedCount: publishedCount,
+    approved: approvedCount,
+    pending: pendingCount,
+    rejected: rejectedCount,
+    total: totalCount,
+    message: "Course counts fetched successfully"
+  });
+});
 
 
-export const getRequiredDocumentforEdit = async (req, res) => {
+export const getRequiredDocumentforEdit = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
 
-  try {
-    const course = await CourseSch.findById(courseId);
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-
-    const { documents, courseType } = course;
-    res.status(200).json({
-      documents,
-      courseType,
-      message: "Required documents fetched successfully",
-    });
-
-  } catch (error) {
-    console.log("Error in getRequiredDocumentforEdit", error);
-    res.status(500).json({ message: "Internal Server Error" });
+  if (!mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Invalid course ID format");
   }
-}
 
-export const editCoureDocument = async (req, res) => {
+  const course = await CourseSch.findById(courseId);
+  
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
+
+  res.status(200).json({
+    documents: course.documents,
+    courseType: course.courseType,
+    message: "Required documents fetched successfully"
+  });
+});
+
+export const editCoureDocument = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Invalid course ID format");
+  }
+
+  const course = await CourseSch.findById(courseId);
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
+
   const files = req.files;
+  const currentDocuments = course.documents || {};
+  const updatedDocuments = { ...currentDocuments };
 
-  try {
-    const course = await CourseSch.findById(courseId);
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
+  for (const field in files) {
+    const file = files[field]?.[0];
+    if (file) {
+      const uploadResult = await uploadToCloudinary(file.buffer, "course_documents");
+
+      updatedDocuments[field] = {
+        url: uploadResult.secure_url,
+        publicId: uploadResult.public_id,
+        filename: file.originalname,
+      };
     }
-
-    // Get the current full documents object from DB
-    const currentDocuments = course.documents || {};
-    const updatedDocuments = { ...currentDocuments };
-
-    for (const field in files) {
-      const file = files[field]?.[0];
-      if (file) {
-        // Optional: delete old file from cloudinary
-        if (updatedDocuments[field]?.publicId) {
-          // await deleteFromCloudinary(updatedDocuments[field].publicId);
-        }
-
-        const uploadResult = await uploadToCloudinary(file.buffer, "course_documents");
-
-        updatedDocuments[field] = {
-          url: uploadResult.secure_url,
-          publicId: uploadResult.public_id,
-          filename: file.originalname,
-        };
-      }
-    }
-
-    if (updatedDocuments.resume) {
-      course.documents.resume = updatedDocuments.resume;
-    }
-    if (updatedDocuments.certificate) {
-      course.documents.certificate = updatedDocuments.certificate;
-    }
-    if (updatedDocuments.governmentId) {
-      course.documents.governmentId = updatedDocuments.governmentId;
-    }
-    if (updatedDocuments.transcript) {
-      course.documents.transcript = updatedDocuments.transcript;
-    }
-
-    await course.save();
-    res.status(200).json({ message: "Course documents updated successfully" });
-  } catch (error) {
-    console.error("Error in editCoureDocument", error.message);
-    res.status(500).json({ message: error.message || "Internal Server Error" });
   }
-};
+
+  if (updatedDocuments.resume) {
+    course.documents.resume = updatedDocuments.resume;
+  }
+  if (updatedDocuments.certificate) {
+    course.documents.certificate = updatedDocuments.certificate;
+  }
+  if (updatedDocuments.governmentId) {
+    course.documents.governmentId = updatedDocuments.governmentId;
+  }
+  if (updatedDocuments.transcript) {
+    course.documents.transcript = updatedDocuments.transcript;
+  }
+
+  await course.save();
+
+  res.status(200).json({
+    course,
+    message: "Course documents updated successfully"
+  });
+});
 
 
-export const getCourseEnrollmentStats = async (req, res) => {
+export const getCourseEnrollmentStats = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
   const { range } = req.query;
-  console.log(range, "this is the range");
 
-  try {
-    let startDate = null;
-    const now = new Date();
+  if (!courseId) {
+    throw new ValidationError("Course ID is required");
+  }
 
-    // Calculate the date offset
-    if (range === '7d') {
-      startDate = new Date();
-      startDate.setDate(now.getDate() - 7);
-    } else if (range === '30d') {
-      startDate = new Date();
-      startDate.setMonth(now.getMonth() - 1);
-    } else if (range === '6m') {
-      startDate = new Date();
-      startDate.setMonth(now.getMonth() - 6);
+  if (!mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Invalid course ID format");
+  }
+
+  let startDate = null;
+  const now = new Date();
+
+  // Calculate the date offset
+  if (range === '7d') {
+    startDate = new Date();
+    startDate.setDate(now.getDate() - 7);
+  } else if (range === '30d') {
+    startDate = new Date();
+    startDate.setMonth(now.getMonth() - 1);
+  } else if (range === '6m') {
+    startDate = new Date();
+    startDate.setMonth(now.getMonth() - 6);
+  }
+
+  const matchStage = {
+    course: new mongoose.Types.ObjectId(courseId)
+  };
+
+  if (startDate) {
+    matchStage.createdAt = { $gte: startDate };
+  }
+
+  const stats = await Enrollment.aggregate([
+    { $match: matchStage },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { "_id": 1 } },
+    {
+      $project: {
+        _id: 0,
+        date: "$_id",
+        students: "$count"
+      }
     }
+  ]);
 
-    const matchStage = {
-      course: new mongoose.Types.ObjectId(courseId)
-    };
+  res.status(200).json({
+    stats: stats || [],
+    message: "Enrollment statistics fetched successfully"
+  });
+});
 
-    if (startDate) {
-      matchStage.createdAt = { $gte: startDate };
+
+export const getUserCoursesforFilter = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const role = req.user.role;
+  const search = req.query.search || "";
+
+  const searchFilter = search
+    ? {
+      courseTitle: { $regex: search, $options: "i" },
     }
+    : {};
 
-    const stats = await Enrollment.aggregate([
-      { $match: matchStage },
+  let courses = [];
+
+  // ============================
+  // ✅ TEACHER COURSES
+  // ============================
+  if (role === "teacher") {
+    courses = await CourseSch.aggregate([
       {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          count: { $sum: 1 }
-        }
+        $match: {
+          isVerified: "approved",
+          createdby: new mongoose.Types.ObjectId(userId),
+          ...searchFilter
+
+        },
       },
-      { $sort: { "_id": 1 } },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "category",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      {
+        $lookup: {
+          from: "subcategories",
+          localField: "subcategory",
+          foreignField: "_id",
+          as: "subcategory",
+        },
+      },
+      {
+        $unwind: { path: "$category", preserveNullAndEmptyArrays: true },
+      },
+      {
+        $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true },
+      },
       {
         $project: {
-          _id: 0,
-          date: "$_id",
-          students: "$count"
-        }
-      }
+          courseTitle: 1,
+          courseCode: 1,
+          language: 1,
+          published: 1,
+          gradingSystem: 1,
+          thumbnail: 1,
+          createdAt: 1,
+          category: {
+            _id: "$category._id",
+            name: "$category.name",
+          },
+          subcategory: {
+            _id: "$subcategory._id",
+            name: "$subcategory.name",
+          },
+        },
+      },
+      {
+        $sort: {
+          published: -1,
+          createdAt: -1,
+        },
+      },
     ]);
-
-    // Ensure we always return an array
-    res.status(200).json({
-      success: true,
-      data: stats || []
-    });
-  } catch (error) {
-    console.error("Stats Error:", error);
-    res.status(500).json({ success: false, message: "Error fetching stats", error: error.message });
   }
-};
 
-
-export const getUserCoursesforFilter = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const role = req.user.role;
-    const search = req.query.search || "";
-
-    const searchFilter = search
-      ? {
-        courseTitle: { $regex: search, $options: "i" },
-      }
-      : {};
-
-    let courses = [];
-
-    // ============================
-    // ✅ TEACHER COURSES
-    // ============================
-    if (role === "teacher") {
-      courses = await CourseSch.aggregate([
-        {
-          $match: {
-            isVerified: "approved",
-            createdby: new mongoose.Types.ObjectId(userId),
-            ...searchFilter
-
-          },
+  if (role === "student") {
+    courses = await Enrollment.aggregate([
+      {
+        $match: {
+          student: new mongoose.Types.ObjectId(userId),
         },
-        {
-          $lookup: {
-            from: "categories",
-            localField: "category",
-            foreignField: "_id",
-            as: "category",
-          },
+      },
+      {
+        $lookup: {
+          from: "coursesches",
+          localField: "course",
+          foreignField: "_id",
+          as: "course",
         },
-        {
-          $lookup: {
-            from: "subcategories",
-            localField: "subcategory",
-            foreignField: "_id",
-            as: "subcategory",
-          },
-        },
-        {
-          $unwind: { path: "$category", preserveNullAndEmptyArrays: true },
-        },
-        {
-          $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true },
-        },
-        {
-          $project: {
-            courseTitle: 1,
-            courseCode: 1,
-            language: 1,
-            published: 1,
-            gradingSystem: 1,
-            thumbnail: 1,
-            createdAt: 1,
-            category: {
-              _id: "$category._id",
-              name: "$category.name",
+      },
+      {
+        $unwind: "$course",
+      },
+
+      // 🔍 Search filter here
+      {
+        $match: search
+          ? {
+            "course.courseTitle": {
+              $regex: search,
+              $options: "i",
             },
-            subcategory: {
-              _id: "$subcategory._id",
-              name: "$subcategory.name",
-            },
-          },
-        },
-        {
-          $sort: {
-            published: -1,
-            createdAt: -1,
-          },
-        },
-      ]);
-    }
+          }
+          : {},
+      },
 
-    if (role === "student") {
-      courses = await Enrollment.aggregate([
-        {
-          $match: {
-            student: new mongoose.Types.ObjectId(userId),
-          },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "course.category",
+          foreignField: "_id",
+          as: "category",
         },
-        {
-          $lookup: {
-            from: "coursesches",
-            localField: "course",
-            foreignField: "_id",
-            as: "course",
-          },
+      },
+      {
+        $lookup: {
+          from: "subcategories",
+          localField: "course.subcategory",
+          foreignField: "_id",
+          as: "subcategory",
         },
-        {
-          $unwind: "$course",
-        },
+      },
+      {
+        $unwind: { path: "$category", preserveNullAndEmptyArrays: true },
+      },
+      {
+        $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true },
+      },
+      {
+        $project: {
+          _id: "$course._id",
+          courseTitle: "$course.courseTitle",
+          language: "$course.language",
+          published: "$course.published",
+          gradingSystem: "$course.gradingSystem",
+          thumbnail: "$course.thumbnail",
+          createdAt: "$course.createdAt",
 
-        // 🔍 Search filter here
-        {
-          $match: search
-            ? {
-              "course.courseTitle": {
-                $regex: search,
-                $options: "i",
-              },
-            }
-            : {},
-        },
+          progress: 1,
+          completed: 1,
 
-        {
-          $lookup: {
-            from: "categories",
-            localField: "course.category",
-            foreignField: "_id",
-            as: "category",
+          category: {
+            _id: "$category._id",
+            name: "$category.name",
+          },
+          subcategory: {
+            _id: "$subcategory._id",
+            name: "$subcategory.name",
           },
         },
-        {
-          $lookup: {
-            from: "subcategories",
-            localField: "course.subcategory",
-            foreignField: "_id",
-            as: "subcategory",
-          },
+      },
+      {
+        $sort: {
+          createdAt: -1,
         },
-        {
-          $unwind: { path: "$category", preserveNullAndEmptyArrays: true },
-        },
-        {
-          $unwind: { path: "$subcategory", preserveNullAndEmptyArrays: true },
-        },
-        {
-          $project: {
-            _id: "$course._id",
-            courseTitle: "$course.courseTitle",
-            language: "$course.language",
-            published: "$course.published",
-            gradingSystem: "$course.gradingSystem",
-            thumbnail: "$course.thumbnail",
-            createdAt: "$course.createdAt",
-
-            progress: 1,
-            completed: 1,
-
-            category: {
-              _id: "$category._id",
-              name: "$category.name",
-            },
-            subcategory: {
-              _id: "$subcategory._id",
-              name: "$subcategory.name",
-            },
-          },
-        },
-        {
-          $sort: {
-            createdAt: -1,
-          },
-        },
-      ]);
-    }
-
-    return res.status(200).json({
-      totalCourses: courses.length,
-      courses,
-    });
-  } catch (error) {
-    console.error("Error fetching user courses:", error);
-    res.status(500).json({ message: "Server error" });
+      },
+    ]);
   }
-};
+
+  res.status(200).json({
+    totalCourses: courses.length,
+    courses,
+    message: "User courses fetched successfully"
+  });
+});

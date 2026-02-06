@@ -1,15 +1,16 @@
 import Meeting from "../Models/Meeting";
 import { generateJitsiToken } from "../Utiles/jwtToken";
+import { NotFoundError } from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
 
-export const joinMeeting = async (req, res) => {
-  try {
-    const { meetingId } = req.params;
-    const user = req.user; // From your 'protect' middleware
+export const joinMeeting = asyncHandler(async (req, res) => {
+  const { meetingId } = req.params;
+  const user = req.user; // From your 'protect' middleware
 
-    // 1. Find the meeting and populate course info
-    const meeting = await Meeting.findById(meetingId);
-    if (!meeting) return res.status(404).json({ message: "Meeting not found" });
+  // 1. Find the meeting and populate course info
+  const meeting = await Meeting.findById(meetingId);
+  if (!meeting) throw new NotFoundError("Meeting not found", "MEET_001");
 
     // 2. CHECK AUTHORIZATION
     // If user is Admin, let them in.
@@ -30,14 +31,11 @@ export const joinMeeting = async (req, res) => {
     // 3. Generate Jitsi Token
     const token = generateJitsiToken(user, meeting.roomName, isTeacher);
 
-    // 4. Return the token and room details to React
-    res.json({
-      token,
-      roomName: meeting.roomName,
-      domain: "meet.your-lms-domain.com" // This will be your self-hosted Jitsi domain
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+  // 4. Return the token and room details to React
+  return res.json({
+    token,
+    roomName: meeting.roomName,
+    domain: "meet.your-lms-domain.com", // This will be your self-hosted Jitsi domain
+    message: "Meeting joined successfully"
+  });
+});

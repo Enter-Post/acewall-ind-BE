@@ -4,17 +4,23 @@ import Message from "../Models/messages.model.js";
 import { connect } from "mongoose";
 import Enrollment from "../Models/Enrollement.model.js";
 import CourseSch from "../Models/courses.model.sch.js";
+import {
+  ValidationError,
+  NotFoundError,
+  AuthenticationError,
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
-export const createConversation = async (req, res) => {
+export const createConversation = asyncHandler(async (req, res) => {
   const myId = req.user._id;
   const memeberId = req.body.memberId;
 
-  try {
-    if (memeberId === myId) {
-      return res
-        .status(400)
-        .json({ message: "You can't create conversation with yourself" });
-    }
+  if (memeberId === myId) {
+    throw new ValidationError(
+      "You can't create conversation with yourself",
+      "CONV_001"
+    );
+  }
 
     const existingConversation = await Conversation.findOne({
       members: { $all: [myId, memeberId] },
@@ -27,27 +33,23 @@ export const createConversation = async (req, res) => {
       });
     }
 
-    const newConversation = new Conversation({
-      members: [myId, memeberId],
-    });
-    await newConversation.save();
-    res.status(200).json({
-      message: "conversation created successfully",
-      newConversation,
-    });
-  } catch (err) {
-    res.status(500).json(err);
-  }
-};
+  const newConversation = new Conversation({
+    members: [myId, memeberId],
+  });
+  await newConversation.save();
+  return res.status(200).json({
+    conversation: newConversation,
+    message: "Conversation created successfully"
+  });
+});
 
-export const getMyConversations = async (req, res) => {
+export const getMyConversations = asyncHandler(async (req, res) => {
   const myId = req.user._id;
 
-  try {
-    const conversations = await Conversation.find({ members: myId }).populate({
-      path: "members",
-      select: "firstName lastName profileImg",
-    });
+  const conversations = await Conversation.find({ members: myId }).populate({
+    path: "members",
+    select: "firstName lastName profileImg",
+  });
 
     const formattedConversations = await Promise.all(
       conversations.map(async (conversation) => {
@@ -80,38 +82,30 @@ export const getMyConversations = async (req, res) => {
       })
     );
 
-    res.status(200).json({
-      message: "Conversations fetched successfully",
-      conversations: formattedConversations,
-    });
-  } catch (err) {
-    console.error("Error in getMyConversations_updated:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  return res.status(200).json({
+    conversations: formattedConversations,
+    message: "Conversations fetched successfully"
+  });
+});
 
-export const updateLastSeen = async (req, res) => {
+export const updateLastSeen = asyncHandler(async (req, res) => {
   const { conversationId } = req.params;
   const userId = req.user._id;
 
-  try {
-    await Conversation.findByIdAndUpdate(conversationId, {
-      $set: { [`lastSeen.${userId}`]: new Date() },
-    });
+  await Conversation.findByIdAndUpdate(conversationId, {
+    $set: { [`lastSeen.${userId}`]: new Date() },
+  });
 
-    res.status(200).json({ message: "Last seen updated" });
-  } catch (err) {
-    console.error("Error updating last seen:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  return res.status(200).json({ 
+    message: "Last seen updated" 
+  });
+});
 
 
-export const getTeacherforStudent = async (req, res) => {
+export const getTeacherforStudent = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
 
-  try {
-    const teachers = await Enrollment.aggregate([
+  const teachers = await Enrollment.aggregate([
       {
         $match: { student: new mongoose.Types.ObjectId(studentId) }
       },
@@ -161,40 +155,35 @@ export const getTeacherforStudent = async (req, res) => {
     ]);
 
 
-    console.log(teachers, "teachers")
+  console.log(teachers, "teachers")
 
-    if (!teachers || teachers.length === 0) {
-      return res.status(404).json({ message: "No teacher found" });
-    }
-
-    res.status(200).json({
-      message: "Teachers fetched successfully",
-      teachers
-    });
-
-  } catch (error) {
-    console.error("Error fetching teacher for student:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+  if (!teachers || teachers.length === 0) {
+    throw new NotFoundError("No teacher found", "CONV_002");
   }
-};
+
+  return res.status(200).json({
+    teachers,
+    message: "Teachers fetched successfully"
+  });
+});
 
 
-export const getStudentsByOfTeacher = async (req, res) => {
-  try {
-    const { courseId } = req.params;
-    const teacherId = req.user._id;
+export const getStudentsByOfTeacher = asyncHandler(async (req, res) => {
+  const { courseId } = req.params;
+  const teacherId = req.user._id;
 
-    // 1️⃣ Verify course belongs to teacher
-    const course = await CourseSch.findOne({
-      _id: courseId,
-      createdby: teacherId,
-    }).select("courseTitle");
+  // 1️⃣ Verify course belongs to teacher
+  const course = await CourseSch.findOne({
+    _id: courseId,
+    createdby: teacherId,
+  }).select("courseTitle");
 
-    if (!course) {
-      return res.status(403).json({
-        message: "You are not authorized to view students of this course",
-      });
-    }
+  if (!course) {
+    throw new AuthenticationError(
+      "You are not authorized to view students of this course",
+      "CONV_003"
+    );
+  }
 
     // 2️⃣ Aggregation pipeline
     const students = await Enrollment.aggregate([
@@ -247,14 +236,11 @@ export const getStudentsByOfTeacher = async (req, res) => {
       },
     ]);
 
-    res.status(200).json({
-      courseId,
-      courseTitle: course.courseTitle,
-      totalStudents: students.length,
-      students,
-    });
-  } catch (error) {
-    console.error("Error in getStudentsByOfTeacher:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
+  return res.status(200).json({
+    courseId,
+    courseTitle: course.courseTitle,
+    totalStudents: students.length,
+    students,
+    message: "Students fetched successfully"
+  });
+});

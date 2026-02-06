@@ -2,6 +2,9 @@ import jwt from "jsonwebtoken";
 import User from "../Models/user.model.js";
 // import Admin from "../Models/admins.model.js";   // Uncomment later if needed
 
+// Import error classes
+import { AuthenticationError, AuthorizationError } from "../Utiles/errors.js";
+
 // ----------------- Helper: detect portal -----------------
 function getPortalFromReq(req) {
   let host = "";
@@ -35,37 +38,34 @@ export const isUser = async (req, res, next) => {
 
     const token = req.cookies?.[cookieName];
     if (!token) {
-      return res.status(401).json({
-        error: true,
-        message: `No auth token provided for ${portal} portal`,
-      });
+      throw new AuthenticationError(
+        `No auth token provided for ${portal} portal`,
+        "AUTH_004"
+      );
     }
 
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRAT);
     } catch (err) {
-      return res.status(401).json({
-        error: true,
-        message: "Invalid or expired token",
-      });
+      throw new AuthenticationError(
+        "Invalid or expired token",
+        "AUTH_002"
+      );
     }
 
     if (!decoded || decoded.aud !== portal) {
-      return res.status(401).json({
-        error: true,
-        message: "Cross-portal token detected",
-      });
+      throw new AuthorizationError(
+        "Cross-portal token detected",
+        "AUTH_003"
+      );
     }
 
     req.user = decoded.user;
 
     next();
   } catch (error) {
-    console.error("Error in isUser middleware:", error);
-    return res.status(500).json({
-      error: true,
-      message: "Authentication failed",
-    });
+    // Pass error to centralized error handler
+    next(error);
   }
 };
