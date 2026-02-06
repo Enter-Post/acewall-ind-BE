@@ -13,14 +13,14 @@ export const errorHandler = (err, req, res, next) => {
   let details = err.details || null;
 
   // Log error for debugging (in production, use a proper logger like Winston)
-  console.error("Error:", {
-    timestamp: new Date().toISOString(),
-    path: req.path,
-    method: req.method,
-    errorCode,
-    message: err.message,
-    stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
-  });
+  // console.error("Error:", {
+  //   timestamp: new Date().toISOString(),
+  //   path: req.path,
+  //   method: req.method,
+  //   errorCode,
+  //   message: err.message,
+  //   stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+  // });
 
   // Handle specific error types
   if (err.name === "ValidationError" && err.errors) {

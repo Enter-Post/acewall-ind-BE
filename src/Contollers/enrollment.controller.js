@@ -116,45 +116,215 @@ export const isEnrolled = asyncHandler(async (req, res, next) => {
 
 
 
+const validateFilterParams = (type, status) => {
+  const validTypes = ['ONETIME', 'SUBSCRIPTION', 'FREE'];
+  const validStatuses = ['active', 'trial', 'cancelled', 'pastdue'];
 
-export const studenCourses = async (req, res) => {
+  // Validate type if provided
+  if (type && !validTypes.includes(type.toUpperCase())) {
+    throw new ValidationError(
+      `Invalid type parameter. Must be one of: ${validTypes.join(', ')}`,
+      'VAL_002'
+    );
+  }
+
+  // Validate status if provided
+  if (status && !validStatuses.includes(status.toLowerCase())) {
+    throw new ValidationError(
+      `Invalid status parameter. Must be one of: ${validStatuses.join(', ')}`,
+      'VAL_003'
+    );
+  }
+
+  // Status can only be used with SUBSCRIPTION type
+  if (status && type && type.toUpperCase() !== 'SUBSCRIPTION') {
+    throw new ValidationError(
+      'Status filter can only be used with type=SUBSCRIPTION',
+      'VAL_004'
+    );
+  }
+
+  // Status requires type to be specified
+  if (status && !type) {
+    throw new ValidationError(
+      'Status filter requires type=SUBSCRIPTION to be specified',
+      'VAL_005'
+    );
+  }
+};
+
+const buildEnrollmentFilter = (userId, type, status) => {
+  const filter = {
+    student: userId,
+    enrollmentType: { $ne: 'TEACHERENROLLMENT' } // Exclude teacher enrollments
+  };
+
+  if (!type) {
+    // No type filter - return all enrollments (except TEACHERENROLLMENT)
+    return filter;
+  }
+
+  const typeUpper = type.toUpperCase();
+  
+  if (typeUpper === 'ONETIME') {
+    // ONETIME: only show ACTIVE one-time purchases
+    filter.enrollmentType = 'ONETIME';
+    filter.status = 'ACTIVE';
+  } else if (typeUpper === 'FREE') {
+    // FREE: only show ACTIVE free courses
+    filter.enrollmentType = 'FREE';
+    filter.status = 'ACTIVE';
+  } else if (typeUpper === 'SUBSCRIPTION') {
+    filter.enrollmentType = 'SUBSCRIPTION';
+    
+    if (status) {
+      const statusLower = status.toLowerCase();
+      
+      if (statusLower === 'active') {
+        // Active includes ACTIVE and APPLIEDFORCANCEL (still has access until period end)
+        filter.status = { $in: ['ACTIVE', 'APPLIEDFORCANCEL'] };
+      } else if (statusLower === 'trial') {
+        filter.status = 'TRIAL';
+      } else if (statusLower === 'cancelled') {
+        filter.status = 'CANCELLED';
+      } else if (statusLower === 'pastdue') {
+        filter.status = 'PAST_DUE';
+      }
+    }
+    // If no status sub-filter, return all subscription statuses
+  }
+
+  return filter;
+};
+
+const getEnrollmentCounts = async (userId) => {
+  const counts = {
+    onetime: 0,
+    subscription: {
+      total: 0,
+      active: 0,
+      trial: 0,
+      cancelled: 0,
+      pastdue: 0
+    },
+    free: 0
+  };
+
   try {
-  const userId = req.user._id;
-  const search = req.query.search?.trim(); // Get the search query from the request
+    // Aggregate all enrollments in a single query
+    const aggregation = await Enrollment.aggregate([
+      {
+        $match: {
+          student: userId,
+          enrollmentType: { $ne: 'TEACHERENROLLMENT' }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            type: '$enrollmentType',
+            status: '$status'
+          },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
 
-    const filter = { student: userId };
+    // Process aggregation results
+    aggregation.forEach(item => {
+      const { type, status } = item._id;
+      const count = item.count;
 
-    // Find enrollments with optional search filter
-    let enrolledCourses = await Enrollment.find(filter).populate({
-      path: "course",
-      select: "courseTitle createdby category subcategory language thumbnail",
-      populate: [
-        {
-          path: "createdby",
-          select: "firstName middleName lastName profileImg",
-        },
-        {
-          path: "category",
-          select: "title",
-        },
-      ],
+      if (type === 'ONETIME' && status === 'ACTIVE') {
+        counts.onetime += count;
+      } else if (type === 'FREE' && status === 'ACTIVE') {
+        counts.free += count;
+      } else if (type === 'SUBSCRIPTION') {
+        counts.subscription.total += count;
+        
+        if (status === 'ACTIVE' || status === 'APPLIEDFORCANCEL') {
+          counts.subscription.active += count;
+        } else if (status === 'TRIAL') {
+          counts.subscription.trial += count;
+        } else if (status === 'CANCELLED') {
+          counts.subscription.cancelled += count;
+        } else if (status === 'PAST_DUE') {
+          counts.subscription.pastdue += count;
+        }
+      }
     });
+  } catch (error) {
+    console.error('Error calculating enrollment counts:', error);
+    // Return default counts on error
+  }
 
-    // If a search query is provided, filter courses by courseTitle
+  return counts;
+};
+
+
+export const studenCourses = asyncHandler(async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const search = req.query.search?.trim();
+    const type = req.query.type?.trim();
+    const status = req.query.status?.trim();
+
+    // Validate filter parameters
+    validateFilterParams(type, status);
+
+    // Build MongoDB filter based on type and status
+    const filter = buildEnrollmentFilter(userId, type, status);
+
+    // Find enrollments with filter
+    let enrolledCourses = await Enrollment.find(filter)
+      .populate({
+        path: "course",
+        select: "courseTitle createdby category subcategory language thumbnail",
+        populate: [
+          {
+            path: "createdby",
+            select: "firstName middleName lastName profileImg",
+          },
+          {
+            path: "category",
+            select: "title",
+          },
+        ],
+      })
+      .sort('-enrolledAt') // Newest first
+      .lean();
+
+    // Filter out enrollments where course was deleted
+    enrolledCourses = enrolledCourses.filter(enroll => enroll.course);
+
+    // If search query is provided, filter by course title
     if (search) {
       enrolledCourses = enrolledCourses.filter((enroll) =>
         enroll.course?.courseTitle?.toLowerCase().includes(search.toLowerCase())
       );
     }
 
+    // Get enrollment counts for metadata
+    const counts = await getEnrollmentCounts(userId);
+
+    // Build response with metadata
     res.status(200).json({
       enrolledCourses,
+      metadata: {
+        total: enrolledCourses.length,
+        filters: {
+          type: type?.toUpperCase() || null,
+          status: status?.toLowerCase() || null,
+          search: search || null
+        },
+        counts
+      },
       message: "Enrolled courses retrieved successfully"
     });
   } catch (err) {
     next(err);
   }
-};
+});
 
 export const studentsEnrolledinCourse = asyncHandler(async (req, res, next) => {
   try {
