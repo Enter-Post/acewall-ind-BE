@@ -261,7 +261,6 @@ export const getFullCourseData = asyncHandler(async (req, res) => {
   res.status(200).json(fullCourseData);
 });
 
-
 export const getCoursesWithMeetings = async (req, res) => {
   try {
     // 1. Fetch all meetings to count them per course
@@ -394,6 +393,7 @@ export const getCoursesWithMeetings = async (req, res) => {
 export const toggleGradingSystem = asyncHandler(async (req, res) => {
   const { courseId } = req.params;
 
+
   if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
     throw new ValidationError("Valid course ID is required");
   }
@@ -498,6 +498,10 @@ export const createCourseSch = asyncHandler(async (req, res) => {
     }
 
     const stripePrice = await stripe.prices.create(stripePriceConfig);
+
+    // 5. Auto-enroll creator
+    await Enrollment.create({ student: createdby, course: course._id, enrollmentType: "TEACHERENROLLMENT", status: "ACTIVE" });
+
 
     courseData.price = parseFloat(price);
     courseData.stripeProductId = product.id;

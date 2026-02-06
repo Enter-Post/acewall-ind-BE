@@ -39,6 +39,7 @@ export const getMyEnrolledCourses = asyncHandler(async (req, res, next) => {
 });
 
 
+
 export const enrollmentforTeacher = asyncHandler(async (req, res, next) => {
   try {
     const { teacherId, courseId } = req.body;
@@ -113,10 +114,12 @@ export const isEnrolled = asyncHandler(async (req, res, next) => {
   }
 });
 
-export const studenCourses = asyncHandler(async (req, res, next) => {
-  try {
-    const userId = req.user._id;
-    const search = req.query.search?.trim();
+
+
+
+export const studenCourses = async (req, res) => {
+  const userId = req.user._id;
+  const search = req.query.search?.trim(); // Get the search query from the request
 
     const filter = { student: userId };
 
@@ -192,14 +195,15 @@ export const unEnrollment = asyncHandler(async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
 
-export const studentCourseDetails = asyncHandler(async (req, res, next) => {
+
+export const studentCourseDetails = async (req, res) => {
+  const { enrollmentId } = req.params;
   try {
-    const { enrollmentId } = req.params;
+    const checkEnrollment = await Enrollment.findById(enrollmentId)
 
-    if (!enrollmentId) {
-      throw new ValidationError("Enrollment ID is required", "VAL_001");
+    if (checkEnrollment.status === "CANCELLED") {
+      return res.status(403).json({ message: "Access denied to cancelled enrollment", enrolledCourse: [] });
     }
 
     const enrolledData = await Enrollment.aggregate([
@@ -326,6 +330,7 @@ export const studentCourseDetails = asyncHandler(async (req, res, next) => {
           stripeSessionId: 1,
           subscriptionId: 1,
           courseDetails: 1,
+          trial: 1,
         },
       },
     ]);
