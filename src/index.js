@@ -50,6 +50,8 @@ import couponRoutes from "./Routes/coupenCode.Routes.js";
 import wishlistRoutes from "./Routes/Wishlist.Routes.js";
 import zoomRoutes from "./Routes/Zoom.Routes.js";
 import notificationRoutes from "./Routes/notification.Routes.js";
+import courseShareRoutes from "./Routes/CourseShare.Routes.js";
+import campaignRoutes from "./Routes/Campaign.Routes.js";
 import { startZoomMeetingMonitor } from "./cronJobs/zoomMeetingMonitor.js";
 import { startAssessmentReminder } from "./cronJobs/assessmentReminder.js";
 
@@ -164,6 +166,9 @@ app.use("/api/aichat", aiChatRoutes);
 app.use("/api/coupon", couponRoutes);
 app.use("/api/zoom", zoomRoutes);
 app.use("/api/notifications", notificationRoutes);
+
+app.use("/api/course-share", courseShareRoutes);
+app.use("/api/campaigns", campaignRoutes);
 
 app.use("/api/wishlist", wishlistRoutes);
 server.listen(PORT, async () => {
