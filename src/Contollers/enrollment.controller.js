@@ -118,6 +118,7 @@ export const isEnrolled = asyncHandler(async (req, res, next) => {
 
 
 export const studenCourses = async (req, res) => {
+  try {
   const userId = req.user._id;
   const search = req.query.search?.trim(); // Get the search query from the request
 
@@ -153,7 +154,7 @@ export const studenCourses = async (req, res) => {
   } catch (err) {
     next(err);
   }
-});
+};
 
 export const studentsEnrolledinCourse = asyncHandler(async (req, res, next) => {
   try {
@@ -195,7 +196,7 @@ export const unEnrollment = asyncHandler(async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-
+});
 
 export const studentCourseDetails = async (req, res) => {
   const { enrollmentId } = req.params;
@@ -346,12 +347,7 @@ export const studentCourseDetails = async (req, res) => {
   } catch (error) {
     next(error);
   }
-});
-
-
-
-
-
+};
 
 
 export const chapterDetails = asyncHandler(async (req, res, next) => {
