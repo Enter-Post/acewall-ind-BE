@@ -2,22 +2,22 @@ import { uploadToCloudinary } from "../lib/cloudinary-course.config.js";
 import Pages from "../Models/Pages.modal.js";
 import CourseSch from "../Models/courses.model.sch.js";
 import Enrollment from "../Models/Enrollement.model.js";
+import { ValidationError, NotFoundError } from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
 
 // ✅ Create a new course post/page
 // Create Page
-export const createpage = async (req, res) => {
+export const createpage = asyncHandler(async (req, res) => {
     const { title, description } = req.body;
     const { courseId, type, typeId } = req.params;
 
     if (!courseId) {
-        return res.status(400).json({ message: "Course ID is required." });
+        throw new ValidationError("Course ID is required.", "PAGE_001");
     }
 
     const image = req.files?.image?.[0];
     const files = req.files?.files || [];
-
-    try {
         const uploadedFiles = await Promise.all(
             files.map(async (file) => {
                 const result = await uploadToCloudinary(file.buffer, "discussion_files");
@@ -65,110 +65,78 @@ export const createpage = async (req, res) => {
             });
 
         }
-        await newPage.save();
+    await newPage.save();
 
-        res.status(201).json({
-            message: "Page created successfully",
-            page: newPage,
-        });
-    } catch (error) {
-        console.error("Error creating page:", error);
-        res.status(500).json({
-            message: "Internal Server Error",
-            error: error.message,
-        });
+    return res.status(201).json({
+        message: "Page created successfully",
+        page: newPage,
+    });
+});
+
+export const getAllPages = asyncHandler(async (req, res) => {
+    const { courseId, type, typeId } = req.params;
+
+    let pages;
+
+    if (type === "lesson") {
+        pages = await Pages.find({ lesson: typeId });
     }
-};
-
-export const getAllPages = async (req, res) => {
-    const { courseId, type, typeId } = req.params
-    try {
-        let pages;
-
-        if (type === "lesson") {
-            pages = await Pages.find({ lesson: typeId })
-        }
-        if (type === "chapter") {
-            pages = await Pages.find({ chapter: typeId })
-        }
-        if (!pages) {
-            return res.status(404).json({
-                message: "Pages not found"
-            })
-        }
-
-        res.status(201).json({
-            pages,
-            message: "pages found successfully."
-        })
-
-    } catch (error) {
-        console.error("Error fetching pages:", error);
-        res.status(500).json({ message: "Failed to fetch pages" });
+    if (type === "chapter") {
+        pages = await Pages.find({ chapter: typeId });
     }
-};
+    if (!pages) {
+        throw new NotFoundError("Pages not found", "PAGE_002");
+    }
+
+    return res.status(200).json({
+        pages,
+        message: "Pages found successfully"
+    });
+});
 
 
 // DELETE a page by ID
-export const deletePage = async (req, res) => {
+export const deletePage = asyncHandler(async (req, res) => {
     const { pageId } = req.params;
 
-    try {
-        const deletedPage = await Pages.findByIdAndDelete(pageId);
+    const deletedPage = await Pages.findByIdAndDelete(pageId);
 
-        if (!deletedPage) {
-            return res.status(404).json({ message: "Page not found" });
-        }
-
-        res.status(200).json({ message: "Page deleted successfully", page: deletedPage });
-    } catch (error) {
-        console.error("Error deleting page:", error);
-        res.status(500).json({ message: "Failed to delete page", error: error.message });
+    if (!deletedPage) {
+        throw new NotFoundError("Page not found", "PAGE_003");
     }
-};
 
-export const ChapterPagesforStudent = async (req, res) => {
-    const { chapterId } = req.params
-    try {
-        const pages = await Pages.find({ chapter: chapterId })
+    return res.status(200).json({ 
+        page: deletedPage,
+        message: "Page deleted successfully"
+    });
+});
 
-        if (!pages) {
-            res.status(404).json({
-                message: "no pages found"
-            })
-        }
+export const ChapterPagesforStudent = asyncHandler(async (req, res) => {
+    const { chapterId } = req.params;
 
-        res.status(201).json({
-            pages,
-            message: "Pages found successfully"
-        })
-    } catch (error) {
-        console.log("error in getting chapter for student", error)
-        res.status(500).json({
-            message: "Internal server Error"
-        })
+    const pages = await Pages.find({ chapter: chapterId });
+
+    if (!pages || pages.length === 0) {
+        throw new NotFoundError("No pages found", "PAGE_004");
     }
-}
 
-export const lessonPagesforStudent = async (req, res) => {
-    const { lessonId } = req.params
-    try {
-        const pages = await Pages.find({ lesson: lessonId })
+    return res.status(200).json({
+        pages,
+        message: "Pages found successfully"
+    });
+});
 
-        if (!pages) {
-            res.status(404).json({
-                message: "no pages found"
-            })
-        }
+export const lessonPagesforStudent = asyncHandler(async (req, res) => {
+    const { lessonId } = req.params;
 
-        res.status(201).json({
-            pages,
-            message: "Pages found successfully"
-        })
-    } catch (error) {
-        console.log("error in getting chapter for student", error)
-        res.status(500).json({
-            message: "Internal server Error"
-        })
+    const pages = await Pages.find({ lesson: lessonId });
+
+    if (!pages || pages.length === 0) {
+        throw new NotFoundError("No pages found", "PAGE_005");
     }
-}
+
+    return res.status(200).json({
+        pages,
+        message: "Pages found successfully"
+    });
+});

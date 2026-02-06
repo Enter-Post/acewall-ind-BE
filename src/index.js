@@ -37,17 +37,29 @@ import teacherPaymentRoutes from "./Routes/TeacherPayment.Routes.js";
 import gpaRoutes from "./Routes/GPA.Routes.js";
 import contactRoutes from "./Routes/Contact.Routes.js";
 import stripeRoutes from "./Routes/Stripe.Routes.js";
-import { handleStripeWebhook, handleStripeWebhookConnect } from "./Contollers/stripe.controller.js";
+import {
+  handleStripeWebhook,
+  handleStripeWebhookConnect,
+} from "./Contollers/stripe.controller.js";
 import postRoutes from "./Routes/PostRoutes/Post.Routes.js";
 import likesRoutes from "./Routes/PostRoutes/PostLikes.Routes.js";
 import postCommentRoutes from "./Routes/PostRoutes/PostComment.Routes.js";
 import StandardGradingRoutes from "./Routes/StandardGrading.Routes.js";
 import aiChatRoutes from "./Routes/AIChat.Routes.js";
-import couponRoutes from "./Routes/coupenCode.Routes.js"
-import wishlistRoutes from "./Routes/Wishlist.Routes.js"
+import couponRoutes from "./Routes/coupenCode.Routes.js";
+import wishlistRoutes from "./Routes/Wishlist.Routes.js";
+import zoomRoutes from "./Routes/Zoom.Routes.js";
+import notificationRoutes from "./Routes/notification.Routes.js";
+import courseShareRoutes from "./Routes/CourseShare.Routes.js";
+import campaignRoutes from "./Routes/Campaign.Routes.js";
+import { startZoomMeetingMonitor } from "./cronJobs/zoomMeetingMonitor.js";
+import { startAssessmentReminder } from "./cronJobs/assessmentReminder.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
+
+// Error handling middleware
+import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.middleware.js";
 
 dotenv.config();
 
@@ -56,9 +68,11 @@ const PORT = process.env.PORT || 5050;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
-app.post("/api/stripe/webhook", express.raw({ type: "application/json" }),
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
   (req, res, next) => {
     // console.log("🚀 WEBHOOK RECEIVED!", new Date().toISOString());
     // console.log("📝 Method:", req.method);
@@ -68,7 +82,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }),
     // console.log("🔑 Webhook secret configured:", !!process.env.STRIPE_WEBHOOK_SECRET);
     next();
   },
-  handleStripeWebhookConnect
+  handleStripeWebhookConnect,
 );
 
 // Add test route for webhook
@@ -77,7 +91,7 @@ app.get("/api/stripe/webhook", (req, res) => {
   res.json({
     message: "Webhook endpoint is working",
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || "development"
+    environment: process.env.NODE_ENV || "development",
   });
 });
 
@@ -93,11 +107,11 @@ app.use(
       "http://localhost:4173",
       "http://localhost:5174",
       "https://acewallscholarslearningonline.org",
-      "https://admin.acewallscholarslearningonline.org"
+      "https://admin.acewallscholarslearningonline.org",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     credentials: true,
-  })
+  }),
 );
 app.use(express.json());
 app.use(cookieParser());
@@ -133,7 +147,7 @@ app.use("/api/replyDiscussion", replyDiscussionRoutes);
 app.use("/api/semester", semesterRoutes);
 app.use("/api/quarter", quarterRoutes);
 app.use("/api/gpa", gpaRoutes);
-app.use("/api/standardGrading", StandardGradingRoutes)
+app.use("/api/standardGrading", StandardGradingRoutes);
 
 app.use("/api/posts", postRoutes);
 app.use("/api/postlike", likesRoutes);
@@ -142,10 +156,33 @@ app.use("/api/aichat", aiChatRoutes)
 app.use("/api/coupon", couponRoutes)
 app.use("/api/wishlist", wishlistRoutes)
 
+// 404 handler for undefined routes (must be after all routes)
+app.use(notFoundHandler);
 
+// Global error handler (must be last middleware)
+app.use(errorHandler);
 
-server.listen(PORT, () => {
-  connectDB();
+app.use("/api/aichat", aiChatRoutes);
+app.use("/api/coupon", couponRoutes);
+app.use("/api/zoom", zoomRoutes);
+app.use("/api/notifications", notificationRoutes);
+
+app.use("/api/course-share", courseShareRoutes);
+app.use("/api/campaigns", campaignRoutes);
+
+app.use("/api/wishlist", wishlistRoutes);
+server.listen(PORT, async () => {
   console.log(`This app is running on localhost ${PORT}`);
   console.log(`🔗 Webhook endpoint: https://acewell-production.up.railway.app/api/stripe/webhook`);
+  
+  // Connect to database with error handling
+  try {
+    await connectDB();
+    startZoomMeetingMonitor();
+    startAssessmentReminder();
+  } catch (error) {
+    console.error("❌ Failed to connect to database on startup");
+    console.error("⚠️  Server is running but database operations will fail");
+    console.error("💡 Please check your internet connection and MongoDB URI");
+  }
 });

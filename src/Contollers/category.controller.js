@@ -1,213 +1,163 @@
 import mongoose from "mongoose";
+import { 
+  ValidationError, 
+  NotFoundError, 
+  ConflictError 
+} from "../Utiles/errors.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
 import Category from "../Models/category.model.js";
 import Subcategory from "../Models/subcategory.model.js";
 import CourseSch from "../Models/courses.model.sch.js";
 
 
-export const getAllCategories = async (req, res) => {
-  try {
-    const categories = await Category.find({});
-    return res.status(200).json({
-      categories,
-      message: "Categories fetched successfully",
-    });
-  } catch (error) {
-    console.log("error in fetching categories==>", error.message);
-    return res.status(500).json({
-      message: "Some this Went Wrong, sorry for inconvenience",
-    });
-  }
-};
+export const getAllCategories = asyncHandler(async (req, res) => {
+  const categories = await Category.find({});
+  
+  return res.status(200).json({
+    categories,
+    message: "Categories fetched successfully",
+  });
+});
 
-export const createCategory = async (req, res) => {
+export const createCategory = asyncHandler(async (req, res) => {
   const { title } = req.body;
-  try {
-    if (!title) {
-      return res.status(400).json({
-        error: true,
-        message: "Please fill all the fields",
-      });
-    }
-
-    const isExist = await Category.find({ title });
-    if (isExist.length > 0) {
-      return res.status(400).json({
-        error: true,
-        message: "Category already exist",
-      });
-    }
-
-    const category = await Category.create({
-      title,
-    });
-    return res.status(200).json({
-      category,
-      message: "Category Created Successfully",
-    });
-  } catch (error) {
-    console.log("error in creating category==>", error.message);
-    return res.status(500).json({
-      message: "Some this Went Wrong, sorry for inconvenience",
-    });
+  
+  if (!title) {
+    throw new ValidationError("Category title is required", "VAL_001");
   }
-};
+
+  const isExist = await Category.findOne({ title });
+  if (isExist) {
+    throw new ConflictError("Category already exists", "CAT_002");
+  }
+
+  const category = await Category.create({ title });
+  
+  return res.status(201).json({
+    category,
+    message: "Category created successfully",
+  });
+});
 
 
 
-export const deleteCategory = async (req, res) => {
+export const deleteCategory = asyncHandler(async (req, res) => {
   const { categoryId } = req.params;
 
   if (!categoryId) {
-    return res.status(400).json({
-      error: true,
-      message: "Please provide the category ID",
-    });
+    throw new ValidationError("Category ID is required", "VAL_001");
   }
 
   if (!mongoose.Types.ObjectId.isValid(categoryId)) {
-    return res.status(400).json({
-      error: true,
-      message: "Invalid category ID",
-    });
+    throw new ValidationError("Invalid category ID format", "VAL_002");
   }
 
-  try {
-    const courseCount = await CourseSch.countDocuments({ category: categoryId });
-
-    if (courseCount > 0) {
-      return res.status(400).json({
-        error: true,
-        message: "Category contains courses and cannot be deleted",
-      });
-    }
-
-    const category = await Category.findByIdAndDelete(categoryId);
-
-    if (!category) {
-      return res.status(404).json({
-        error: true,
-        message: "Category not found",
-      });
-    }
-
-    return res.status(200).json({
-      category,
-      message: "Category deleted successfully",
-    });
-  } catch (error) {
-    console.error("Error deleting category:", error.message);
-    return res.status(500).json({
-      error: true,
-      message: "Something went wrong, sorry for the inconvenience",
-    });
-  }
-};
-
-export const getSubcategoriesByCategoryId = async (req, res) => {
-  try {
-    const { categoryId } = req.params;
-
-    if (!categoryId) {
-      return res.status(400).json({ message: "Category ID is required." });
-    }
-
-    const subcategories = await Subcategory.find({
-      category: categoryId,
-    }).populate("category", "title");
-
-    if (!subcategories.length) {
-      return res
-        .status(404)
-        .json({ message: "No subcategories found for this category." });
-    }
-
-    return res.status(200).json({
-      subcategories,
-      message: "Subcategories fetched successfully.",
-    });
-  } catch (error) {
-    console.error(
-      "Error fetching subcategories by category ID =>",
-      error.message
+  const courseCount = await CourseSch.countDocuments({ category: categoryId });
+  if (courseCount > 0) {
+    throw new ConflictError(
+      "Cannot delete category that contains courses",
+      "CAT_003"
     );
-    return res.status(500).json({
-      message: "Something went wrong while fetching subcategories.",
-    });
   }
-};
 
-export const editCategory = async (req, res) => {
+  const category = await Category.findByIdAndDelete(categoryId);
+  if (!category) {
+    throw new NotFoundError("Category not found", "CAT_001");
+  }
+
+  return res.status(200).json({
+    category,
+    message: "Category deleted successfully",
+  });
+});
+
+export const getSubcategoriesByCategoryId = asyncHandler(async (req, res) => {
+  const { categoryId } = req.params;
+
+  if (!categoryId) {
+    throw new ValidationError("Category ID is required", "VAL_001");
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+    throw new ValidationError("Invalid category ID format", "VAL_002");
+  }
+
+  const categoryExists = await Category.findById(categoryId);
+  if (!categoryExists) {
+    throw new NotFoundError("Category not found", "CAT_001");
+  }
+
+  const subcategories = await Subcategory.find({
+    category: categoryId,
+  }).populate("category", "title");
+
+  return res.status(200).json({
+    subcategories,
+    message: subcategories.length > 0
+      ? "Subcategories fetched successfully"
+      : "No subcategories found for this category",
+  });
+});
+
+export const editCategory = asyncHandler(async (req, res) => {
   const { categoryId } = req.params;
   const { title } = req.body;
 
-  try {
-    if (!categoryId || !title) {
-      return res.status(400).json({
-        error: true,
-        message: "Category ID and new title are required.",
-      });
-    }
+  if (!categoryId) {
+    throw new ValidationError("Category ID is required", "VAL_001");
+  }
 
-    // Check for duplicate title
-    const existing = await Category.findOne({
-      title,
-      _id: { $ne: categoryId },
-    });
-    if (existing) {
-      return res.status(400).json({
-        error: true,
-        message: "Another category with this title already exists.",
-      });
-    }
+  if (!title) {
+    throw new ValidationError("Category title is required", "VAL_001");
+  }
 
-    const updatedCategory = await Category.findByIdAndUpdate(
-      categoryId,
-      { title },
-      { new: true }
+  if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+    throw new ValidationError("Invalid category ID format", "VAL_002");
+  }
+
+  const existing = await Category.findOne({
+    title,
+    _id: { $ne: categoryId },
+  });
+  if (existing) {
+    throw new ConflictError(
+      "Another category with this title already exists",
+      "CAT_002"
     );
-
-    if (!updatedCategory) {
-      return res.status(404).json({
-        error: true,
-        message: "Category not found.",
-      });
-    }
-
-    return res.status(200).json({
-      category: updatedCategory,
-      message: "Category updated successfully.",
-    });
-  } catch (error) {
-    console.error("Error updating category:", error.message);
-    return res.status(500).json({
-      error: true,
-      message: "Something went wrong while updating the category.",
-    });
   }
-};
+
+  const updatedCategory = await Category.findByIdAndUpdate(
+    categoryId,
+    { title },
+    { new: true, runValidators: true }
+  );
+
+  if (!updatedCategory) {
+    throw new NotFoundError("Category not found", "CAT_001");
+  }
+
+  return res.status(200).json({
+    category: updatedCategory,
+    message: "Category updated successfully",
+  });
+});
 
 
-export const getCategoriesforAdmin = async (req, res) => {
-  try {
-    const categories = await Category.aggregate([
-      {
-        $lookup: {
-          from: "subcategories",
-          localField: "_id",
-          foreignField: "category",
-          as: "subcategories",
-        },
+export const getCategoriesforAdmin = asyncHandler(async (req, res) => {
+  const categories = await Category.aggregate([
+    {
+      $lookup: {
+        from: "subcategories",
+        localField: "_id",
+        foreignField: "category",
+        as: "subcategories",
       },
-    ])
-    return res.status(200).json({
-      categories,
-      message: "Categories fetched successfully",
-    });
-  } catch (error) {
-    console.log("error in fetching categories==>", error.message);
-    return res.status(500).json({
-      message: "Some this Went Wrong, sorry for inconvenience",
-    });
-  }
-};
+    },
+  ]);
+  
+  return res.status(200).json({
+    categories,
+    message: "Categories with subcategories fetched successfully",
+  });
+});

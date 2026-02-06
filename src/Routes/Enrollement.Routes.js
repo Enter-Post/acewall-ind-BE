@@ -2,7 +2,6 @@ import express from "express";
 import {
   chapterDetails,
   chapterDetailsStdPre,
-  enrollment,
   enrollmentforTeacher,
   getMyEnrolledCourses,
   isEnrolled,
@@ -18,7 +17,7 @@ const router = express.Router();
 
 router.get("/my-courses", isUser, getMyEnrolledCourses);
 
-router.post("/create/:courseId", isUser, enrollment);
+// router.post("/create/:courseId", isUser, enrollment);
 router.get("/isEnrolled/:courseId", isUser, isEnrolled);
 router.get("/studentCourses", isUser, studenCourses);
 router.get("/studentCourseDetails/:enrollmentId", isUser, studentCourseDetails);

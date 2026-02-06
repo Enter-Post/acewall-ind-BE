@@ -5,9 +5,11 @@ import Chapter from "../Models/chapter.model.sch.js";
 import Submission from "../Models/submission.model.js";
 import Assessment from "../Models/Assessment.model.js";
 import Lesson from "../Models/lesson.model.sch.js";
+import { ValidationError, NotFoundError, DatabaseError } from '../Utiles/errors.js';
+import { asyncHandler } from '../middlewares/errorHandler.middleware.js';
 
 
-export const getMyEnrolledCourses = async (req, res) => {
+export const getMyEnrolledCourses = asyncHandler(async (req, res, next) => {
     try {
         const userId = req.user._id;
         const userRole = req.user.role; 
@@ -32,77 +34,94 @@ export const getMyEnrolledCourses = async (req, res) => {
 
         res.status(200).json(courses);
     } catch (error) {
-        console.error("Error in getMyEnrolledCourses:", error);
-        res.status(500).json({ message: "Error fetching courses" });
+        next(error);
     }
-};
+});
 
 
-export const enrollmentforTeacher = async (req, res) => {
+
+export const enrollmentforTeacher = asyncHandler(async (req, res, next) => {
   try {
     const { teacherId, courseId } = req.body;
 
-    const enrollments = await Enrollment.find({ student: teacherId, course: courseId });
-    const enrollment = enrollments[0];
-    if (enrollment) {
-      res.status(200).json({ message: "Enrollments fetched successfully", enrollment });
-    } else {
-      res.status(404).json({ message: "No enrollments found" });
+    // Validate required fields
+    if (!teacherId || !courseId) {
+      throw new ValidationError("teacherId and courseId are required", "VAL_001");
     }
 
+    const enrollments = await Enrollment.find({ student: teacherId, course: courseId });
+    const enrollment = enrollments[0];
+    
+    if (!enrollment) {
+      throw new NotFoundError("No enrollments found", "RES_001");
+    }
+
+    res.status(200).json({
+      enrollment,
+      message: "Enrollments fetched successfully"
+    });
   } catch (error) {
-    console.log("Error in the enrollmentforTeacher", error);
-    res.status(500).json({ message: "Internal Server Error" });
+    next(error);
   }
-}
+});
 
-export const enrollment = async (req, res) => {
-  const { courseId } = req.params;
-  const userId = req.user._id;
+// export const enrollment = async (req, res) => {
+//   const { courseId } = req.params;
+//   const userId = req.user._id;
+//   try {
+//     const course = await CourseSch.findById(courseId);
+//     if (!course) return res.status(404).json({ message: "Course not found" });
+
+//     const exists = await Enrollment.findOne({
+//       student: userId,
+//       course: courseId,
+//     });
+//     if (exists)
+//       return res
+//         .status(400)
+//         .json({ message: "Already enrolled in this course" });
+
+//     const enrollment = await Enrollment.create({
+//       student: userId,
+//       course: courseId,
+//     });
+//     res.status(201).json({ message: "Enrollment successful", enrollment });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// };
+
+export const isEnrolled = asyncHandler(async (req, res, next) => {
   try {
-    const course = await CourseSch.findById(courseId);
-    if (!course) return res.status(404).json({ message: "Course not found" });
+    const { courseId } = req.params;
+    const userId = req.user._id;
+
+    if (!courseId) {
+      throw new ValidationError("Course ID is required", "VAL_001");
+    }
 
     const exists = await Enrollment.findOne({
       student: userId,
       course: courseId,
     });
-    if (exists)
-      return res
-        .status(400)
-        .json({ message: "Already enrolled in this course" });
 
-    const enrollment = await Enrollment.create({
-      student: userId,
-      course: courseId,
+    res.status(200).json({
+      enrolled: !!exists,
+      message: 'Enrollment status checked'
     });
-    res.status(201).json({ message: "Enrollment successful", enrollment });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
-};
+});
 
-export const isEnrolled = async (req, res) => {
-  const { courseId } = req.params;
-  const userId = req.user._id;
-  try {
-    const exists = await Enrollment.findOne({
-      student: userId,
-      course: courseId,
-    });
 
-    res.status(200).json({ enrolled: !!exists });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
+
 
 export const studenCourses = async (req, res) => {
   const userId = req.user._id;
   const search = req.query.search?.trim(); // Get the search query from the request
 
-  try {
-    const filter = { student: userId }; // Find enrollments by student ID
+    const filter = { student: userId };
 
     // Find enrollments with optional search filter
     let enrolledCourses = await Enrollment.find(filter).populate({
@@ -127,45 +146,66 @@ export const studenCourses = async (req, res) => {
       );
     }
 
-    res.status(200).json({ message: "Enrolled Courses", enrolledCourses });
+    res.status(200).json({
+      enrolledCourses,
+      message: "Enrolled courses retrieved successfully"
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
-};
+});
 
-export const studentsEnrolledinCourse = async (req, res) => {
-  const { courseId } = req.params;
+export const studentsEnrolledinCourse = asyncHandler(async (req, res, next) => {
   try {
+    const { courseId } = req.params;
+
+    if (!courseId) {
+      throw new ValidationError("Course ID is required", "VAL_001");
+    }
+
     const enrolledStudents = await Enrollment.find({
       course: courseId,
     }).populate("student", "firstName middleName lastName profileImg");
+
     res.status(200).json(enrolledStudents);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
-};
+});
 
-export const unEnrollment = async (req, res) => {
-  const { courseId } = req.params;
-  const userId = req.user._id;
+export const unEnrollment = asyncHandler(async (req, res, next) => {
   try {
+    const { courseId } = req.params;
+    const userId = req.user._id;
+
+    if (!courseId) {
+      throw new ValidationError("Course ID is required", "VAL_001");
+    }
+
     const enrollment = await Enrollment.findOneAndDelete({
       student: userId,
       course: courseId,
     });
+
+    if (!enrollment) {
+      throw new NotFoundError("Enrollment not found", "RES_001");
+    }
+
     res.status(200).json(enrollment);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
-};
+
 
 export const studentCourseDetails = async (req, res) => {
   const { enrollmentId } = req.params;
-
-
-  console.log("calling studentCourseDetails api");
-
   try {
+    const checkEnrollment = await Enrollment.findById(enrollmentId)
+
+    if (checkEnrollment.status === "CANCELLED") {
+      return res.status(403).json({ message: "Access denied to cancelled enrollment", enrolledCourse: [] });
+    }
+
     const enrolledData = await Enrollment.aggregate([
       {
         $match: { _id: new mongoose.Types.ObjectId(enrollmentId) },
@@ -290,26 +330,23 @@ export const studentCourseDetails = async (req, res) => {
           stripeSessionId: 1,
           subscriptionId: 1,
           courseDetails: 1,
+          trial: 1,
         },
       },
-
     ]);
 
     if (!enrolledData || enrolledData.length === 0) {
-      return res.status(404).json({ message: "Enrollment not found" });
+      throw new NotFoundError("Enrollment not found", "RES_001");
     }
 
     res.status(200).json({
-      message: "Course overview fetched successfully",
       enrolledCourse: enrolledData[0],
+      message: "Course overview fetched successfully"
     });
   } catch (error) {
-    console.error("Error in studentCourseDetails:", error);
-    res
-      .status(500)
-      .json({ message: "Internal Server Error", error: error.message });
+    next(error);
   }
-};
+});
 
 
 
@@ -317,14 +354,18 @@ export const studentCourseDetails = async (req, res) => {
 
 
 
-export const chapterDetails = async (req, res) => {
-  const { chapterId } = req.params;
-  const userId = req.user._id;
-
+export const chapterDetails = asyncHandler(async (req, res, next) => {
   try {
+    const { chapterId } = req.params;
+    const userId = req.user._id;
+
+    if (!chapterId) {
+      throw new ValidationError("Chapter ID is required", "VAL_001");
+    }
+
     const chapter = await Chapter.findById(chapterId).populate("course");
     if (!chapter) {
-      return res.status(404).json({ message: "Chapter not found" });
+      throw new NotFoundError("Chapter not found", "RES_001");
     }
 
     const isEnrolled = await Enrollment.findOne({
@@ -333,9 +374,7 @@ export const chapterDetails = async (req, res) => {
     });
 
     if (!isEnrolled) {
-      return res
-        .status(403)
-        .json({ message: "Unauthorized access to chapter" });
+      throw new ValidationError("Unauthorized access to chapter", "AUTH_003");
     }
 
     const chapterData = await Chapter.aggregate([
@@ -416,28 +455,27 @@ export const chapterDetails = async (req, res) => {
     ]);
 
     if (!chapterData || chapterData.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "Chapter not found in aggregation" });
+      throw new NotFoundError("Chapter not found in aggregation", "RES_001");
     }
 
     res.status(200).json({
-      message: "Chapter details fetched successfully",
       chapterDetails: chapterData[0],
+      message: "Chapter details fetched successfully"
     });
   } catch (error) {
-    console.error("Error in chapterDetails:", error);
-    res
-      .status(500)
-      .json({ message: "Internal Server Error", error: error.message });
+    next(error);
   }
-};
+});
 
 // controller/adminController.js
-export const getStudentEnrolledCourses = async (req, res) => {
-  const { id } = req.params;
-
+export const getStudentEnrolledCourses = asyncHandler(async (req, res, next) => {
   try {
+    const { id } = req.params;
+
+    if (!id) {
+      throw new ValidationError("Student ID is required", "VAL_001");
+    }
+
     const enrolledCourses = await Enrollment.find({ student: id }).populate({
       path: "course",
       select: "courseTitle createdby category subcategory language thumbnail",
@@ -451,24 +489,29 @@ export const getStudentEnrolledCourses = async (req, res) => {
       ],
     });
 
-    res
-      .status(200)
-      .json({ message: "Student's Enrolled Courses", enrolledCourses });
+    res.status(200).json({
+      enrolledCourses,
+      message: "Student's enrolled courses retrieved successfully"
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
-};
+});
 
 
 
-export const chapterDetailsStdPre = async (req, res) => {
-  const { chapterId } = req.params;
-
+export const chapterDetailsStdPre = asyncHandler(async (req, res, next) => {
   try {
+    const { chapterId } = req.params;
+
+    if (!chapterId) {
+      throw new ValidationError("Chapter ID is required", "VAL_001");
+    }
+
     const chapter = await Chapter.findById(chapterId).populate("course");
 
     if (!chapter) {
-      return res.status(404).json({ message: "Chapter not found" });
+      throw new NotFoundError("Chapter not found", "RES_001");
     }
 
     const chapterData = await Chapter.aggregate([
@@ -549,19 +592,14 @@ export const chapterDetailsStdPre = async (req, res) => {
     ]);
 
     if (!chapterData || chapterData.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "Chapter not found in aggregation" });
+      throw new NotFoundError("Chapter not found in aggregation", "RES_001");
     }
 
     res.status(200).json({
-      message: "Chapter details fetched successfully",
       chapterDetails: chapterData[0],
+      message: "Chapter details fetched successfully"
     });
   } catch (error) {
-    console.error("Error in chapterDetails:", error);
-    res
-      .status(500)
-      .json({ message: "Internal Server Error", error: error.message });
+    next(error);
   }
-};
+});
