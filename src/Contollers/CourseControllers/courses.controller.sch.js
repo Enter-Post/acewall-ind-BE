@@ -499,23 +499,19 @@ export const createCourseSch = asyncHandler(async (req, res) => {
 
     const stripePrice = await stripe.prices.create(stripePriceConfig);
 
-    // 5. Auto-enroll creator
-    await Enrollment.create({ student: createdby, course: course._id, enrollmentType: "TEACHERENROLLMENT", status: "ACTIVE" });
-
-
     courseData.price = parseFloat(price);
     courseData.stripeProductId = product.id;
     courseData.stripePriceId = stripePrice.id;
   }
-
+  
   const course = new CourseSch(courseData);
   await course.save();
 
-  await Enrollment.create({ student: createdby, course: course._id });
-
-  res.status(201).json({ 
-    course, 
-    message: "Course created successfully" 
+  await Enrollment.create({ student: createdby, course: course._id, enrollmentType: "TEACHERENROLLMENT", status: "ACTIVE" });
+  
+  res.status(201).json({
+    course,
+    message: "Course created successfully"
   });
 });
 

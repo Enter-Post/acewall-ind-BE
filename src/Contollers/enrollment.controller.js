@@ -65,31 +65,50 @@ export const enrollmentforTeacher = asyncHandler(async (req, res, next) => {
   }
 });
 
-// export const enrollment = async (req, res) => {
-//   const { courseId } = req.params;
-//   const userId = req.user._id;
-//   try {
-//     const course = await CourseSch.findById(courseId);
-//     if (!course) return res.status(404).json({ message: "Course not found" });
+export const enrollment = asyncHandler(async (req, res, next) => {
+  const { courseId } = req.params;
+  const userId = req.user._id;
 
-//     const exists = await Enrollment.findOne({
-//       student: userId,
-//       course: courseId,
-//     });
-//     if (exists)
-//       return res
-//         .status(400)
-//         .json({ message: "Already enrolled in this course" });
+  // Find and validate course
+  const course = await CourseSch.findById(courseId);
+  if (!course) {
+    throw new NotFoundError("Course not found", "RES_001");
+  }
 
-//     const enrollment = await Enrollment.create({
-//       student: userId,
-//       course: courseId,
-//     });
-//     res.status(201).json({ message: "Enrollment successful", enrollment });
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// };
+  // Check if course is free
+  if (course.paymentType !== "FREE") {
+    throw new ValidationError(
+      "This is a paid course. Please use the payment flow to enroll.",
+      "VAL_002"
+    );
+  }
+
+  // Check for existing enrollment
+  const exists = await Enrollment.findOne({
+    student: userId,
+    course: courseId,
+  });
+  
+  if (exists) {
+    throw new ValidationError(
+      "Already enrolled in this course",
+      "VAL_003"
+    );
+  }
+
+  // Create enrollment with required fields
+  const enrollment = await Enrollment.create({
+    student: userId,
+    course: courseId,
+    enrollmentType: "FREE",
+    status: "ACTIVE",
+  });
+
+  res.status(201).json({ 
+    message: "Enrollment successful", 
+    enrollment 
+  });
+});
 
 export const isEnrolled = asyncHandler(async (req, res, next) => {
   try {
@@ -197,60 +216,55 @@ const getEnrollmentCounts = async (userId) => {
   const counts = {
     onetime: 0,
     free: 0,
-    subscription: {
-      total: 0,
-      active: 0,
-      trial: 0,
-      cancelled: 0,
-      pastdue: 0
-    }
+    subscription: { total: 0, active: 0, trial: 0, cancelled: 0, pastdue: 0 },
   };
 
   try {
+    const studentId =
+      userId instanceof mongoose.Types.ObjectId
+        ? userId
+        : mongoose.isValidObjectId(userId)
+          ? new mongoose.Types.ObjectId(userId)
+          : null;
+
+    if (!studentId) return counts;
+
     const aggregation = await Enrollment.aggregate([
       {
         $match: {
-          student: userId,
-          enrollmentType: { $ne: 'TEACHERENROLLMENT' }
-        }
+          student: studentId, // <-- key change
+          enrollmentType: { $ne: "TEACHERENROLLMENT" },
+        },
       },
       {
         $group: {
-          _id: { type: '$enrollmentType', status: '$status' },
-          count: { $sum: 1 }
-        }
-      }
+          _id: { type: "$enrollmentType", status: "$status" },
+          count: { $sum: 1 },
+        },
+      },
     ]);
 
     aggregation.forEach(({ _id: { type, status }, count }) => {
-      // ONETIME
-      if (type === 'ONETIME' && status === 'ACTIVE') {
+      if (type === "ONETIME" && status === "ACTIVE") {
         counts.onetime += count;
         return;
       }
-
-      // FREE
-      if (type === 'FREE' && status === 'ACTIVE') {
+      if (type === "FREE" && status === "ACTIVE") {
         counts.free += count;
         return;
       }
-
-      // SUBSCRIPTION
-      if (type === 'SUBSCRIPTION') {
+      if (type === "SUBSCRIPTION") {
         const key = SUBSCRIPTION_STATUS_MAP[status];
-
         if (!key) return;
 
-        // Only active + trial counted in total
-        if (key === 'active' || key === 'trial') {
-        counts.subscription.total += count;
-
-        counts.subscription[key] += count;
-    }
+        if (key === "active" || key === "trial") {
+          counts.subscription.total += count;
+          counts.subscription[key] += count;
+        }
       }
     });
   } catch (err) {
-    console.error('Enrollment count error:', err);
+    console.error("Enrollment count error:", err);
   }
 
   return counts;
@@ -363,11 +377,14 @@ export const unEnrollment = asyncHandler(async (req, res, next) => {
   }
 });
 
-export const studentCourseDetails = async (req, res) => {
+export const studentCourseDetails = asyncHandler(async (req, res, next) => {
   const { enrollmentId } = req.params;
   try {
     const checkEnrollment = await Enrollment.findById(enrollmentId)
 
+    if (!checkEnrollment) {
+    throw new NotFoundError("Enrollment not found or has been removed", "RES_001");
+    }
     if (checkEnrollment.status === "CANCELLED") {
       return res.status(403).json({ message: "Access denied to cancelled enrollment", enrolledCourse: [] });
     }
@@ -512,7 +529,7 @@ export const studentCourseDetails = async (req, res) => {
   } catch (error) {
     next(error);
   }
-};
+});
 
 
 export const chapterDetails = asyncHandler(async (req, res, next) => {
