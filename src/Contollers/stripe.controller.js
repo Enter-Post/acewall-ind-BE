@@ -890,7 +890,13 @@ export const handleStripeWebhookConnect = async (req, res) => {
         let enrollmentStatus = "ACTIVE";
         let trialStatus = false;
         let trialEndDate = null;
+        let cancellationDate = null;
 
+        const fullSubscription = await stripe.subscriptions.retrieve(
+          subscription.id
+        );
+
+        // Trial handling
         if (subscription.status === "trialing") {
           enrollmentStatus = "TRIAL";
           trialStatus = true;
@@ -899,28 +905,60 @@ export const handleStripeWebhookConnect = async (req, res) => {
             : null;
         }
 
+        // Payment issues
         if (["past_due", "unpaid"].includes(subscription.status)) {
           enrollmentStatus = "PAST_DUE";
         }
 
+        // Fully cancelled
         if (["canceled", "incomplete_expired"].includes(subscription.status)) {
-          enrollmentStatus = "CANCELLED";
+          enrollmentStatus = "CANCELLEDDDDDD";
+
+          console.log(subscription, "subscription")
+          console.log(subscription.canceled_at, "subscription.canceled_at")
+
+          cancellationDate = subscription.canceled_at
+            ? new Date(subscription.canceled_at * 1000)
+            : new Date();
+          console.log("Subscription cancelled on:", cancellationDate);
         }
 
-        if (subscription.status === "active") {
-          enrollmentStatus = "ACTIVE";
-        }
-
+        // Active but cancel scheduled
         if (subscription.cancel_at_period_end === true) {
           enrollmentStatus = "APPLIEDFORCANCEL";
+
+          // 🔥 Fetch full subscription
+          const futureCancelTime =
+            subscription.cancel_at || subscription.current_period_end;
+
+          cancellationDate = futureCancelTime
+            ? new Date(futureCancelTime * 1000)
+            : null;
+          console.log("Cancellation scheduled for:", cancellationDate);
         }
 
-        // Reactivate existing enrollment
-        const enrollment = await Enrollment.findOne({ subscriptionId: subscription.id });
+        // Active (no cancel scheduled)
+        if (
+          subscription.status === "active" &&
+          subscription.cancel_at_period_end === false
+        ) {
+          enrollmentStatus = "ACTIVE";
+          cancellationDate = null;
+        }
+
+        // Update enrollment
+        const enrollment = await Enrollment.findOne({
+          subscriptionId: subscription.id,
+        });
+
         if (enrollment) {
           enrollment.status = enrollmentStatus;
 
-          // Only update trial if never used before
+          if (cancellationDate) {
+            enrollment.cancellationDate = cancellationDate;
+          }
+
+          // Trial logic (only once)
           if (trialStatus && !enrollment.hasUsedTrial) {
             enrollment.hasUsedTrial = true;
             enrollment.trial = {
@@ -974,14 +1012,14 @@ export const handleStripeWebhookConnect = async (req, res) => {
       case "customer.subscription.deleted": {
         const subscription = event.data.object;
 
-        console.log("📋 Subscription deleted:", {
-          id: subscription.id,
-          status: subscription.status
-        });
+        const cancellationDate = subscription.canceled_at
+          ? new Date(subscription.canceled_at * 1000)
+          : new Date();
+
 
         await Enrollment.updateOne(
           { subscriptionId: subscription.id },
-          { $set: { status: "CANCELLED" } }
+          { $set: { status: "CANCELLED", cancellationDate } }
         );
 
         break;

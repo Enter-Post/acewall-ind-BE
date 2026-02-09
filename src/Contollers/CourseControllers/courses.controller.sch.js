@@ -34,10 +34,10 @@ export const importCourseFromJSON = asyncHandler(async (req, res) => {
 
   const {
     _id: oldCourseId,
-    curriculum, assessments, discussions, assessmentCategories,                                  
+    curriculum, assessments, discussions, assessmentCategories,
     semesters, semester, quarter, quarters,
     category, subcategory,
-    createdAt, updatedAt, __v, createdby,                          
+    createdAt, updatedAt, __v, createdby,
     ...courseBody
   } = data;
 
@@ -153,7 +153,7 @@ export const importCourseFromJSON = asyncHandler(async (req, res) => {
     });
   }
 
-  res.status(201).json({ 
+  res.status(201).json({
     courseId: newCourse._id,
     message: "Course imported successfully"
   });
@@ -499,23 +499,19 @@ export const createCourseSch = asyncHandler(async (req, res) => {
 
     const stripePrice = await stripe.prices.create(stripePriceConfig);
 
-    // 5. Auto-enroll creator
-    await Enrollment.create({ student: createdby, course: course._id, enrollmentType: "TEACHERENROLLMENT", status: "ACTIVE" });
-
-
     courseData.price = parseFloat(price);
     courseData.stripeProductId = product.id;
     courseData.stripePriceId = stripePrice.id;
   }
-
+  
   const course = new CourseSch(courseData);
   await course.save();
 
-  await Enrollment.create({ student: createdby, course: course._id });
-
-  res.status(201).json({ 
-    course, 
-    message: "Course created successfully" 
+  await Enrollment.create({ student: createdby, course: course._id, enrollmentType: "TEACHERENROLLMENT", status: "ACTIVE" });
+  
+  res.status(201).json({
+    course,
+    message: "Course created successfully"
   });
 });
 
@@ -538,9 +534,9 @@ export const getAllCoursesSch = asyncHandler(async (req, res) => {
     .populate("category", "title")
     .populate("subcategory", "title");
 
-  res.status(200).json({ 
-    courses, 
-    message: courses.length === 0 ? "No courses found" : "All courses fetched successfully" 
+  res.status(200).json({
+    courses,
+    message: courses.length === 0 ? "No courses found" : "All courses fetched successfully"
   });
 });
 
@@ -952,9 +948,9 @@ export const getunPurchasedCourseByIdSch = asyncHandler(async (req, res) => {
     throw new NotFoundError("Course not found");
   }
 
-  res.status(200).json({ 
-    course: courseData[0], 
-    message: "Course fetched successfully" 
+  res.status(200).json({
+    course: courseData[0],
+    message: "Course fetched successfully"
   });
 });
 
@@ -1196,9 +1192,9 @@ export const getCoursesByTeacherSch = asyncHandler(async (req, res) => {
       select: "title",
     });
 
-  res.status(200).json({ 
-    courses, 
-    message: courses.length === 0 ? "No courses found for this teacher" : "Courses fetched successfully" 
+  res.status(200).json({
+    courses,
+    message: courses.length === 0 ? "No courses found for this teacher" : "Courses fetched successfully"
   });
 });
 
@@ -1223,9 +1219,9 @@ export const getCoursesforadminofteacher = asyncHandler(async (req, res) => {
     .populate("createdby")
     .populate("category");
 
-  res.status(200).json({ 
-    courses, 
-    message: courses.length === 0 ? "No courses found for this teacher" : "Courses fetched successfully" 
+  res.status(200).json({
+    courses,
+    message: courses.length === 0 ? "No courses found for this teacher" : "Courses fetched successfully"
   });
 });
 
@@ -1456,29 +1452,29 @@ export const verifyCourse = asyncHandler(async (req, res) => {
 
   await course.save();
 
-    const teacherEmail = course.createdby?.email;
-    const teacherName = course.createdby?.firstName || "Instructor";
-    const courseTitle = course.courseTitle;
+  const teacherEmail = course.createdby?.email;
+  const teacherName = course.createdby?.firstName || "Instructor";
+  const courseTitle = course.courseTitle;
 
-    // ✅ Email setup (like in verifyTeacherDocument)
-    const transporter = nodemailer.createTransport({
-      host: process.env.MAIL_HOST,
-      port: Number(process.env.MAIL_PORT),
-      secure: Number(process.env.MAIL_PORT) === 465,
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
+  // ✅ Email setup (like in verifyTeacherDocument)
+  const transporter = nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: Number(process.env.MAIL_PORT),
+    secure: Number(process.env.MAIL_PORT) === 465,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
 
-    // ✅ Send approval email
-    if (isVerified === "approved" && teacherEmail) {
-      try {
-        await transporter.sendMail({
-          from: `"Admin Team" <${process.env.MAIL_USER}>`,
-          to: teacherEmail,
-          subject: "Course Approved ✅",
-          html: `
+  // ✅ Send approval email
+  if (isVerified === "approved" && teacherEmail) {
+    try {
+      await transporter.sendMail({
+        from: `"Admin Team" <${process.env.MAIL_USER}>`,
+        to: teacherEmail,
+        subject: "Course Approved ✅",
+        html: `
       <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
         <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
           
@@ -1510,20 +1506,20 @@ export const verifyCourse = asyncHandler(async (req, res) => {
         </div>
       </div>
       `,
-        });
-      } catch (mailError) {
-        console.error("❌ Error sending approval email:", mailError);
-      }
+      });
+    } catch (mailError) {
+      console.error("❌ Error sending approval email:", mailError);
     }
+  }
 
-    // ✅ Send rejection email
-    if (isVerified === "rejected" && teacherEmail) {
-      try {
-        await transporter.sendMail({
-          from: `"Admin Team" <${process.env.MAIL_USER}>`,
-          to: teacherEmail,
-          subject: "Course Rejected ❌",
-          html: `
+  // ✅ Send rejection email
+  if (isVerified === "rejected" && teacherEmail) {
+    try {
+      await transporter.sendMail({
+        from: `"Admin Team" <${process.env.MAIL_USER}>`,
+        to: teacherEmail,
+        subject: "Course Rejected ❌",
+        html: `
       <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
         <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
           
@@ -1555,19 +1551,19 @@ export const verifyCourse = asyncHandler(async (req, res) => {
         </div>
       </div>
       `,
-        });
-      } catch (mailError) {
-        console.error("❌ Error sending rejection email:", mailError);
-      }
+      });
+    } catch (mailError) {
+      console.error("❌ Error sending rejection email:", mailError);
     }
+  }
 
 
-    const message =
-      isVerified === "approved"
-        ? "Course approved successfully."
-        : isVerified === "rejected"
-          ? "Course rejected successfully."
-          : "Course verification status updated.";
+  const message =
+    isVerified === "approved"
+      ? "Course approved successfully."
+      : isVerified === "rejected"
+        ? "Course rejected successfully."
+        : "Course verification status updated.";
 
   res.status(200).json({
     courseId: course._id,
@@ -1851,7 +1847,7 @@ export const getRequiredDocumentforEdit = asyncHandler(async (req, res) => {
   }
 
   const course = await CourseSch.findById(courseId);
-  
+
   if (!course) {
     throw new NotFoundError("Course not found");
   }
