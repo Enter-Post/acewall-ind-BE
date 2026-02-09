@@ -9,6 +9,7 @@ import {
   studentCourseDetails,
   studentsEnrolledinCourse,
   unEnrollment,
+  enrollment,
 } from "../Contollers/enrollment.controller.js";
 import { isUser } from "../middlewares/Auth.Middleware.js";
 import { isEnrolledMiddleware } from "../middlewares/isEnrolled.middleware.js";
@@ -17,7 +18,7 @@ const router = express.Router();
 
 router.get("/my-courses", isUser, getMyEnrolledCourses);
 
-// router.post("/create/:courseId", isUser, enrollment);
+router.post("/create/:courseId", isUser, enrollment);
 router.get("/isEnrolled/:courseId", isUser, isEnrolled);
 router.get("/studentCourses", isUser, studenCourses);
 router.get("/studentCourseDetails/:enrollmentId", isUser, studentCourseDetails);
