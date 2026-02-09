@@ -116,102 +116,233 @@ export const isEnrolled = asyncHandler(async (req, res, next) => {
 
 
 
-const validateFilterParams = (type, status) => {
-  const validTypes = ['ONETIME', 'SUBSCRIPTION', 'FREE'];
-  const validStatuses = ['active', 'trial', 'cancelled', 'pastdue'];
+// const validateFilterParams = (type, status) => {
+//   const validTypes = ['ONETIME', 'SUBSCRIPTION', 'FREE'];
+//   const validStatuses = ['active', 'trial', 'cancelled', 'pastdue'];
 
-  // Validate type if provided
-  if (type && !validTypes.includes(type.toUpperCase())) {
+//   // Validate type if provided
+//   if (type && !validTypes.includes(type.toUpperCase())) {
+//     throw new ValidationError(
+//       `Invalid type parameter. Must be one of: ${validTypes.join(', ')}`,
+//       'VAL_002'
+//     );
+//   }
+
+//   // Validate status if provided
+//   if (status && !validStatuses.includes(status.toLowerCase())) {
+//     throw new ValidationError(
+//       `Invalid status parameter. Must be one of: ${validStatuses.join(', ')}`,
+//       'VAL_003'
+//     );
+//   }
+
+//   // Status can only be used with SUBSCRIPTION type
+//   if (status && type && type.toUpperCase() !== 'SUBSCRIPTION') {
+//     throw new ValidationError(
+//       'Status filter can only be used with type=SUBSCRIPTION',
+//       'VAL_004'
+//     );
+//   }
+
+//   // Status requires type to be specified
+//   if (status && !type) {
+//     throw new ValidationError(
+//       'Status filter requires type=SUBSCRIPTION to be specified',
+//       'VAL_005'
+//     );
+//   }
+// };
+
+// const buildEnrollmentFilter = (userId, type, status) => {
+//   const filter = {
+//     student: userId,
+//     enrollmentType: { $ne: 'TEACHERENROLLMENT' }
+//   };
+
+//   if (!type) return filter;
+
+//   const typeUpper = type.toUpperCase();
+
+//   const typeConfig = {
+//     ONETIME: { enrollmentType: 'ONETIME', status: 'ACTIVE' },
+//     FREE: { enrollmentType: 'FREE', status: 'ACTIVE' },
+//     SUBSCRIPTION: { enrollmentType: 'SUBSCRIPTION' }
+//   };
+
+//   if (!typeConfig[typeUpper]) return filter;
+
+//   Object.assign(filter, typeConfig[typeUpper]);
+
+//   if (typeUpper === 'SUBSCRIPTION' && status) {
+//     const statusMap = {
+//       active: { $in: ['ACTIVE', 'APPLIEDFORCANCEL'] },
+//       trial: 'TRIAL',
+//       cancelled: 'CANCELLED',
+//       pastdue: 'PAST_DUE'
+//     };
+
+//     const key = status.toLowerCase();
+//     if (statusMap[key]) filter.status = statusMap[key];
+//   }
+
+//   return filter;
+// };
+
+// const getEnrollmentCounts = async (userId) => {
+//   const counts = {
+//     onetime: 0,
+//     subscription: {
+//     },
+//     free: 0
+//   };
+
+//   try {
+//     // Aggregate all enrollments in a single query
+//     const aggregation = await Enrollment.aggregate([
+//       {
+//         $match: {
+//           student: userId,
+//           enrollmentType: { $ne: 'TEACHERENROLLMENT' }
+//         }
+//       },
+//       {
+//         $group: {
+//           _id: {
+//             type: '$enrollmentType',
+//             status: '$status'
+//           },
+//           count: { $sum: 1 }
+//         }
+//       }
+//     ]);
+
+//     // Process aggregation results
+//     aggregation.forEach(item => {
+//       const { type, status } = item._id;
+//       const count = item.count;
+
+//       if (type === 'ONETIME' && status === 'ACTIVE') {
+//         counts.onetime += count;
+//       } else if (type === 'FREE' && status === 'ACTIVE') {
+//         counts.free += count;
+//       } else if (type === 'SUBSCRIPTION') {
+//         counts.subscription.total += count;
+        
+//         if (status === 'ACTIVE' || status === 'APPLIEDFORCANCEL') {
+//           counts.subscription.active += count;
+//         } else if (status === 'TRIAL') {
+//           counts.subscription.trial += count;
+//         } else if (status === 'CANCELLED') {
+//           counts.subscription.cancelled += count;
+//         } else if (status === 'PAST_DUE') {
+//           counts.subscription.pastdue += count;
+//         }
+//       }
+//     });
+//   } catch (error) {
+//     console.error('Error calculating enrollment counts:', error);
+//     // Return default counts on error
+//   }
+
+//   return counts;
+// };      total: 0,
+//       active: 0,
+//       trial: 0,
+//       cancelled: 0,
+//       pastdue: 0
+// 
+const VALID_TYPES = ['ONETIME', 'SUBSCRIPTION', 'FREE'];
+const VALID_STATUSES = ['active', 'trial', 'cancelled', 'pastdue'];
+
+const validateFilterParams = (type, status) => {
+  const typeUpper = type?.toUpperCase();
+  const statusLower = status?.toLowerCase();
+
+  if (type && !VALID_TYPES.includes(typeUpper)) {
     throw new ValidationError(
-      `Invalid type parameter. Must be one of: ${validTypes.join(', ')}`,
+      `Invalid type. Allowed: ${VALID_TYPES.join(', ')}`,
       'VAL_002'
     );
   }
 
-  // Validate status if provided
-  if (status && !validStatuses.includes(status.toLowerCase())) {
+  if (status && !VALID_STATUSES.includes(statusLower)) {
     throw new ValidationError(
-      `Invalid status parameter. Must be one of: ${validStatuses.join(', ')}`,
+      `Invalid status. Allowed: ${VALID_STATUSES.join(', ')}`,
       'VAL_003'
     );
   }
 
-  // Status can only be used with SUBSCRIPTION type
-  if (status && type && type.toUpperCase() !== 'SUBSCRIPTION') {
+  if (status && typeUpper !== 'SUBSCRIPTION') {
     throw new ValidationError(
-      'Status filter can only be used with type=SUBSCRIPTION',
-      'VAL_004'
+      'Status filter only allowed for SUBSCRIPTION',
+      'VAL_005'
     );
   }
 
-  // Status requires type to be specified
   if (status && !type) {
     throw new ValidationError(
-      'Status filter requires type=SUBSCRIPTION to be specified',
+      'Status requires type=SUBSCRIPTION',
       'VAL_005'
     );
   }
 };
 
+const TYPE_CONFIG = {
+  ONETIME: { enrollmentType: 'ONETIME', status: 'ACTIVE' },
+  FREE: { enrollmentType: 'FREE', status: 'ACTIVE' },
+  SUBSCRIPTION: { enrollmentType: 'SUBSCRIPTION' }
+};
+
+const STATUS_MAP = {
+  active: 'ACTIVE',
+  trial: 'TRIAL',
+  cancelled: { $in: ['CANCELLED', 'APPLIEDFORCANCEL'] },
+  pastdue: 'PAST_DUE'
+};
+
 const buildEnrollmentFilter = (userId, type, status) => {
-  const filter = {
+  const baseFilter = {
     student: userId,
-    enrollmentType: { $ne: 'TEACHERENROLLMENT' } // Exclude teacher enrollments
+    enrollmentType: { $ne: 'TEACHERENROLLMENT' }
   };
 
-  if (!type) {
-    // No type filter - return all enrollments (except TEACHERENROLLMENT)
-    return filter;
-  }
+  if (!type) return baseFilter;
 
   const typeUpper = type.toUpperCase();
-  
-  if (typeUpper === 'ONETIME') {
-    // ONETIME: only show ACTIVE one-time purchases
-    filter.enrollmentType = 'ONETIME';
-    filter.status = 'ACTIVE';
-  } else if (typeUpper === 'FREE') {
-    // FREE: only show ACTIVE free courses
-    filter.enrollmentType = 'FREE';
-    filter.status = 'ACTIVE';
-  } else if (typeUpper === 'SUBSCRIPTION') {
-    filter.enrollmentType = 'SUBSCRIPTION';
-    
-    if (status) {
-      const statusLower = status.toLowerCase();
-      
-      if (statusLower === 'active') {
-        // Active includes ACTIVE and APPLIEDFORCANCEL (still has access until period end)
-        filter.status = { $in: ['ACTIVE', 'APPLIEDFORCANCEL'] };
-      } else if (statusLower === 'trial') {
-        filter.status = 'TRIAL';
-      } else if (statusLower === 'cancelled') {
-        filter.status = 'CANCELLED';
-      } else if (statusLower === 'pastdue') {
-        filter.status = 'PAST_DUE';
-      }
-    }
-    // If no status sub-filter, return all subscription statuses
+  const config = TYPE_CONFIG[typeUpper];
+  if (!config) return baseFilter;
+
+  const filter = { ...baseFilter, ...config };
+
+  if (typeUpper === 'SUBSCRIPTION' && status) {
+    filter.status = STATUS_MAP[status.toLowerCase()];
   }
 
   return filter;
 };
 
+const SUBSCRIPTION_STATUS_MAP = {
+  ACTIVE: 'active',
+  APPLIEDFORCANCEL: 'cancelled', // Treat applied for cancel as cancelled in counts
+  TRIAL: 'trial',
+  CANCELLED: 'cancelled',
+  PAST_DUE: 'pastdue'
+};
+
 const getEnrollmentCounts = async (userId) => {
   const counts = {
     onetime: 0,
+    free: 0,
     subscription: {
       total: 0,
       active: 0,
       trial: 0,
       cancelled: 0,
       pastdue: 0
-    },
-    free: 0
+    }
   };
 
   try {
-    // Aggregate all enrollments in a single query
     const aggregation = await Enrollment.aggregate([
       {
         $match: {
@@ -221,41 +352,41 @@ const getEnrollmentCounts = async (userId) => {
       },
       {
         $group: {
-          _id: {
-            type: '$enrollmentType',
-            status: '$status'
-          },
+          _id: { type: '$enrollmentType', status: '$status' },
           count: { $sum: 1 }
         }
       }
     ]);
 
-    // Process aggregation results
-    aggregation.forEach(item => {
-      const { type, status } = item._id;
-      const count = item.count;
-
+    aggregation.forEach(({ _id: { type, status }, count }) => {
+      // ONETIME
       if (type === 'ONETIME' && status === 'ACTIVE') {
         counts.onetime += count;
-      } else if (type === 'FREE' && status === 'ACTIVE') {
+        return;
+      }
+
+      // FREE
+      if (type === 'FREE' && status === 'ACTIVE') {
         counts.free += count;
-      } else if (type === 'SUBSCRIPTION') {
+        return;
+      }
+
+      // SUBSCRIPTION
+      if (type === 'SUBSCRIPTION') {
+        const key = SUBSCRIPTION_STATUS_MAP[status];
+
+        if (!key) return;
+
+        // Only active + trial counted in total
+        if (key === 'active' || key === 'trial') {
         counts.subscription.total += count;
-        
-        if (status === 'ACTIVE' || status === 'APPLIEDFORCANCEL') {
-          counts.subscription.active += count;
-        } else if (status === 'TRIAL') {
-          counts.subscription.trial += count;
-        } else if (status === 'CANCELLED') {
-          counts.subscription.cancelled += count;
-        } else if (status === 'PAST_DUE') {
-          counts.subscription.pastdue += count;
-        }
+
+        counts.subscription[key] += count;
+    }
       }
     });
-  } catch (error) {
-    console.error('Error calculating enrollment counts:', error);
-    // Return default counts on error
+  } catch (err) {
+    console.error('Enrollment count error:', err);
   }
 
   return counts;
