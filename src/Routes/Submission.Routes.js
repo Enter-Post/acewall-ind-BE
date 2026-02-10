@@ -8,16 +8,20 @@ import {
   teacherGrading,
 } from "../Contollers/Submission.controller.js";
 import { upload } from "../lib/multer.config.js";
+import { isEnrolledMiddleware } from "../middlewares/isEnrolled.middleware.js";
+import { resolveEnrollmentFromAssessment, resolveEnrollmentFromSubmission } from "../middlewares/enrollment-resolvers.js";
 
 const router = express.Router();
 
 router.post(
   "/submission/:assessmentId",
   isUser,
+  resolveEnrollmentFromAssessment,
+  isEnrolledMiddleware,
   upload.array("files"),
   submission
 );
-router.get("/submission/:submissionId", isUser, getSubmissionById);
+router.get("/submission/:submissionId", isUser, resolveEnrollmentFromSubmission, isEnrolledMiddleware, getSubmissionById);
 router.get(
   "/submission_for_Teacher/:assessmentId",
   isUser,

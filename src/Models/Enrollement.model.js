@@ -33,7 +33,7 @@ const EnrollmentSchema = new mongoose.Schema(
     stripeSessionId: { type: String },
     subscriptionId: { type: String },
     enrollmentType: { type: String, enum: ["ONETIME", "SUBSCRIPTION", "FREE", "TEACHERENROLLMENT"], required: true },
-    status: { type: String, enum: ["ACTIVE", "PAST_DUE", "CANCELLED", "TRIAL", "APPLIEDFORCANCEL", "CANCELLEDDDDDD"] },
+    status: { type: String, enum: ["ACTIVE", "PAST_DUE", "CANCELLED", "TRIAL", "APPLIEDFORCANCEL"] },
     stripeInvoiceId: { type: String },
     hasUsedTrial: {
       type: Boolean,
