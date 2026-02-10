@@ -439,9 +439,10 @@ export const allAssessmentByTeacher = asyncHandler(async (req, res) => {
 export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
 
-  // 1. Get all enrollments
+  // 1. Get all ACTIVE enrollments (exclude CANCELLED)
   const allEnrollmentofStudent = await Enrollment.find({
     student: studentId,
+    status: { $ne: "CANCELLED" }
   });
 
     const courseIds = allEnrollmentofStudent.map(

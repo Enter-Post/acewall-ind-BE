@@ -29,7 +29,13 @@ export const getMyEnrolledCourses = asyncHandler(async (req, res, next) => {
             
             courses = enrollments
                 .filter(e => e.course) // Security check in case course was deleted
-                .map(e => e.course);
+                .map(e => ({
+                    ...e.course,
+                    enrollmentStatus: e.status,
+                    enrollmentType: e.enrollmentType,
+                    enrollmentId: e._id,
+                    canRenew: e.status === "CANCELLED" && e.enrollmentType === "SUBSCRIPTION"
+                }));
         }
 
         res.status(200).json(courses);
@@ -257,9 +263,10 @@ const getEnrollmentCounts = async (userId) => {
         const key = SUBSCRIPTION_STATUS_MAP[status];
         if (!key) return;
 
+        counts.subscription[key] += count;
+        
         if (key === "active" || key === "trial") {
           counts.subscription.total += count;
-          counts.subscription[key] += count;
         }
       }
     });
@@ -274,6 +281,19 @@ const getEnrollmentCounts = async (userId) => {
 export const studenCourses = asyncHandler(async (req, res, next) => {
   try {
     const userId = req.user._id;
+    
+    const now = new Date();
+    await Enrollment.updateMany(
+      {
+        student: userId,
+        status: "APPLIEDFORCANCEL",
+        cancellationDate: { $lte: now }
+      },
+      {
+        $set: { status: "CANCELLED" }
+      }
+    );
+    
     const search = req.query.search?.trim();
     const type = req.query.type?.trim();
     const status = req.query.status?.trim();
@@ -385,8 +405,24 @@ export const studentCourseDetails = asyncHandler(async (req, res, next) => {
     if (!checkEnrollment) {
     throw new NotFoundError("Enrollment not found or has been removed", "RES_001");
     }
+    
+    // Auto-update APPLIEDFORCANCEL to CANCELLED if cancellation date has passed
+    if (checkEnrollment.status === "APPLIEDFORCANCEL" && checkEnrollment.cancellationDate) {
+      const now = new Date();
+      if (now >= checkEnrollment.cancellationDate) {
+        checkEnrollment.status = "CANCELLED";
+        await checkEnrollment.save();
+      }
+    }
+    
     if (checkEnrollment.status === "CANCELLED") {
-      return res.status(403).json({ message: "Access denied to cancelled enrollment", enrolledCourse: [] });
+      const canRenew = checkEnrollment.enrollmentType === "SUBSCRIPTION";
+      return res.status(403).json({ 
+        message: "Your enrollment has been cancelled. " + (canRenew ? "You can renew your subscription to regain access." : "Please contact support."),
+        canRenew,
+        enrollmentId: checkEnrollment._id,
+        enrolledCourse: [] 
+      });
     }
 
     const enrolledData = await Enrollment.aggregate([

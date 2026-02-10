@@ -912,7 +912,7 @@ export const handleStripeWebhookConnect = async (req, res) => {
 
         // Fully cancelled
         if (["canceled", "incomplete_expired"].includes(subscription.status)) {
-          enrollmentStatus = "CANCELLEDDDDDD";
+          enrollmentStatus = "CANCELLED";
 
           console.log(subscription, "subscription")
           console.log(subscription.canceled_at, "subscription.canceled_at")
@@ -1057,17 +1057,136 @@ export const cancelSubscriptionAtPeriodEnd = async (req, res) => {
   const { subscriptionId, comment } = req.body;
 
   try {
-    await stripe.subscriptions.update(subscriptionId, {
+    // Update Stripe subscription
+    const subscription = await stripe.subscriptions.update(subscriptionId, {
       cancel_at_period_end: true,
       metadata: {
         cancellation_reason: comment
       }
     });
 
+    // Calculate cancellation date (period end or 30 days from now as fallback)
+    let cancellationDate;
+    if (subscription.current_period_end && typeof subscription.current_period_end === 'number') {
+      cancellationDate = new Date(subscription.current_period_end * 1000);
+    } else {
+      // Fallback: 30 days from now if period end not available
+      cancellationDate = new Date();
+      cancellationDate.setDate(cancellationDate.getDate() + 30);
+    }
+
+    // Update enrollment in database immediately
+    await Enrollment.findOneAndUpdate(
+      { subscriptionId },
+      {
+        status: "APPLIEDFORCANCEL",
+        cancellationDate: cancellationDate,
+        cancellationReason: comment || "User requested cancellation"
+      }
+    );
+
     return res.json({
       success: true,
-      message: "Subscription will cancel at period end"
+      message: "Subscription will cancel at period end",
+      cancelAt: cancellationDate
     });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+export const undoCancellation = async (req, res) => {
+  const { subscriptionId } = req.body;
+
+  try {
+    // Remove cancellation from Stripe subscription
+    await stripe.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: false
+    });
+
+    // Update enrollment status back to ACTIVE
+    await Enrollment.findOneAndUpdate(
+      { subscriptionId },
+      {
+        status: "ACTIVE",
+        cancellationDate: null,
+        cancellationReason: null
+      }
+    );
+
+    return res.json({
+      success: true,
+      message: "Subscription cancellation has been undone"
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+export const renewSubscription = async (req, res) => {
+  const { enrollmentId } = req.body;
+  const userId = req.user._id;
+
+  try {
+    // Find the cancelled enrollment
+    const enrollment = await Enrollment.findOne({
+      _id: enrollmentId,
+      student: userId,
+      status: "CANCELLED",
+      enrollmentType: "SUBSCRIPTION"
+    }).populate("course");
+
+    if (!enrollment) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Cancelled subscription enrollment not found" 
+      });
+    }
+
+    const course = enrollment.course;
+
+    // Check if trial already used for this student-course combination
+    if (enrollment.hasUsedTrial) {
+      // Cannot use trial again - must pay
+      if (!course.stripePriceId) {
+        return res.status(400).json({
+          success: false,
+          message: "This course doesn't have a price set up"
+        });
+      }
+
+      // Create checkout session for renewal (no trial)
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "subscription",
+        line_items: [{
+          price: course.stripePriceId,
+          quantity: 1,
+        }],
+        success_url: `${process.env.FRONTEND_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.FRONTEND_URL}/cancel`,
+        client_reference_id: userId.toString(),
+        metadata: {
+          courseId: course._id.toString(),
+          userId: userId.toString(),
+          renewalEnrollmentId: enrollmentId.toString()
+        }
+      });
+
+      return res.json({
+        success: true,
+        sessionId: session.id,
+        url: session.url,
+        message: "Checkout session created for renewal"
+      });
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "This enrollment still has trial available - contact support"
+      });
+    }
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message });
