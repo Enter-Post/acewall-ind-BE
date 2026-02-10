@@ -162,7 +162,12 @@ export const createAnnouncement = asyncHandler(async (req, res) => {
 });
 
 export const getAnnouncementsForCourse = asyncHandler(async (req, res) => {
-  const { courseId } = req.params;
+  const courseId = req.query.courseId || req.params.courseId;
+  
+  if (!courseId) {
+    throw new ValidationError("Course ID is required", "ANN_005");
+  }
+  
   const announcements = await Announcement.find({ course: courseId })
     .populate("teacher", "firstName lastName email")
     .sort({ createdAt: -1 });
@@ -207,8 +212,11 @@ export const deleteAnnouncement = asyncHandler(async (req, res) => {
 export const getAnnouncementsForStudent = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
 
-  // 1. Find all courses the student is enrolled in
-  const enrollments = await Enrollment.find({ student: studentId }).select("course");
+  // 1. Find all courses the student is enrolled in (exclude CANCELLED)
+  const enrollments = await Enrollment.find({ 
+    student: studentId,
+    status: { $ne: "CANCELLED" }
+  }).select("course");
   
   if (!enrollments.length) {
     return res.status(200).json({ announcements: [] });

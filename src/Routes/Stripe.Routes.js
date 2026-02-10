@@ -1,5 +1,5 @@
 import express from 'express';
-import { cancelSubscriptionAtPeriodEnd, checkOnboarding, createCheckoutSession, createCheckoutSessionConnect, createMobileCheckoutSession, getpurchases, getStripeLoginLink, stripeOnboarding } from '../Contollers/stripe.controller.js';
+import { cancelSubscriptionAtPeriodEnd, checkOnboarding, createCheckoutSession, createCheckoutSessionConnect, createMobileCheckoutSession, getpurchases, getStripeLoginLink, stripeOnboarding, undoCancellation, renewSubscription } from '../Contollers/stripe.controller.js';
 import { isUser } from '../middlewares/Auth.Middleware.js';
 
 const router = express.Router();
@@ -18,6 +18,8 @@ router.get("/getStripeLoginLink", isUser, getStripeLoginLink)
 router.post("/create-checkout-session-connect", isUser, createCheckoutSessionConnect)
 router.get("/getPurchases", isUser, getpurchases)
 router.post("/cancelSubscriptionAtPeriodEnd", isUser, cancelSubscriptionAtPeriodEnd)
+router.post("/undo-cancellation", isUser, undoCancellation)
+router.post("/renew-subscription", isUser, renewSubscription)
 
 /////for test only
 // router.post("/advance-test-clock", advanceTestClock)

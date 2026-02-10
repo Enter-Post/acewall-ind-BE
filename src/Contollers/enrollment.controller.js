@@ -29,7 +29,13 @@ export const getMyEnrolledCourses = asyncHandler(async (req, res, next) => {
             
             courses = enrollments
                 .filter(e => e.course) // Security check in case course was deleted
-                .map(e => e.course);
+                .map(e => ({
+                    ...e.course,
+                    enrollmentStatus: e.status,
+                    enrollmentType: e.enrollmentType,
+                    enrollmentId: e._id,
+                    canRenew: e.status === "CANCELLED" && e.enrollmentType === "SUBSCRIPTION"
+                }));
         }
 
         res.status(200).json(courses);
@@ -65,31 +71,50 @@ export const enrollmentforTeacher = asyncHandler(async (req, res, next) => {
   }
 });
 
-// export const enrollment = async (req, res) => {
-//   const { courseId } = req.params;
-//   const userId = req.user._id;
-//   try {
-//     const course = await CourseSch.findById(courseId);
-//     if (!course) return res.status(404).json({ message: "Course not found" });
+export const enrollment = asyncHandler(async (req, res, next) => {
+  const { courseId } = req.params;
+  const userId = req.user._id;
 
-//     const exists = await Enrollment.findOne({
-//       student: userId,
-//       course: courseId,
-//     });
-//     if (exists)
-//       return res
-//         .status(400)
-//         .json({ message: "Already enrolled in this course" });
+  // Find and validate course
+  const course = await CourseSch.findById(courseId);
+  if (!course) {
+    throw new NotFoundError("Course not found", "RES_001");
+  }
 
-//     const enrollment = await Enrollment.create({
-//       student: userId,
-//       course: courseId,
-//     });
-//     res.status(201).json({ message: "Enrollment successful", enrollment });
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// };
+  // Check if course is free
+  if (course.paymentType !== "FREE") {
+    throw new ValidationError(
+      "This is a paid course. Please use the payment flow to enroll.",
+      "VAL_002"
+    );
+  }
+
+  // Check for existing enrollment
+  const exists = await Enrollment.findOne({
+    student: userId,
+    course: courseId,
+  });
+  
+  if (exists) {
+    throw new ValidationError(
+      "Already enrolled in this course",
+      "VAL_003"
+    );
+  }
+
+  // Create enrollment with required fields
+  const enrollment = await Enrollment.create({
+    student: userId,
+    course: courseId,
+    enrollmentType: "FREE",
+    status: "ACTIVE",
+  });
+
+  res.status(201).json({ 
+    message: "Enrollment successful", 
+    enrollment 
+  });
+});
 
 export const isEnrolled = asyncHandler(async (req, res, next) => {
   try {
@@ -115,46 +140,220 @@ export const isEnrolled = asyncHandler(async (req, res, next) => {
 });
 
 
+const VALID_TYPES = ['ONETIME', 'SUBSCRIPTION', 'FREE'];
+const VALID_STATUSES = ['active', 'trial', 'cancelled', 'pastdue'];
 
+const validateFilterParams = (type, status) => {
+  const typeUpper = type?.toUpperCase();
+  const statusLower = status?.toLowerCase();
 
-export const studenCourses = async (req, res) => {
+  if (type && !VALID_TYPES.includes(typeUpper)) {
+    throw new ValidationError(
+      `Invalid type. Allowed: ${VALID_TYPES.join(', ')}`,
+      'VAL_002'
+    );
+  }
+
+  if (status && !VALID_STATUSES.includes(statusLower)) {
+    throw new ValidationError(
+      `Invalid status. Allowed: ${VALID_STATUSES.join(', ')}`,
+      'VAL_003'
+    );
+  }
+
+  if (status && typeUpper !== 'SUBSCRIPTION') {
+    throw new ValidationError(
+      'Status filter only allowed for SUBSCRIPTION',
+      'VAL_005'
+    );
+  }
+
+  if (status && !type) {
+    throw new ValidationError(
+      'Status requires type=SUBSCRIPTION',
+      'VAL_005'
+    );
+  }
+};
+
+const TYPE_CONFIG = {
+  ONETIME: { enrollmentType: 'ONETIME', status: 'ACTIVE' },
+  FREE: { enrollmentType: 'FREE', status: 'ACTIVE' },
+  SUBSCRIPTION: { enrollmentType: 'SUBSCRIPTION' }
+};
+
+const STATUS_MAP = {
+  active: 'ACTIVE',
+  trial: 'TRIAL',
+  cancelled: { $in: ['CANCELLED', 'APPLIEDFORCANCEL'] },
+  pastdue: 'PAST_DUE'
+};
+
+const buildEnrollmentFilter = (userId, type, status) => {
+  const baseFilter = {
+    student: userId,
+    enrollmentType: { $ne: 'TEACHERENROLLMENT' }
+  };
+
+  if (!type) return baseFilter;
+
+  const typeUpper = type.toUpperCase();
+  const config = TYPE_CONFIG[typeUpper];
+  if (!config) return baseFilter;
+
+  const filter = { ...baseFilter, ...config };
+
+  if (typeUpper === 'SUBSCRIPTION' && status) {
+    filter.status = STATUS_MAP[status.toLowerCase()];
+  }
+
+  return filter;
+};
+
+const SUBSCRIPTION_STATUS_MAP = {
+  ACTIVE: 'active',
+  APPLIEDFORCANCEL: 'cancelled', // Treat applied for cancel as cancelled in counts
+  TRIAL: 'trial',
+  CANCELLED: 'cancelled',
+  PAST_DUE: 'pastdue'
+};
+
+const getEnrollmentCounts = async (userId) => {
+  const counts = {
+    onetime: 0,
+    free: 0,
+    subscription: { total: 0, active: 0, trial: 0, cancelled: 0, pastdue: 0 },
+  };
+
   try {
-  const userId = req.user._id;
-  const search = req.query.search?.trim(); // Get the search query from the request
+    const studentId =
+      userId instanceof mongoose.Types.ObjectId
+        ? userId
+        : mongoose.isValidObjectId(userId)
+          ? new mongoose.Types.ObjectId(userId)
+          : null;
 
-    const filter = { student: userId };
+    if (!studentId) return counts;
 
-    // Find enrollments with optional search filter
-    let enrolledCourses = await Enrollment.find(filter).populate({
-      path: "course",
-      select: "courseTitle createdby category subcategory language thumbnail",
-      populate: [
-        {
-          path: "createdby",
-          select: "firstName middleName lastName profileImg",
+    const aggregation = await Enrollment.aggregate([
+      {
+        $match: {
+          student: studentId, // <-- key change
+          enrollmentType: { $ne: "TEACHERENROLLMENT" },
         },
-        {
-          path: "category",
-          select: "title",
+      },
+      {
+        $group: {
+          _id: { type: "$enrollmentType", status: "$status" },
+          count: { $sum: 1 },
         },
-      ],
+      },
+    ]);
+
+    aggregation.forEach(({ _id: { type, status }, count }) => {
+      if (type === "ONETIME" && status === "ACTIVE") {
+        counts.onetime += count;
+        return;
+      }
+      if (type === "FREE" && status === "ACTIVE") {
+        counts.free += count;
+        return;
+      }
+      if (type === "SUBSCRIPTION") {
+        const key = SUBSCRIPTION_STATUS_MAP[status];
+        if (!key) return;
+
+        counts.subscription[key] += count;
+        
+        if (key === "active" || key === "trial") {
+          counts.subscription.total += count;
+        }
+      }
     });
+  } catch (err) {
+    console.error("Enrollment count error:", err);
+  }
 
-    // If a search query is provided, filter courses by courseTitle
+  return counts;
+};
+
+
+export const studenCourses = asyncHandler(async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    
+    const now = new Date();
+    await Enrollment.updateMany(
+      {
+        student: userId,
+        status: "APPLIEDFORCANCEL",
+        cancellationDate: { $lte: now }
+      },
+      {
+        $set: { status: "CANCELLED" }
+      }
+    );
+    
+    const search = req.query.search?.trim();
+    const type = req.query.type?.trim();
+    const status = req.query.status?.trim();
+
+    // Validate filter parameters
+    validateFilterParams(type, status);
+
+    // Build MongoDB filter based on type and status
+    const filter = buildEnrollmentFilter(userId, type, status);
+
+    // Find enrollments with filter
+    let enrolledCourses = await Enrollment.find(filter)
+      .populate({
+        path: "course",
+        select: "courseTitle createdby category subcategory language thumbnail",
+        populate: [
+          {
+            path: "createdby",
+            select: "firstName middleName lastName profileImg",
+          },
+          {
+            path: "category",
+            select: "title",
+          },
+        ],
+      })
+      .sort('-enrolledAt') // Newest first
+      .lean();
+
+    // Filter out enrollments where course was deleted
+    enrolledCourses = enrolledCourses.filter(enroll => enroll.course);
+
+    // If search query is provided, filter by course title
     if (search) {
       enrolledCourses = enrolledCourses.filter((enroll) =>
         enroll.course?.courseTitle?.toLowerCase().includes(search.toLowerCase())
       );
     }
 
+    // Get enrollment counts for metadata
+    const counts = await getEnrollmentCounts(userId);
+
+    // Build response with metadata
     res.status(200).json({
       enrolledCourses,
+      metadata: {
+        total: enrolledCourses.length,
+        filters: {
+          type: type?.toUpperCase() || null,
+          status: status?.toLowerCase() || null,
+          search: search || null
+        },
+        counts
+      },
       message: "Enrolled courses retrieved successfully"
     });
   } catch (err) {
     next(err);
   }
-};
+});
 
 export const studentsEnrolledinCourse = asyncHandler(async (req, res, next) => {
   try {
@@ -198,13 +397,32 @@ export const unEnrollment = asyncHandler(async (req, res, next) => {
   }
 });
 
-export const studentCourseDetails = async (req, res) => {
+export const studentCourseDetails = asyncHandler(async (req, res, next) => {
   const { enrollmentId } = req.params;
   try {
     const checkEnrollment = await Enrollment.findById(enrollmentId)
 
+    if (!checkEnrollment) {
+    throw new NotFoundError("Enrollment not found or has been removed", "RES_001");
+    }
+    
+    // Auto-update APPLIEDFORCANCEL to CANCELLED if cancellation date has passed
+    if (checkEnrollment.status === "APPLIEDFORCANCEL" && checkEnrollment.cancellationDate) {
+      const now = new Date();
+      if (now >= checkEnrollment.cancellationDate) {
+        checkEnrollment.status = "CANCELLED";
+        await checkEnrollment.save();
+      }
+    }
+    
     if (checkEnrollment.status === "CANCELLED") {
-      return res.status(403).json({ message: "Access denied to cancelled enrollment", enrolledCourse: [] });
+      const canRenew = checkEnrollment.enrollmentType === "SUBSCRIPTION";
+      return res.status(403).json({ 
+        message: "Your enrollment has been cancelled. " + (canRenew ? "You can renew your subscription to regain access." : "Please contact support."),
+        canRenew,
+        enrollmentId: checkEnrollment._id,
+        enrolledCourse: [] 
+      });
     }
 
     const enrolledData = await Enrollment.aggregate([
@@ -347,7 +565,7 @@ export const studentCourseDetails = async (req, res) => {
   } catch (error) {
     next(error);
   }
-};
+});
 
 
 export const chapterDetails = asyncHandler(async (req, res, next) => {
