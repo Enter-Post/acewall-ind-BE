@@ -1,4 +1,5 @@
 import CourseShare from "../Models/CourseShare.model.js";
+import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 
 // Public endpoint to track share
@@ -70,46 +71,56 @@ export const getCourseShareAnalytics = async (req, res) => {
 
     // Date filters
     if (startDate || endDate) {
-      matchQuery.timestamp = {};
-      if (startDate) matchQuery.timestamp.$gte = new Date(startDate);
-      if (endDate) matchQuery.timestamp.$lte = new Date(endDate);
+      matchQuery.createdAt = {};
+      if (startDate) matchQuery.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        matchQuery.createdAt.$lte = end;
+      }
     }
 
     // UTM filters
     if (utm_source) matchQuery.utm_source = utm_source;
-    if (utm_campaign) matchQuery.utm_campaign = utm_campaign;
+    if (utm_campaign) matchQuery.utm_campaign = { $regex: utm_campaign, $options: "i" };
 
-    const totalShares = await CourseShare.countDocuments(matchQuery);
+    // Fetch raw records for the detailed log table
+    const analytics = await CourseShare.find(matchQuery)
+      .populate("courseId", "courseTitle")
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const breakdown = await CourseShare.aggregate([
-      { $match: matchQuery },
-      {
-        $group: {
-          _id: {
-            utm_source: "$utm_source",
-            utm_medium: "$utm_medium",
-            utm_campaign: "$utm_campaign",
-          },
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          utm_source: "$_id.utm_source",
-          utm_medium: "$_id.utm_medium",
-          utm_campaign: "$_id.utm_campaign",
-          count: 1,
-        },
-      },
-      { $sort: { count: -1 } },
-    ]);
+    const totalShares = analytics.length;
+
+    // Source breakdown
+    const sourceMap = {};
+    const campaignMap = {};
+    const timeMap = {};
+
+    analytics.forEach((item) => {
+      const source = item.utm_source || "direct";
+      sourceMap[source] = (sourceMap[source] || 0) + 1;
+
+      const campaign = item.utm_campaign || "none";
+      campaignMap[campaign] = (campaignMap[campaign] || 0) + 1;
+
+      const dateKey = new Date(item.createdAt).toISOString().split("T")[0];
+      timeMap[dateKey] = (timeMap[dateKey] || 0) + 1;
+    });
+
+    const summary = {
+      totalShares,
+      sourceBreakdown: Object.entries(sourceMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+      campaignBreakdown: Object.entries(campaignMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+      timeSeriesData: Object.entries(timeMap).map(([date, shares]) => ({ date, shares })).sort((a, b) => new Date(a.date) - new Date(b.date)),
+    };
 
     return res.status(200).json({
       success: true,
       courseId,
       totalShares,
-      breakdown,
+      analytics,
+      summary,
     });
   } catch (error) {
     console.error("Error fetching course share analytics:", error);
@@ -128,60 +139,55 @@ export const getGlobalShareAnalytics = async (req, res) => {
 
     // Date filters
     if (startDate || endDate) {
-      matchQuery.timestamp = {};
-      if (startDate) matchQuery.timestamp.$gte = new Date(startDate);
-      if (endDate) matchQuery.timestamp.$lte = new Date(endDate);
+      matchQuery.createdAt = {};
+      if (startDate) matchQuery.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        matchQuery.createdAt.$lte = end;
+      }
     }
 
     // UTM filters
     if (utm_source) matchQuery.utm_source = utm_source;
-    if (utm_campaign) matchQuery.utm_campaign = utm_campaign;
+    if (utm_campaign) matchQuery.utm_campaign = { $regex: utm_campaign, $options: "i" };
 
-    const totalShares = await CourseShare.countDocuments(matchQuery);
+    // Fetch raw records for the detailed log table
+    const analytics = await CourseShare.find(matchQuery)
+      .populate("courseId", "courseTitle")
+      .sort({ createdAt: -1 })
+      .lean();
 
-    // Breakdown by Source
-    const bySource = await CourseShare.aggregate([
-      { $match: matchQuery },
-      {
-        $group: {
-          _id: "$utm_source",
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          utm_source: "$_id",
-          count: 1,
-        },
-      },
-      { $sort: { count: -1 } },
-    ]);
+    const totalShares = analytics.length;
 
-    // Breakdown by Campaign
-    const byCampaign = await CourseShare.aggregate([
-      { $match: matchQuery },
-      {
-        $group: {
-          _id: "$utm_campaign",
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          utm_campaign: "$_id",
-          count: 1,
-        },
-      },
-      { $sort: { count: -1 } },
-    ]);
+    // Build summary breakdowns
+    const sourceMap = {};
+    const campaignMap = {};
+    const timeMap = {};
+
+    analytics.forEach((item) => {
+      const source = item.utm_source || "direct";
+      sourceMap[source] = (sourceMap[source] || 0) + 1;
+
+      const campaign = item.utm_campaign || "none";
+      campaignMap[campaign] = (campaignMap[campaign] || 0) + 1;
+
+      const dateKey = new Date(item.createdAt).toISOString().split("T")[0];
+      timeMap[dateKey] = (timeMap[dateKey] || 0) + 1;
+    });
+
+    const summary = {
+      totalShares,
+      sourceBreakdown: Object.entries(sourceMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+      campaignBreakdown: Object.entries(campaignMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+      timeSeriesData: Object.entries(timeMap).map(([date, shares]) => ({ date, shares })).sort((a, b) => new Date(a.date) - new Date(b.date)),
+    };
 
     return res.status(200).json({
       success: true,
       totalShares,
-      bySource,
-      byCampaign,
+      analytics,
+      summary,
     });
   } catch (error) {
     console.error("Error fetching global share analytics:", error);
