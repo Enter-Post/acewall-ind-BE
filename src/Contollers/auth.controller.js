@@ -314,6 +314,9 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
   const userResponse = newUser.toObject();
   delete userResponse.password;
 
+  // ✅ Issue JWT token so user is auto-logged in after signup
+  generateToken(newUser, newUser.role, req, res);
+
   res.status(200).json({
     message: "Email verified successfully. Registration complete!",
     user: userResponse,
