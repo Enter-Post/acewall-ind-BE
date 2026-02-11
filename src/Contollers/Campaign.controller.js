@@ -187,3 +187,72 @@ export const getAllCampaigns = async (req, res) => {
       .json({ error: true, message: "Internal server error" });
   }
 };
+
+
+// Get Active Campaign for Course
+// export const getActiveCampaign = async (req, res) => {
+//   try {
+//     const { courseId } = req.query;
+//     const now = new Date();
+
+//     let campaigns = [];
+
+//     // Common date filter
+//     const dateFilter = {
+//       isActive: true,
+//       $and: [
+//         { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
+//         { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+//       ],
+//     };
+
+//     // 1️⃣ If courseId provided → check for course-specific campaign
+//     if (courseId) {
+//       const courseCampaign = await Campaign.findOne({
+//         ...dateFilter,
+//         courseId,
+//       });
+
+//       if (courseCampaign) {
+//         campaigns.push(courseCampaign);
+//       }
+//     }
+
+//     // 2️⃣ Always check for global campaign
+//     const globalCampaign = await Campaign.findOne({
+//       ...dateFilter,
+//       courseId: null,
+//     });
+
+//     if (globalCampaign) {
+//       campaigns.push(globalCampaign);
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       campaigns, // now returning array
+//     });
+
+//   } catch (error) {
+//     console.error("Error fetching active campaign:", error);
+//     return res
+//       .status(500)
+//       .json({ error: true, message: "Internal server error" });
+//   }
+// };
+
+
+// List all campaigns for admin
+// export const getAllCampaigns = async (req, res) => {
+//   try {
+//     const campaigns = await Campaign.find()
+//       .populate("courseId", "courseTitle")
+//       .sort({ createdAt: -1 });
+//     return res.status(200).json({ success: true, campaigns });
+//   } catch (error) {
+//     console.error("Error listing campaigns:", error);
+//     return res
+//       .status(500)
+//       .json({ error: true, message: "Internal server error" });
+//   }
+// };
