@@ -7,6 +7,7 @@ import Assessment from "../Models/Assessment.model.js";
 import Lesson from "../Models/lesson.model.sch.js";
 import { ValidationError, NotFoundError, DatabaseError } from '../Utiles/errors.js';
 import { asyncHandler } from '../middlewares/errorHandler.middleware.js';
+import { notifyEnrollmentSuccess } from "../Utiles/notificationService.js";
 
 
 export const getMyEnrolledCourses = asyncHandler(async (req, res, next) => {
@@ -23,7 +24,7 @@ export const getMyEnrolledCourses = asyncHandler(async (req, res, next) => {
                 .lean();
         } else {
             // Students see courses they are ENROLLED in
-            const enrollments = await Enrollment.find({ student: userId })
+            const enrollments = await Enrollment.find({ student: userId, status: { $ne: "CANCELLED" } })
                 .populate('course', 'courseTitle courseCode thumbnail')
                 .lean();
             
@@ -110,6 +111,9 @@ export const enrollment = asyncHandler(async (req, res, next) => {
     status: "ACTIVE",
   });
 
+
+  // Send enrollment success notification
+  await notifyEnrollmentSuccess(userId, enrollment._id, course.courseTitle);
   res.status(201).json({ 
     message: "Enrollment successful", 
     enrollment 
@@ -192,7 +196,8 @@ const STATUS_MAP = {
 const buildEnrollmentFilter = (userId, type, status) => {
   const baseFilter = {
     student: userId,
-    enrollmentType: { $ne: 'TEACHERENROLLMENT' }
+    enrollmentType: { $ne: 'TEACHERENROLLMENT' },
+    status: { $ne: 'CANCELLED' }
   };
 
   if (!type) return baseFilter;
@@ -293,8 +298,7 @@ export const studenCourses = asyncHandler(async (req, res, next) => {
         $set: { status: "CANCELLED" }
       }
     );
-    
-    const search = req.query.search?.trim();
+        const search = req.query.search?.trim();
     const type = req.query.type?.trim();
     const status = req.query.status?.trim();
 
@@ -355,23 +359,69 @@ export const studenCourses = asyncHandler(async (req, res, next) => {
   }
 });
 
-export const studentsEnrolledinCourse = asyncHandler(async (req, res, next) => {
-  try {
-    const { courseId } = req.params;
+export const studentsEnrolledinCourse = asyncHandler(async (req, res) => {
+  const { courseId } = req.params;
+  const { status } = req.query;
 
-    if (!courseId) {
-      throw new ValidationError("Course ID is required", "VAL_001");
-    }
-
-    const enrolledStudents = await Enrollment.find({
-      course: courseId,
-    }).populate("student", "firstName middleName lastName profileImg");
-
-    res.status(200).json(enrolledStudents);
-  } catch (err) {
-    next(err);
+  if (!courseId) {
+    throw new ValidationError("Course ID is required", "VAL_001");
   }
+
+  const filter = { course: courseId };
+
+  const statusMap = {
+    active: ["ACTIVE", "TRIAL", "APPLIEDFORCANCEL", "PAST_DUE"],
+    cancelled: ["CANCELLED"],
+    appliedforcancel: ["APPLIEDFORCANCEL"]
+  };
+
+  if (status) {
+    const normalizedStatus = status.toLowerCase();
+    filter.status = statusMap[normalizedStatus]
+      ? { $in: statusMap[normalizedStatus] }
+      : status.toUpperCase();
+  }
+
+  // Fetch Students
+  const students = await Enrollment.find(filter)
+    .populate("student", "firstName middleName lastName profileImg email")
+    .sort({ enrolledAt: -1 })
+    .lean();
+
+  // Status Counts
+  const statusCounts = await Enrollment.aggregate([
+    { $match: { course: new mongoose.Types.ObjectId(courseId) } },
+    { $group: { _id: "$status", count: { $sum: 1 } } }
+  ]);
+
+  const counts = statusCounts.reduce(
+    (acc, { _id, count }) => {
+      acc.total += count;
+      if (_id === "ACTIVE") acc.active += count;
+      if (_id === "CANCELLED") acc.cancelled += count;
+      if (_id === "APPLIEDFORCANCEL") acc.appliedForCancel += count;
+      if (_id === "TRIAL") acc.trial += count;
+      if (_id === "PAST_DUE") acc.pastDue += count;
+      return acc;
+    },
+    {
+      total: 0,
+      active: 0,
+      cancelled: 0,
+      appliedForCancel: 0,
+      trial: 0,
+      pastDue: 0
+    }
+  );
+
+  res.status(200).json({
+    students,
+    counts,
+    filter: status?.toLowerCase() || "all",
+    message: "Enrolled students fetched successfully"
+  });
 });
+
 
 export const unEnrollment = asyncHandler(async (req, res, next) => {
   try {
@@ -414,7 +464,6 @@ export const studentCourseDetails = asyncHandler(async (req, res, next) => {
         await checkEnrollment.save();
       }
     }
-    
     if (checkEnrollment.status === "CANCELLED") {
       const canRenew = checkEnrollment.enrollmentType === "SUBSCRIPTION";
       return res.status(403).json({ 
@@ -571,25 +620,17 @@ export const studentCourseDetails = asyncHandler(async (req, res, next) => {
 export const chapterDetails = asyncHandler(async (req, res, next) => {
   try {
     const { chapterId } = req.params;
-    const userId = req.user._id;
 
     if (!chapterId) {
       throw new ValidationError("Chapter ID is required", "VAL_001");
     }
 
-    const chapter = await Chapter.findById(chapterId).populate("course");
+    const chapter = await Chapter.findById(chapterId);
     if (!chapter) {
       throw new NotFoundError("Chapter not found", "RES_001");
     }
 
-    const isEnrolled = await Enrollment.findOne({
-      student: userId,
-      course: chapter.course._id,
-    });
-
-    if (!isEnrolled) {
-      throw new ValidationError("Unauthorized access to chapter", "AUTH_003");
-    }
+    // Enrollment check is now handled by isEnrolledMiddleware
 
     const chapterData = await Chapter.aggregate([
       {

@@ -13,6 +13,7 @@ import {
 } from "../Contollers/enrollment.controller.js";
 import { isUser } from "../middlewares/Auth.Middleware.js";
 import { isEnrolledMiddleware } from "../middlewares/isEnrolled.middleware.js";
+import { resolveEnrollmentFromChapter } from "../middlewares/enrollment-resolvers.js";
 
 const router = express.Router();
 
@@ -32,7 +33,7 @@ router.get(
 );
 // routes/adminRoutes.js
 
-router.get("/getChapter/:chapterId", isUser, chapterDetails);
+router.get("/getChapter/:chapterId", isUser, resolveEnrollmentFromChapter, isEnrolledMiddleware, chapterDetails);
 router.delete("/unenroll/:courseId", isUser, unEnrollment);
 router.post("/enrollmentforTeacher", isUser, enrollmentforTeacher);
 export default router;

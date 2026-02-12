@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import Chapter from "../../Models/chapter.model.sch.js";
 import Quarter from "../../Models/quarter.model.js";
+import Course from "../../Models/courses.model.sch.js";
+import { notifyNewChapter } from "../../Utiles/notificationService.js";
 
 export const createChapter = async (req, res) => {
   const course = req.params.courseId;
@@ -20,6 +22,13 @@ export const createChapter = async (req, res) => {
     }
 
     const chapter = await Chapter.create(chapterObject);
+    
+    // Send new chapter notification to enrolled students
+    const courseData = await Course.findById(course).select("courseTitle");
+    if (courseData) {
+      await notifyNewChapter(course, courseData.courseTitle, title, chapter._id, createdby);
+    }
+    
     res.status(201).json({ message: "Chapter created successfully", chapter });
   } catch (error) {
     console.log("error in creating chapter", error);

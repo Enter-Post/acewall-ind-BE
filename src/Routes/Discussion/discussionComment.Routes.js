@@ -7,11 +7,13 @@ import {
   isCommentedInDiscussion,
   sendDiscussionComment,
 } from "../../Contollers/Discussion/discussionComment.controller.js";
+import { isEnrolledMiddleware } from "../../middlewares/isEnrolled.middleware.js";
+import { resolveEnrollmentFromDiscussion } from "../../middlewares/enrollment-resolvers.js";
 
 const router = express.Router();
 
-router.get("/get/:id", isUser, getDiscussionComments);
-router.post("/sendComment/:id", isUser, sendDiscussionComment);
+router.get("/get/:id", isUser, resolveEnrollmentFromDiscussion, isEnrolledMiddleware, getDiscussionComments);
+router.post("/sendComment/:id", isUser, resolveEnrollmentFromDiscussion, isEnrolledMiddleware, sendDiscussionComment);
 router.delete("/delete/:id", isUser, deleteComment);
 
 ////grades

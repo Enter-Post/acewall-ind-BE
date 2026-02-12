@@ -7,6 +7,7 @@ import Enrollment from "../Models/Enrollement.model.js";
 import Purchase from "../Models/purchase.model.js"; // Assuming you have this model
 import TestClock from "../Models/testClock.model.js";
 import User from "../Models/user.model.js";
+import { notifyEnrollmentSuccess } from "../Utiles/notificationService.js";
 
 // Create Mobile-Only Checkout Session
 export const createMobileCheckoutSession = async (req, res) => {
@@ -166,6 +167,12 @@ export const handleStripeWebhook = async (req, res) => {
           student: studentId,
           course: courseId,
         });
+        
+        // Send enrollment success notification
+        const courseData = await CourseSch.findById(courseId).select("courseTitle");
+        if (courseData) {
+          await notifyEnrollmentSuccess(studentId, enrollment._id, courseData.courseTitle);
+        }
         break;
 
       default:
@@ -311,7 +318,11 @@ export const createCheckoutSessionConnect = async (req, res) => {
 
     // FREE COURSE
     if (course.paymentType === "FREE") {
-      await Enrollment.create({ student: studentId, course: courseId, status: "ACTIVE", enrollmentType: "FREE" });
+      const freeEnrollment = await Enrollment.create({ student: studentId, course: courseId, status: "ACTIVE", enrollmentType: "FREE" });
+      
+      // Send enrollment success notification
+      await notifyEnrollmentSuccess(studentId, freeEnrollment._id, course.courseTitle);
+      
       return res.json({ success: true, free: true });
     }
 
@@ -598,7 +609,7 @@ export const handleStripeWebhookConnect = async (req, res) => {
 
           if (!enrollment) {
             // FIRST TIME enrollment → create
-            await Enrollment.create({
+            const newEnrollment = await Enrollment.create({
               student: subStudentId,
               course: subCourseId,
               subscriptionId: session.subscription,
@@ -609,6 +620,13 @@ export const handleStripeWebhookConnect = async (req, res) => {
                 ? { status: true, endDate: new Date(subscription.trial_end * 1000) }
                 : { status: false },
             });
+            
+            // Send enrollment success notification
+            const courseData = await CourseSch.findById(subCourseId).select("courseTitle");
+            if (courseData) {
+              await notifyEnrollmentSuccess(subStudentId, newEnrollment._id, courseData.courseTitle);
+            }
+            
             console.log("✅ Subscription enrollment created");
           } else {
             // RE-ACTIVATE existing enrollment
@@ -642,13 +660,20 @@ export const handleStripeWebhookConnect = async (req, res) => {
           });
 
           if (!alreadyEnrolled) {
-            await Enrollment.create({
+            const oneTimeEnrollment = await Enrollment.create({
               student: studentId,
               course: courseId,
               status: "ACTIVE",
               enrollmentType: "ONETIME",
               stripeInvoiceId: manualInvoiceId,
             });
+            
+            // Send enrollment success notification
+            const courseData = await CourseSch.findById(courseId).select("courseTitle");
+            if (courseData) {
+              await notifyEnrollmentSuccess(studentId, oneTimeEnrollment._id, courseData.courseTitle);
+            }
+            
             console.log("✅ One-time enrollment created");
           } else {
             console.log("ℹ️ Student already enrolled");
@@ -892,10 +917,10 @@ export const handleStripeWebhookConnect = async (req, res) => {
         let trialEndDate = null;
         let cancellationDate = null;
 
+
         const fullSubscription = await stripe.subscriptions.retrieve(
           subscription.id
         );
-
         // Trial handling
         if (subscription.status === "trialing") {
           enrollmentStatus = "TRIAL";
