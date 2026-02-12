@@ -7,6 +7,7 @@ import Assessment from "../Models/Assessment.model.js";
 import Lesson from "../Models/lesson.model.sch.js";
 import { ValidationError, NotFoundError, DatabaseError } from '../Utiles/errors.js';
 import { asyncHandler } from '../middlewares/errorHandler.middleware.js';
+import { notifyEnrollmentSuccess } from "../Utiles/notificationService.js";
 
 
 export const getMyEnrolledCourses = asyncHandler(async (req, res, next) => {
@@ -109,6 +110,9 @@ export const enrollment = asyncHandler(async (req, res, next) => {
     enrollmentType: "FREE",
     status: "ACTIVE",
   });
+
+  // Send enrollment success notification
+  await notifyEnrollmentSuccess(userId, enrollment._id, course.courseTitle);
 
   res.status(201).json({ 
     message: "Enrollment successful", 
@@ -618,25 +622,17 @@ export const studentCourseDetails = asyncHandler(async (req, res, next) => {
 export const chapterDetails = asyncHandler(async (req, res, next) => {
   try {
     const { chapterId } = req.params;
-    const userId = req.user._id;
 
     if (!chapterId) {
       throw new ValidationError("Chapter ID is required", "VAL_001");
     }
 
-    const chapter = await Chapter.findById(chapterId).populate("course");
+    const chapter = await Chapter.findById(chapterId);
     if (!chapter) {
       throw new NotFoundError("Chapter not found", "RES_001");
     }
 
-    const isEnrolled = await Enrollment.findOne({
-      student: userId,
-      course: chapter.course._id,
-    });
-
-    if (!isEnrolled) {
-      throw new ValidationError("Unauthorized access to chapter", "AUTH_003");
-    }
+    // Enrollment check is now handled by isEnrolledMiddleware
 
     const chapterData = await Chapter.aggregate([
       {
