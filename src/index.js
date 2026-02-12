@@ -1,3 +1,7 @@
+import dns from "dns";
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
+
+
 import express from "express";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
@@ -155,6 +159,10 @@ app.use("/api/postComment", postCommentRoutes);
 app.use("/api/aichat", aiChatRoutes)
 app.use("/api/coupon", couponRoutes)
 app.use("/api/wishlist", wishlistRoutes)
+app.use("/api/zoom", zoomRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/course-share", courseShareRoutes);
+app.use("/api/campaigns", campaignRoutes);
 
 // 404 handler for undefined routes (must be after all routes)
 app.use(notFoundHandler);
@@ -162,15 +170,6 @@ app.use(notFoundHandler);
 // Global error handler (must be last middleware)
 app.use(errorHandler);
 
-app.use("/api/aichat", aiChatRoutes);
-app.use("/api/coupon", couponRoutes);
-app.use("/api/zoom", zoomRoutes);
-app.use("/api/notifications", notificationRoutes);
-
-app.use("/api/course-share", courseShareRoutes);
-app.use("/api/campaigns", campaignRoutes);
-
-app.use("/api/wishlist", wishlistRoutes);
 server.listen(PORT, async () => {
   console.log(`This app is running on localhost ${PORT}`);
   console.log(`🔗 Webhook endpoint: https://acewell-production.up.railway.app/api/stripe/webhook`);

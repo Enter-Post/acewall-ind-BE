@@ -141,31 +141,38 @@ export const getActiveCampaign = async (req, res) => {
     const { courseId } = req.query;
     const now = new Date();
 
-    // 1. Check for Active Global Campaign
-    let campaign = await Campaign.findOne({
-      courseId: null,
-      isActive: true,
+    const dateFilter = {
       $and: [
         { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
         { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
       ],
+    };
+
+    // 1. Check for Active Global Campaign
+    const globalCampaign = await Campaign.findOne({
+      courseId: null,
+      isActive: true,
+      ...dateFilter,
     });
 
-    // 2. If no global, check for course-specific if courseId is provided
-    if (!campaign && courseId) {
-      campaign = await Campaign.findOne({
+    // 2. Check for course-specific campaign if courseId is provided
+    let courseCampaign = null;
+    if (courseId) {
+      courseCampaign = await Campaign.findOne({
         courseId,
         isActive: true,
-        $and: [
-          { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
-          { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
-        ],
+        ...dateFilter,
       });
     }
 
+    // Course-specific campaign takes priority, fallback to global
+    const campaign = courseCampaign || globalCampaign || null;
+
     return res.status(200).json({
       success: true,
-      campaign: campaign || null,
+      campaign,
+      globalCampaign: globalCampaign || null,
+      courseCampaign: courseCampaign || null,
     });
   } catch (error) {
     console.error("Error fetching active campaign:", error);
