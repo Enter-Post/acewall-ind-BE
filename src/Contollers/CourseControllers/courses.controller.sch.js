@@ -2051,6 +2051,7 @@ export const getUserCoursesforFilter = asyncHandler(async (req, res) => {
       {
         $match: {
           student: new mongoose.Types.ObjectId(userId),
+          status: { $ne: "CANCELLED" } 
         },
       },
       {

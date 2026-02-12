@@ -17,6 +17,8 @@ import { upload } from "../lib/multer.config.js";
 import { isUser } from "../middlewares/Auth.Middleware.js";
 import { getResultsMiddleware } from "../middlewares/isSubmitted.middleware.js";
 import { createAssessment_updated } from "../Contollers/UPDATED_API_CONTROLLER/assessment.controller.web.js";
+import { isEnrolledMiddleware } from "../middlewares/isEnrolled.middleware.js";
+import { resolveEnrollmentFromAssessment } from "../middlewares/enrollment-resolvers.js";
 
 const router = express.Router();
 
@@ -39,7 +41,7 @@ router.put(
   uploadFiles
 );
 router.delete("/deleteFile/:assessmentId/:fileId", deleteFile);
-router.get("/:assessmentId", isUser, getResultsMiddleware, getAssesmentbyID);
+router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, isEnrolledMiddleware, getResultsMiddleware, getAssesmentbyID);
 
 router.put("/editAssessment/:assessmentId", isUser, editAssessmentInfo);
 

@@ -128,7 +128,11 @@ export const discussionforStudent = asyncHandler(async (req, res) => {
 
   userId = new mongoose.Types.ObjectId(userId);
 
-  const studentEnrollment = await Enrollment.find({ student: userId });
+  // Exclude CANCELLED enrollments - student shouldn't see cancelled course discussions
+  const studentEnrollment = await Enrollment.find({ 
+    student: userId,
+    status: { $ne: "CANCELLED" }
+  });
   const allEnrolledCourseIds = studentEnrollment.map((enr) => enr.course);
 
   const discussions = await Discussion.find({
@@ -150,7 +154,6 @@ export const discussionforStudent = asyncHandler(async (req, res) => {
     message: "Discussions fetched successfully"
   });
 });
-
 
 export const chapterDiscussions = asyncHandler(async (req, res) => {
   const { chapterId } = req.params;

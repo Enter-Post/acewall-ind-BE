@@ -18,8 +18,8 @@ router.get("/active", getActiveReferral);
 router.use(isUser, checkRole);
 
 router.get("/", getAllReferrals);
-router.post("/", createReferral);
+// router.post("/", createReferral);
 router.put("/:id", updateReferral);
 router.delete("/:id", deleteReferral);
-
+router.post("/createReferral", createReferral)
 export default router;

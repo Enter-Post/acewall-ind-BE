@@ -185,7 +185,7 @@ export const getActiveCampaign = async (req, res) => {
 // List all campaigns for admin
 export const getAllCampaigns = async (req, res) => {
   try {
-    const campaigns = await Campaign.find().sort({ createdAt: -1 });
+    const campaigns = await Campaign.find().populate("courseId", "courseTitle").sort({ createdAt: -1 });
     return res.status(200).json({ success: true, campaigns });
   } catch (error) {
     console.error("Error listing campaigns:", error);
