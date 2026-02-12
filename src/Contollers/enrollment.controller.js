@@ -111,9 +111,9 @@ export const enrollment = asyncHandler(async (req, res, next) => {
     status: "ACTIVE",
   });
 
+
   // Send enrollment success notification
   await notifyEnrollmentSuccess(userId, enrollment._id, course.courseTitle);
-
   res.status(201).json({ 
     message: "Enrollment successful", 
     enrollment 
@@ -298,8 +298,7 @@ export const studenCourses = asyncHandler(async (req, res, next) => {
         $set: { status: "CANCELLED" }
       }
     );
-    
-    const search = req.query.search?.trim();
+        const search = req.query.search?.trim();
     const type = req.query.type?.trim();
     const status = req.query.status?.trim();
 
@@ -465,7 +464,6 @@ export const studentCourseDetails = asyncHandler(async (req, res, next) => {
         await checkEnrollment.save();
       }
     }
-    
     if (checkEnrollment.status === "CANCELLED") {
       const canRenew = checkEnrollment.enrollmentType === "SUBSCRIPTION";
       return res.status(403).json({ 

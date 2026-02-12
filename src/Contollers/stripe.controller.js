@@ -917,10 +917,10 @@ export const handleStripeWebhookConnect = async (req, res) => {
         let trialEndDate = null;
         let cancellationDate = null;
 
+
         const fullSubscription = await stripe.subscriptions.retrieve(
           subscription.id
         );
-
         // Trial handling
         if (subscription.status === "trialing") {
           enrollmentStatus = "TRIAL";
