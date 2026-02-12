@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const UserSchema = new mongoose.Schema(
   {
+    referralCode: { type: String },
     profileImg: {
       url: { type: String },
       filename: { type: String },
