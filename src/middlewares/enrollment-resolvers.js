@@ -1,7 +1,7 @@
 import Chapter from "../Models/chapter.model.sch.js";
 import Assessment from "../Models/Assessment.model.js";
 import Submission from "../Models/submission.model.js";
-
+import Discussion from "../Models/discussion.model.js";
 // Resolver for chapter-based routes - extracts courseId from chapterId
 export const resolveEnrollmentFromChapter = async (req, res, next) => {
   try {
@@ -85,6 +85,29 @@ export const resolveEnrollmentFromQuery = async (req, res, next) => {
 
     // Inject courseId into params for isEnrolledMiddleware
     req.params.courseId = courseId.toString();
+    next();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Resolver for discussion-based routes 
+export const resolveEnrollmentFromDiscussion = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ message: "Discussion ID is required" });
+    }
+
+    const discussion = await Discussion.findById(id).select("course");
+    
+    if (!discussion) {
+      return res.status(404).json({ message: "Discussion not found" });
+    }
+
+    // Inject courseId into params for isEnrolledMiddleware
+    req.params.courseId = discussion.course.toString();
     next();
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -61,7 +61,11 @@ export const getPosts = asyncHandler(async (req, res) => {
         const ownedCourses = await CourseSch.find({ createdby: userId }).select("_id");
         myCourseIds = ownedCourses.map(c => c._id);
     } else {
-        const enrollments = await Enrollment.find({ student: userId }).select("course");
+        // Exclude CANCELLED enrollments - students lose access to course posts
+        const enrollments = await Enrollment.find({ 
+            student: userId,
+            status: { $ne: "CANCELLED" }
+        }).select("course");
         myCourseIds = enrollments.map(e => e.course);
     }
 
