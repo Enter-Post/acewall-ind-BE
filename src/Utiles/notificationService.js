@@ -26,13 +26,14 @@ export const sendNotification = async ({ recipient, sender = null, message, type
     
     // Send real-time via Socket.io
     const recipientSocketId = getRecieverSocketId(recipient.toString());
+    
     if (recipientSocketId) {
       io.to(recipientSocketId).emit("newNotification", notification);
     }
     
     return notification;
   } catch (error) {
-    console.error("❌ sendNotification failed:", error.message);
+    console.error("sendNotification failed:", error.message);
     return null;
   }
 };
@@ -64,10 +65,9 @@ export const sendBulkNotifications = async ({ recipients, message, type = "gener
       }
     });
     
-    console.log(`✅ Sent ${created.length} bulk notifications`);
     return created;
   } catch (error) {
-    console.error("❌ sendBulkNotifications failed:", error.message);
+    console.error("sendBulkNotifications failed:", error.message);
     return [];
   }
 };
@@ -100,7 +100,6 @@ export const notifyNewChapter = async (courseId, courseName, chapterTitle, chapt
     }).select("student _id course");
     
     if (enrollments.length === 0) {
-      console.log("No active students to notify for new chapter");
       return [];
     }
     
@@ -119,121 +118,93 @@ export const notifyNewChapter = async (courseId, courseName, chapterTitle, chapt
     );
     
     const results = await Promise.all(notificationPromises);
-    console.log(`✅ Sent ${results.filter(r => r).length} chapter notifications`);
     return results;
   } catch (error) {
-    console.error("❌ notifyNewChapter failed:", error.message);
+    console.error("notifyNewChapter failed:", error.message);
     return [];
   }
 };
 
 /**
- * SUBSCRIPTION NOTIFICATIONS (for future implementation)
+ * ASSESSMENT NOTIFICATIONS
  */
-export const notifySubscriptionCancelled = async (studentId, cancellationDate) => {
-  return await sendNotification({
-    recipient: studentId,
-    message: `Your subscription has been cancelled. Access until ${cancellationDate}. You can renew anytime.`,
-    type: "general",
-    link: `/student/my-courses`,
-  });
-};
-
-export const notifySubscriptionRenewed = async (studentId, courseId, courseName) => {
-  return await sendNotification({
-    recipient: studentId,
-    message: `Subscription renewed successfully! Welcome back to ${courseName}.`,
-    type: "general",
-    link: `/student/mycourses/${courseId}`,
-  });
-};
-
-/**
- * ASSESSMENT NOTIFICATIONS (for future implementation)
- */
-export const notifyAssessmentAssigned = async (courseId, assessmentTitle, dueDate, teacherId) => {
+export const notifyAssessmentAssigned = async (courseId, courseName, assessmentTitle, teacherId) => {
   try {
+    // Get all active enrolled students
     const enrollments = await Enrollment.find({ 
       course: courseId, 
       status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
     }).select("student");
     
-    if (enrollments.length === 0) return [];
+    if (enrollments.length === 0) {
+      return [];
+    }
     
-    const studentIds = enrollments.map(enr => enr.student);
+    const courseIdStr = courseId.toString();
     
-    return await sendBulkNotifications({
-      recipients: studentIds,
-      sender: teacherId,
-      message: `New assignment: ${assessmentTitle} - Due ${dueDate}`,
-      type: "assignment",
-      link: `/student/mycourses/assessment/${courseId}`,
-    });
+    // Send individual notifications with assessment list link
+    const notificationPromises = enrollments.map(enr => 
+      sendNotification({
+        recipient: enr.student,
+        sender: teacherId,
+        message: `New assessment assigned in ${courseName}: ${assessmentTitle}`,
+        type: "assignment",
+        link: `/student/assessment/bycourse/${courseIdStr}`,
+      })
+    );
+    
+    const results = await Promise.all(notificationPromises);
+    return results;
   } catch (error) {
-    console.error("❌ notifyAssessmentAssigned failed:", error.message);
+    console.error("notifyAssessmentAssigned failed:", error.message);
     return [];
   }
 };
 
-export const notifyGradePosted = async (studentId, assessmentTitle, grade, totalMarks, submissionId) => {
+/**
+ * GRADING NOTIFICATIONS
+ */
+export const notifyGradePosted = async (studentId, assessmentTitle, score, maxScore, courseId) => {
   return await sendNotification({
     recipient: studentId,
-    message: `Your grade for '${assessmentTitle}' is ready: ${grade}/${totalMarks}`,
+    message: `Your grade for "${assessmentTitle}" is ready: ${score}/${maxScore}`,
     type: "assignment",
-    link: `/student/mycourses/assessment/submission/${submissionId}`,
+    link: `/student/analytics/${courseId}`,
   });
 };
 
 /**
- * ANNOUNCEMENT NOTIFICATIONS (for future implementation)
+ * ANNOUNCEMENT NOTIFICATIONS
  */
-export const notifyAnnouncementPosted = async (courseId, courseName, teacherName, teacherId) => {
+export const notifyNewAnnouncement = async (courseId, courseName, announcementTitle, teacherId) => {
   try {
+    // Get all active enrolled students
     const enrollments = await Enrollment.find({ 
       course: courseId, 
       status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
     }).select("student");
     
-    if (enrollments.length === 0) return [];
+    if (enrollments.length === 0) {
+      return [];
+    }
     
     const studentIds = enrollments.map(enr => enr.student);
+    const courseIdStr = courseId.toString();
     
-    return await sendBulkNotifications({
+    // Send bulk notifications
+    const result = await sendBulkNotifications({
       recipients: studentIds,
       sender: teacherId,
-      message: `${teacherName} posted an announcement in ${courseName}`,
+      message: `New announcement in ${courseName}: ${announcementTitle}`,
       type: "announcement",
-      link: `/student/mycourses/announcement/${courseId}`,
+      link: `/student/announcements/${courseIdStr}`,
     });
+    
+    return result;
   } catch (error) {
-    console.error("❌ notifyAnnouncementPosted failed:", error.message);
+    console.error("notifyNewAnnouncement failed:", error.message);
     return [];
   }
 };
 
-/**
- * LIVE CLASS NOTIFICATIONS (for future implementation)
- */
-export const notifyLiveClassScheduled = async (courseId, topic, teacherId) => {
-  try {
-    const enrollments = await Enrollment.find({ 
-      course: courseId, 
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
-    }).select("student");
-    
-    if (enrollments.length === 0) return [];
-    
-    const studentIds = enrollments.map(enr => enr.student);
-    
-    return await sendBulkNotifications({
-      recipients: studentIds,
-      sender: teacherId,
-      message: `New Zoom Class Scheduled: ${topic}`,
-      type: "live-class",
-      link: `/student/mycourses/live-list/${courseId}`,
-    });
-  } catch (error) {
-    console.error("❌ notifyLiveClassScheduled failed:", error.message);
-    return [];
-  }
-};
+

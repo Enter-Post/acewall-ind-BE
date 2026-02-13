@@ -3,6 +3,7 @@ import { uploadToCloudinary } from "../lib/cloudinary-course.config.js";
 import Assessment from "../Models/Assessment.model.js";
 import Lesson from "../Models/lesson.model.sch.js";
 import Chapter from "../Models/chapter.model.sch.js";
+import Course from "../Models/courses.model.sch.js";
 import { ObjectId } from "bson"; // Import ObjectId
 import Enrollment from "../Models/Enrollement.model.js";
 import e from "express";
@@ -15,6 +16,7 @@ import {
   AuthenticationError,
 } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+import { notifyAssessmentAssigned } from "../Utiles/notificationService.js";
 export const sendAssessmentReminder = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const teacherId = req.user._id;
@@ -324,6 +326,21 @@ export const createAssessment = asyncHandler(async (req, res) => {
     });
 
   await newAssessment.save();
+
+  // Send notification to enrolled students
+  try {
+    const courseData = await Course.findById(finalCourse);
+    if (courseData) {
+      await notifyAssessmentAssigned(
+        finalCourse,
+        courseData.courseTitle,
+        title,
+        createdby
+      );
+    }
+  } catch (error) {
+    console.error("❌ Assessment notification error:", error.message);
+  }
 
   return res.status(201).json({
     assessment: newAssessment,
