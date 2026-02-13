@@ -521,6 +521,12 @@ export const login = asyncHandler(async (req, res, next) => {
     throw new AuthenticationError("Invalid credentials", "AUTH_001");
   }
 
+  // Ensure students have a referral code (for legacy users)
+  if (user.role === "student" && !user.referralCode) {
+    user.referralCode = await generateReferralCode(user.firstName);
+    await user.save();
+  }
+
   // ✅ Pass both req and res here
   const token = generateToken(user, user.role, req, res);
 
@@ -731,8 +737,16 @@ export const allUser = asyncHandler(async (req, res) => {
 });
 
 export const checkAuth = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+
+  // Ensure students have a referral code (for legacy users)
+  if (user && user.role === "student" && !user.referralCode) {
+    user.referralCode = await generateReferralCode(user.firstName);
+    await user.save();
+  }
+
   return res.status(200).json({
-    user: req.user
+    user: user
   });
 });
 
