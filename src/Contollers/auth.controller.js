@@ -22,6 +22,22 @@ import {
 } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
+const generateReferralCode = async (firstName) => {
+  const prefix = firstName.toUpperCase().replace(/\s+/g, "").slice(0, 4);
+  let isUnique = false;
+  let code = "";
+
+  while (!isUnique) {
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    code = `${prefix}${randomDigits}`;
+    const existingUser = await User.findOne({ referralCode: code });
+    if (!existingUser) {
+      isUnique = true;
+    }
+  }
+  return code;
+};
+
 export const initiateSignup = asyncHandler(async (req, res, next) => {
   const {
     firstName,
@@ -294,6 +310,10 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
     isVerified: true, // Mark the user as verified
   });
 
+  if (role === "student") {
+    newUser.referralCode = await generateReferralCode(firstName);
+  }
+
   await newUser.save();
 
   const account = await stripe.accounts.create({
@@ -339,6 +359,11 @@ export const verifyPhoneOtp = asyncHandler(async (req, res) => {
   }
 
   const newUser = new User({ ...otpEntry.userData });
+
+  if (newUser.role === "student") {
+    newUser.referralCode = await generateReferralCode(newUser.firstName);
+  }
+
   await newUser.save();
 
   // Delete OTP entry since it's used
@@ -918,7 +943,7 @@ export const getTeacherById = asyncHandler(async (req, res) => {
   ]);
 
   return res.status(200).json({
-    teacher, 
+    teacher,
     courses
   });
 });
