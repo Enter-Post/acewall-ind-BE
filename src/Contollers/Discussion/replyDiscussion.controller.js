@@ -1,9 +1,12 @@
 import mongoose from "mongoose";
 import DiscussionReply from "../../Models/replyDiscussion.model.js";
+import DiscussionComment from "../../Models/discussionComment.model.js";
+import User from "../../Models/user.model.js";
 import {
   ValidationError,
 } from "../../Utiles/errors.js";
 import { asyncHandler } from "../../middlewares/errorHandler.middleware.js";
+import { notifyDiscussionReply } from "../../Utiles/notificationService.js";
 export const getreplyofComment = asyncHandler(async (req, res) => {
   const { commentId } = req.params;
   const { page = 1, limit = 5 } = req.query; // Defaults: page 1, 5 replies per page
@@ -45,6 +48,27 @@ export const sendReplyofComment = asyncHandler(async (req, res) => {
   });
 
   await newReply.save();
+
+  // Send notification to comment author
+  try {
+    const comment = await DiscussionComment.findById(commentId)
+      .populate('createdby', 'firstName lastName role')
+      .populate('discussion');
+    
+    if (comment && comment.createdby && comment.discussion) {
+      const replierName = `${user.firstName} ${user.lastName}`;
+      await notifyDiscussionReply(
+        comment.discussion._id,
+        comment.createdby._id,
+        replierName,
+        user._id,
+        comment.createdby.role
+      );
+    }
+  } catch (error) {
+    console.error("Discussion reply notification error:", error.message);
+  }
+
   return res.status(200).json({ 
     newReply,
     message: "Reply sent successfully"

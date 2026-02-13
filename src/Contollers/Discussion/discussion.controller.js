@@ -3,11 +3,13 @@ import Discussion from "../../Models/discussion.model.js";
 import DiscussionComment from "../../Models/discussionComment.model.js";
 import { uploadToCloudinary } from "../../lib/cloudinary-course.config.js";
 import Enrollment from "../../Models/Enrollement.model.js";
+import CourseSch from "../../Models/courses.model.sch.js";
 import {
   ValidationError,
   NotFoundError,
 } from "../../Utiles/errors.js";
 import { asyncHandler } from "../../middlewares/errorHandler.middleware.js";
+import { notifyNewDiscussion } from "../../Utiles/notificationService.js";
 
 export const createDiscussion = asyncHandler(async (req, res) => {
   const {
@@ -26,7 +28,9 @@ export const createDiscussion = asyncHandler(async (req, res) => {
   const files = req.files;
   const createdby = req.user._id;
 
-  console.log(req.body, "req.body");
+  console.log("🔍 DISCUSSION CREATE - req.body:", req.body);
+  console.log("🔍 DISCUSSION CREATE - course field:", course);
+  console.log("🔍 DISCUSSION CREATE - createdby:", createdby);
 
   let uploadedFiles = [];
 
@@ -71,6 +75,28 @@ export const createDiscussion = asyncHandler(async (req, res) => {
   });
 
   await discussion.save();
+
+  // Send notification to enrolled students
+  try {
+    console.log("📢 Discussion saved, attempting to send notifications...");
+    console.log("Course ID:", course);
+    const courseData = await CourseSch.findById(course);
+    console.log("Course found:", courseData?.courseTitle);
+    if (courseData) {
+      await notifyNewDiscussion(
+        course,
+        courseData.courseTitle,
+        topic,
+        discussion._id,
+        createdby
+      );
+    } else {
+      console.log("❌ Course not found for discussion notification");
+    }
+  } catch (error) {
+    console.error("❌ Discussion notification error:", error.message, error);
+  }
+
   return res
     .status(201)
     .json({ 

@@ -43,7 +43,12 @@ export const sendNotification = async ({ recipient, sender = null, message, type
  */
 export const sendBulkNotifications = async ({ recipients, message, type = "general", link = null, sender = null }) => {
   try {
-    if (!recipients || recipients.length === 0) return [];
+    console.log("📤 sendBulkNotifications called with:", { recipientCount: recipients?.length, message, type, link });
+    
+    if (!recipients || recipients.length === 0) {
+      console.log("⚠️ No recipients provided");
+      return [];
+    }
     
     // Prepare bulk insert data
     const notifications = recipients.map(recipientId => ({
@@ -56,18 +61,22 @@ export const sendBulkNotifications = async ({ recipients, message, type = "gener
     
     // Database bulk insert (efficient)
     const created = await Notification.insertMany(notifications);
+    console.log(`💾 Saved ${created.length} notifications to database`);
     
     // Socket.io real-time delivery for online users
+    let socketsSent = 0;
     recipients.forEach(recipientId => {
       const socketId = getRecieverSocketId(recipientId.toString());
       if (socketId) {
         io.to(socketId).emit("newNotification", { message, type, link });
+        socketsSent++;
       }
     });
     
+    console.log(`🔌 Sent to ${socketsSent}/${recipients.length} online users via Socket.io`);
     return created;
   } catch (error) {
-    console.error("sendBulkNotifications failed:", error.message);
+    console.error("❌ sendBulkNotifications failed:", error.message, error);
     return [];
   }
 };
@@ -207,4 +216,202 @@ export const notifyNewAnnouncement = async (courseId, courseName, announcementTi
   }
 };
 
+/**
+ * DISCUSSION NOTIFICATIONS
+ */
+export const notifyNewDiscussion = async (courseId, courseName, discussionTopic, discussionId, teacherId) => {
+  try {
+    console.log("📢 notifyNewDiscussion called with:", { courseId, courseName, discussionTopic, discussionId: discussionId.toString() });
+    
+    // Get all active enrolled students
+    const enrollments = await Enrollment.find({ 
+      course: courseId, 
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    }).select("student");
+    
+    console.log(`📊 Found ${enrollments.length} active enrollments`);
+    console.log("Excluded statuses:", EXCLUDED_ENROLLMENT_STATUSES);
+    
+    if (enrollments.length === 0) {
+      console.log("⚠️ No active students to notify for new discussion");
+      return [];
+    }
+    
+    const studentIds = enrollments.map(enr => enr.student);
+    const discussionIdStr = discussionId.toString();
+    
+    console.log("Student IDs to notify:", studentIds.map(id => id.toString()));
+    
+    // Send bulk notifications
+    const result = await sendBulkNotifications({
+      recipients: studentIds,
+      sender: teacherId,
+      message: `New discussion in ${courseName}: ${discussionTopic}`,
+      type: "general",
+      link: `/student/discussions/${discussionIdStr}`,
+    });
+    
+    console.log(`✅ Sent ${result.length} discussion notifications`);
+    return result;
+  } catch (error) {
+    console.error("❌ notifyNewDiscussion failed:", error.message, error);
+    return [];
+  }
+};
+
+export const notifyDiscussionComment = async (discussionId, discussionTopic, discussionAuthorId, commenterName, commenterId, recipientRole) => {
+  try {
+    // Don't notify if commenter is the discussion author (self-comment)
+    if (discussionAuthorId.toString() === commenterId.toString()) {
+      return null;
+    }
+    
+    const discussionIdStr = discussionId.toString();
+    const rolePrefix = recipientRole === "teacher" ? "teacher" : "student";
+    
+    return await sendNotification({
+      recipient: discussionAuthorId,
+      sender: commenterId,
+      message: `${commenterName} commented on your discussion "${discussionTopic}"`,
+      type: "general",
+      link: `/${rolePrefix}/discussions/${discussionIdStr}`,
+    });
+  } catch (error) {
+    console.error("notifyDiscussionComment failed:", error.message);
+    return null;
+  }
+};
+
+export const notifyDiscussionReply = async (discussionId, commentAuthorId, replierName, replierId, recipientRole) => {
+  try {
+    // Don't notify if replier is the comment author (self-reply)
+    if (commentAuthorId.toString() === replierId.toString()) {
+      return null;
+    }
+    
+    const discussionIdStr = discussionId.toString();
+    const rolePrefix = recipientRole === "teacher" ? "teacher" : "student";
+    
+    return await sendNotification({
+      recipient: commentAuthorId,
+      sender: replierId,
+      message: `${replierName} replied to your comment`,
+      type: "general",
+      link: `/${rolePrefix}/discussions/${discussionIdStr}`,
+    });
+  } catch (error) {
+    console.error("notifyDiscussionReply failed:", error.message);
+    return null;
+  }
+};
+
+/**
+ * SOCIAL POST NOTIFICATIONS
+ */
+export const notifySocialPostComment = async (postId, postAuthorId, commenterName, commenterId, recipientRole) => {
+  try {
+    // Don't notify if commenter is the post author (self-comment)
+    if (postAuthorId.toString() === commenterId.toString()) {
+      return null;
+    }
+    
+    const rolePrefix = recipientRole === "teacher" ? "teacher" : "student";
+    
+    return await sendNotification({
+      recipient: postAuthorId,
+      sender: commenterId,
+      message: `${commenterName} commented on your post`,
+      type: "general",
+      link: `/${rolePrefix}/social`,
+    });
+  } catch (error) {
+    console.error("notifySocialPostComment failed:", error.message);
+    return null;
+  }
+};
+
+/**
+ * DISCUSSION GRADING NOTIFICATION
+ */
+export const notifyDiscussionGraded = async (studentId, discussionId, discussionTopic, marksObtained, totalMarks, teacherId) => {
+  try {
+    return await sendNotification({
+      recipient: studentId,
+      sender: teacherId,
+      message: `Your discussion "${discussionTopic}" has been graded: ${marksObtained}/${totalMarks}`,
+      type: "assignment",
+      link: `/student/discussions/${discussionId}`,
+    });
+  } catch (error) {
+    console.error("notifyDiscussionGraded failed:", error.message);
+    return null;
+  }
+};
+
+/**
+ * COURSE POST NOTIFICATION (Bulk)
+ */
+export const notifyNewCoursePost = async (postId, courseId, courseName, authorName, authorId) => {
+  try {
+    // Get all active enrolled students
+    const enrollments = await Enrollment.find({ 
+      course: courseId, 
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    }).select("student");
+    
+    if (enrollments.length === 0) {
+      return [];
+    }
+    
+    const studentIds = enrollments.map(enr => enr.student);
+    
+    // Filter out the post author from recipients
+    const recipients = studentIds.filter(id => id.toString() !== authorId.toString());
+    
+    if (recipients.length === 0) {
+      return [];
+    }
+    
+    const courseIdStr = courseId.toString();
+    
+    const result = await sendBulkNotifications({
+      recipients: recipients,
+      sender: authorId,
+      message: `${authorName} posted in ${courseName}`,
+      type: "general",
+      link: `/student/social`,
+    });
+    
+    return result;
+  } catch (error) {
+    console.error("notifyNewCoursePost failed:", error.message);
+    return [];
+  }
+};
+
+/**
+ * MESSAGE NOTIFICATION
+ */
+export const notifyMessageReceived = async (receiverId, senderName, senderId, receiverRole, conversationId) => {
+  try {
+    // Don't notify if sender is the receiver (shouldn't happen, but just in case)
+    if (receiverId.toString() === senderId.toString()) {
+      return null;
+    }
+    
+    const rolePrefix = receiverRole === "teacher" ? "teacher" : "student";
+    const conversationIdStr = conversationId.toString();
+    
+    return await sendNotification({
+      recipient: receiverId,
+      sender: senderId,
+      message: `${senderName} sent you a message`,
+      type: "general",
+      link: `/${rolePrefix}/messages`,
+    });
+  } catch (error) {
+    console.error("notifyMessageReceived failed:", error.message);
+    return null;
+  }
+};
 
