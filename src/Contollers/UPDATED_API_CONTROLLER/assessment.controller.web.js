@@ -3,8 +3,10 @@ import { uploadToCloudinary } from "../../lib/cloudinary-course.config.js";
 import Chapter from "../../Models/chapter.model.sch.js";
 import Lesson from "../../Models/lesson.model.sch.js";
 import Assessment from "../../Models/Assessment.model.js";
+import Course from "../../Models/courses.model.sch.js";
 import { asyncHandler } from "../../middlewares/errorHandler.middleware.js";
 import { ValidationError, NotFoundError } from "../../Utiles/errors.js";
+import { notifyAssessmentAssigned } from "../../Utiles/notificationService.js";
 
 
 export const createAssessment_updated = asyncHandler(async (req, res) => {
@@ -180,6 +182,21 @@ export const createAssessment_updated = asyncHandler(async (req, res) => {
     });
 
     await newAssessment.save();
+
+    // Send notification to enrolled students
+    try {
+      const courseData = await Course.findById(finalCourse);
+      if (courseData) {
+        await notifyAssessmentAssigned(
+          finalCourse,
+          courseData.courseTitle,
+          title,
+          createdby
+        );
+      }
+    } catch (error) {
+      console.error("❌ Assessment notification error:", error.message);
+    }
 
     return res.status(201).json({
       assessment: newAssessment,

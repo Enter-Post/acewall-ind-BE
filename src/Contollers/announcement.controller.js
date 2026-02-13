@@ -10,6 +10,7 @@ import {
   NotFoundError,
 } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+import { notifyNewAnnouncement } from "../Utiles/notificationService.js";
 
 
 export const createAnnouncement = asyncHandler(async (req, res) => {
@@ -67,6 +68,18 @@ export const createAnnouncement = asyncHandler(async (req, res) => {
     });
 
     await announcement.save();
+
+    // Send notification to enrolled students
+    try {
+      await notifyNewAnnouncement(
+        courseId,
+        course.courseTitle,
+        title,
+        teacherId
+      );
+    } catch (error) {
+      console.error("❌ Announcement notification error:", error.message);
+    }
 
     // Fetch enrolled students + guardians
     const enrollments = await Enrollment.find({ course: courseId }).populate(

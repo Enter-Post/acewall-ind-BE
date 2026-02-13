@@ -6,6 +6,8 @@ import {
   AuthenticationError,
 } from "../../Utiles/errors.js";
 import { asyncHandler } from "../../middlewares/errorHandler.middleware.js";
+import { notifyNewCoursePost } from "../../Utiles/notificationService.js";
+import { EXCLUDED_ENROLLMENT_STATUSES } from "../../Utiles/notificationConstants.js";
 
 export const createPost = asyncHandler(async (req, res) => {
     const { text, color, postType, courseId } = req.body;
@@ -39,6 +41,25 @@ export const createPost = asyncHandler(async (req, res) => {
 
     const post = new Posts(postData);
     await post.save();
+
+    // Send notification to enrolled students if this is a course post
+    if (postType === "course" && courseId) {
+      try {
+        const course = await CourseSch.findById(courseId).select('courseTitle');
+        if (course) {
+          const authorName = `${req.user.firstName} ${req.user.lastName}`;
+          await notifyNewCoursePost(
+            post._id,
+            courseId,
+            course.courseTitle,
+            authorName,
+            author
+          );
+        }
+      } catch (error) {
+        console.error("Course post notification error:", error.message);
+      }
+    }
 
     return res.status(201).json({ 
         post,
