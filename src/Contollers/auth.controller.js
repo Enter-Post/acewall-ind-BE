@@ -11,7 +11,7 @@ import Enrollment from "../Models/Enrollement.model.js";
 import mongoose from "mongoose";
 import twilio from "twilio";
 import stripe from "../config/stripe.js";
-
+// ...existing code...
 // Import error classes
 import {
   ValidationError,
@@ -292,7 +292,19 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
     mailingAddress,
     password, // This is already hashed from initiateSignup
     isVerified: true, // Mark the user as verified
+    referralCode: role === "student" ? generateReferralCode() : undefined,
   });
+
+  // Utility function for referral code
+  function generateReferralCode(length = 8) {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "";
+    const bytes = crypto.randomBytes(length);
+    for (let i = 0; i < length; i++) {
+      code += chars[bytes[i] % chars.length];
+    }
+    return code;
+  }
 
   await newUser.save();
 
@@ -820,7 +832,7 @@ export const allStudent = asyncHandler(async (req, res) => {
 
   const students = await User.find(query)
     .sort({ createdAt: -1 })
-    .select("firstName lastName email createdAt courses profileImg _id")
+    .select("firstName lastName email createdAt courses profileImg _id referralCode")
     .skip(skip)
     .limit(limit);
 
@@ -831,6 +843,7 @@ export const allStudent = asyncHandler(async (req, res) => {
     numberOfCourses: student.courses?.length || 0,
     profileImg: student.profileImg,
     id: student._id,
+    referralCode: student.referralCode,
   }));
 
   return res.status(200).json({
@@ -1458,8 +1471,7 @@ export const verifyTeacherDocument = asyncHandler(async (req, res) => {
 
   if (!["verified", "not_verified"].includes(status)) {
     throw new ValidationError(
-      "Invalid status value. Must be 'verified' or 'not_verified'.",
-      "VAL_005"
+      "Invalid status value. Must be 'verified' or 'not_verified'."
     );
   }
 
