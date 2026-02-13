@@ -503,12 +503,12 @@ export const createCourseSch = asyncHandler(async (req, res) => {
     courseData.stripeProductId = product.id;
     courseData.stripePriceId = stripePrice.id;
   }
-  
+
   const course = new CourseSch(courseData);
   await course.save();
 
   await Enrollment.create({ student: createdby, course: course._id, enrollmentType: "TEACHERENROLLMENT", status: "ACTIVE" });
-  
+
   res.status(201).json({
     course,
     message: "Course created successfully"
@@ -2051,7 +2051,7 @@ export const getUserCoursesforFilter = asyncHandler(async (req, res) => {
       {
         $match: {
           student: new mongoose.Types.ObjectId(userId),
-          status: { $ne: "CANCELLED" } 
+          status: { $ne: "CANCELLED" }
         },
       },
       {
@@ -2135,5 +2135,27 @@ export const getUserCoursesforFilter = asyncHandler(async (req, res) => {
     totalCourses: courses.length,
     courses,
     message: "User courses fetched successfully"
+  });
+});
+
+export const toggleReferral = asyncHandler(async (req, res) => {
+  const { courseId } = req.params;
+
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
+  }
+
+  const course = await CourseSch.findById(courseId);
+
+  if (!course) {
+    throw new NotFoundError("Course not found");
+  }
+
+  course.referral = !course.referral;
+  await course.save();
+
+  res.status(200).json({
+    message: `Referral ${course.referral ? "enabled" : "disabled"} successfully`,
+    referral: course.referral,
   });
 });

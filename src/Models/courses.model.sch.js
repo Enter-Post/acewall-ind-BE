@@ -68,6 +68,7 @@ const SchCourseSchema = new mongoose.Schema(
     freeTrialMonths: { type: Number },
     stripePriceId: { type: String },
     stripeProductId: { type: String },
+    referral: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
