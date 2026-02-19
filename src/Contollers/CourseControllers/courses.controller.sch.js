@@ -518,9 +518,11 @@ export const createCourseSch = asyncHandler(async (req, res) => {
 export const getAllCoursesSch = asyncHandler(async (req, res) => {
   const { isVerified, search } = req.query;
 
-  const query = {
-    isVerified: isVerified,
-  };
+  // Only include filters when the corresponding query param is provided
+  const query = {};
+  if (typeof isVerified !== "undefined" && isVerified !== null && isVerified !== "") {
+    query.isVerified = isVerified;
+  }
 
   if (search) {
     query["courseTitle"] = { $regex: search, $options: "i" };

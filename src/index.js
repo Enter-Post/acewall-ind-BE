@@ -8,6 +8,8 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import { connectDB } from "./lib/connectDB.js";
 import { app, server, io } from "./lib/socket.io.js";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./Utiles/swaggerSpec.js";
 
 /// Routes
 import authRoutes from "./Routes/Auth.Routes.js";
@@ -118,6 +120,15 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
+
+// Swagger UI - interactive API docs 
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Serve raw OpenAPI JSON for CI/consumers
+app.get("/openapi.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.send(swaggerSpec);
+});
 
 app.use("/api/assessmentCategory", AssessmentCategoryRoutes);
 app.use("/api/stripe", stripeRoutes);
