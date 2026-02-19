@@ -1,3 +1,6 @@
+import dns from "dns";
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
+
 import express from "express";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
@@ -180,7 +183,7 @@ app.use(errorHandler);
 server.listen(PORT, async () => {
   console.log(`This app is running on localhost ${PORT}`);
   console.log(`🔗 Webhook endpoint: https://acewell-production.up.railway.app/api/stripe/webhook`);
-  
+
   // Connect to database with error handling
   try {
     await connectDB();

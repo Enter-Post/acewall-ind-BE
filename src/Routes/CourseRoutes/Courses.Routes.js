@@ -32,21 +32,11 @@ import {
   getFullCourseData,
   importCourseFromJSON,
   getCoursesWithMeetings,
+  toggleReferral,
 } from "../../Contollers/CourseControllers/courses.controller.sch.js";
 
 const router = express.Router();
-/**
- * @openapi
- * /api/course/all:
- *   get:
- *     tags:
- *       - Course
- *     summary: Get all courses
- *     responses:
- *       200:
- *         description: List of courses
- */
-router.get("/with-meetings",isUser, getCoursesWithMeetings);
+router.get("/with-meetings", isUser, getCoursesWithMeetings);
 
 router.get("/:courseId/export", getFullCourseData);
 /**
@@ -273,6 +263,7 @@ router.put("/editCourseDocuments/:courseId", isUser, upload.fields([
  *         description: Course documents updated
  */
 router.put("/course/:courseId/toggle-grading", toggleGradingSystem);
+router.put("/course/:courseId/toggle-referral", isUser, toggleReferral);
 router.get('/stats/:courseId', getCourseEnrollmentStats);
 
 /**
