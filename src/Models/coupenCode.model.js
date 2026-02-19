@@ -1,16 +1,89 @@
-import mongoose from "mongoose"
+// models/coupon.model.js
 
-const coupenCodeSchema = new mongoose.Schema({
-    code: { type: String, required: true, unique: true },
-    discount: { type: Number, required: true },
-    course: { type: mongoose.Schema.Types.ObjectId, ref: "CourseSch", required: true },
-    demandedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    status: { type: String, enum: ['accepted', 'pending', 'rejected'], default: 'active' },
-    startDate: { type: Date, required: true },
-    endDate: { type: Date, required: true },
-    isActive: { type: Boolean, default: true },
-})
+import mongoose from "mongoose";
 
-const CoupenCode = mongoose.model("CoupenCode", coupenCodeSchema)
+const couponSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+    },
 
-export default CoupenCode;
+    code: {
+      type: String,
+      required: true,
+      unique: true,
+      uppercase: true,
+      trim: true,
+    },
+
+    stripeCouponId: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+
+    stripePromotionCodeId: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+
+    // Course reference
+    course: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CourseSch",
+      required: true,
+    },
+
+    stripeProductId: {
+      type: String,
+      required: true,
+    },
+
+    stripePriceId: {
+      type: String,
+      required: true,
+    },
+
+    discountType: {
+      type: String,
+      enum: ["percentage", "fixed"],
+      required: true,
+    },
+
+    percentageOff: Number,
+
+    amountOff: Number,
+
+    currency: {
+      type: String,
+      default: "usd",
+    },
+
+    duration: {
+      type: String,
+      enum: ["once", "repeating", "forever"],
+      required: true,
+      default: "once",
+    },
+
+    maxRedemptions: Number,
+
+    expiresAt: Date,
+
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+  },
+  { timestamps: true }
+);
+
+const Coupon = mongoose.model("Coupon", couponSchema);
+export default Coupon;

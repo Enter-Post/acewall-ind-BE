@@ -22,6 +22,22 @@ import {
 } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
+const generateReferralCode = async (firstName) => {
+  const prefix = firstName.toUpperCase().replace(/\s+/g, "").slice(0, 4);
+  let isUnique = false;
+  let code = "";
+
+  while (!isUnique) {
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    code = `${prefix}${randomDigits}`;
+    const existingUser = await User.findOne({ referralCode: code });
+    if (!existingUser) {
+      isUnique = true;
+    }
+  }
+  return code;
+};
+
 export const initiateSignup = asyncHandler(async (req, res, next) => {
   const {
     firstName,
@@ -45,7 +61,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
     throw new ValidationError("All required fields must be filled.", "VAL_001");
   }
 
-  console.log("working here 1");
   const existingUser = await User.findOne({ email });
   if (existingUser) {
     throw new ConflictError("User with this email already exists.", "AUTH_005");
@@ -67,10 +82,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
   const otp = generateOTP();
   const hashedOTP = await bcrypt.hash(otp, 10);
 
-  // 2. Removed phone number formatting logic (phoneNumUpdated)
-
-  console.log("working here 2");
-
   await OTP.findOneAndUpdate(
     { email },
     {
@@ -82,7 +93,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
         lastName,
         role,
         email,
-        // 3. Removed 'phone' from the userData object
         homeAddress,
         mailingAddress,
         password: hashedPassword,
@@ -90,8 +100,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
     },
     { upsert: true }
   );
-
-  console.log("working here 3");
 
   // Send OTP via email
   const transporter = nodemailer.createTransport({
@@ -103,8 +111,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
       pass: process.env.MAIL_PASS,
     },
   });
-
-  console.log("working here 4");
 
   await transporter.sendMail({
     from: `"OTP Verification" <${process.env.MAIL_USER}>`,
@@ -145,8 +151,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
   </div>
   `,
   });
-
-  console.log("working here 5");
 
   res.status(201).json({ message: "OTP sent to your email." });
 });
@@ -260,6 +264,8 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
   if (!otpEntry) {
     throw new ValidationError("OTP not found or already used.", "AUTH_006");
   }
+  console.log("working here 1")
+
 
   // 2. Check validity and expiration
   const isExpired = Date.now() > otpEntry.expiresAt;
@@ -268,6 +274,8 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
   if (!isValid || isExpired) {
     throw new ValidationError("Invalid or expired OTP.", "AUTH_006");
   }
+  console.log("working here 2")
+
 
   // 3. Extract user data stored during the initiateSignup phase
   const {
@@ -281,6 +289,8 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
     password,
   } = otpEntry.userData;
 
+  console.log("working here 3")
+
   // 4. Create the final User account
   const newUser = new User({
     firstName,
@@ -293,28 +303,32 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
     password, // This is already hashed from initiateSignup
     isVerified: true, // Mark the user as verified
   });
+  console.log("working here 4")
+
+
+  if (role === "student") {
+    const refCode = await generateReferralCode(firstName);
+    newUser.referralCode = refCode;
+  }
+
+  // if (role === "teacher") {
+  //   const account = await stripe.accounts.create({
+  //     type: "express",
+  //     email: otpEntry.userData.email,
+  //     capabilities: {
+  //       transfers: { requested: true },
+  //     },
+  //   });
+  //   newUser.stripeAccountId = account.id;
+  // }
 
   await newUser.save();
 
-  const account = await stripe.accounts.create({
-    type: "express",
-    email: otpEntry.userData.email,
-    capabilities: {
-      transfers: { requested: true },
-    },
-  });
-
-  newUser.stripeAccountId = account.id;
-  await newUser.save();
-
-  // 5. Delete the OTP record so it can't be reused
   await OTP.deleteOne({ email });
 
-  // 6. Return the user data (excluding password) for the frontend session
   const userResponse = newUser.toObject();
   delete userResponse.password;
 
-  // ✅ Issue JWT token so user is auto-logged in after signup
   generateToken(newUser, newUser.role, req, res);
 
   res.status(200).json({
@@ -339,6 +353,11 @@ export const verifyPhoneOtp = asyncHandler(async (req, res) => {
   }
 
   const newUser = new User({ ...otpEntry.userData });
+
+  if (newUser.role === "student") {
+    newUser.referralCode = await generateReferralCode(newUser.firstName);
+  }
+
   await newUser.save();
 
   // Delete OTP entry since it's used
@@ -494,6 +513,12 @@ export const login = asyncHandler(async (req, res, next) => {
   const isAuthorized = await bcrypt.compare(password, user.password);
   if (!isAuthorized) {
     throw new AuthenticationError("Invalid credentials", "AUTH_001");
+  }
+
+  // Ensure students have a referral code (for legacy users)
+  if (user.role === "student" && !user.referralCode) {
+    user.referralCode = await generateReferralCode(user.firstName);
+    await user.save();
   }
 
   // ✅ Pass both req and res here
@@ -706,8 +731,16 @@ export const allUser = asyncHandler(async (req, res) => {
 });
 
 export const checkAuth = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+
+  // Ensure students have a referral code (for legacy users)
+  if (user && user.role === "student" && !user.referralCode) {
+    user.referralCode = await generateReferralCode(user.firstName);
+    await user.save();
+  }
+
   return res.status(200).json({
-    user: req.user
+    user: user
   });
 });
 
@@ -918,7 +951,7 @@ export const getTeacherById = asyncHandler(async (req, res) => {
   ]);
 
   return res.status(200).json({
-    teacher, 
+    teacher,
     courses
   });
 });
