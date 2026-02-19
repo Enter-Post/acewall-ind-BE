@@ -7,7 +7,7 @@ import Enrollment from "../Models/Enrollement.model.js";
 import Purchase from "../Models/purchase.model.js"; // Assuming you have this model
 import TestClock from "../Models/testClock.model.js";
 import User from "../Models/user.model.js";
-import { notifyEnrollmentSuccess, notifyReferralPointsUpdated } from "../Utiles/notificationService.js";
+import { notifyEnrollmentSuccess } from "../Utiles/notificationService.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
 // Create Mobile-Only Checkout Session
@@ -663,7 +663,7 @@ export const handleStripeWebhookConnect = async (req, res) => {
             if (userByRefCode) {
               userByRefCode.referralPoints = (userByRefCode.referralPoints || 0) + 5;
               await userByRefCode.save();
-              notifyReferralPointsUpdated(userByRefCode._id, 5);
+              // notifyReferralPointsUpdated(userByRefCode._id, 5);
             }
 
 
@@ -719,7 +719,7 @@ export const handleStripeWebhookConnect = async (req, res) => {
               userByRefCode.referralPoints = (userByRefCode.referralPoints || 0) + 5;
               await userByRefCode.save();
 
-              notifyReferralPointsUpdated(userByRefCode._id, 5);
+              // notifyReferralPointsUpdated(userByRefCode._id, 5);
             }
 
             // Send enrollment success notification
