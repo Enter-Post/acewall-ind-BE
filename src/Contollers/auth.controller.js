@@ -61,7 +61,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
     throw new ValidationError("All required fields must be filled.", "VAL_001");
   }
 
-  console.log("working here 1");
   const existingUser = await User.findOne({ email });
   if (existingUser) {
     throw new ConflictError("User with this email already exists.", "AUTH_005");
@@ -83,10 +82,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
   const otp = generateOTP();
   const hashedOTP = await bcrypt.hash(otp, 10);
 
-  // 2. Removed phone number formatting logic (phoneNumUpdated)
-
-  console.log("working here 2");
-
   await OTP.findOneAndUpdate(
     { email },
     {
@@ -98,7 +93,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
         lastName,
         role,
         email,
-        // 3. Removed 'phone' from the userData object
         homeAddress,
         mailingAddress,
         password: hashedPassword,
@@ -106,8 +100,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
     },
     { upsert: true }
   );
-
-  console.log("working here 3");
 
   // Send OTP via email
   const transporter = nodemailer.createTransport({
@@ -119,8 +111,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
       pass: process.env.MAIL_PASS,
     },
   });
-
-  console.log("working here 4");
 
   await transporter.sendMail({
     from: `"OTP Verification" <${process.env.MAIL_USER}>`,
@@ -161,8 +151,6 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
   </div>
   `,
   });
-
-  console.log("working here 5");
 
   res.status(201).json({ message: "OTP sent to your email." });
 });
@@ -276,6 +264,8 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
   if (!otpEntry) {
     throw new ValidationError("OTP not found or already used.", "AUTH_006");
   }
+  console.log("working here 1")
+
 
   // 2. Check validity and expiration
   const isExpired = Date.now() > otpEntry.expiresAt;
@@ -284,6 +274,8 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
   if (!isValid || isExpired) {
     throw new ValidationError("Invalid or expired OTP.", "AUTH_006");
   }
+  console.log("working here 2")
+
 
   // 3. Extract user data stored during the initiateSignup phase
   const {
@@ -297,6 +289,8 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
     password,
   } = otpEntry.userData;
 
+  console.log("working here 3")
+
   // 4. Create the final User account
   const newUser = new User({
     firstName,
@@ -309,32 +303,32 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
     password, // This is already hashed from initiateSignup
     isVerified: true, // Mark the user as verified
   });
+  console.log("working here 4")
+
 
   if (role === "student") {
-    newUser.referralCode = await generateReferralCode(firstName);
+    const refCode = await generateReferralCode(firstName);
+    newUser.referralCode = refCode;
   }
 
+  // if (role === "teacher") {
+  //   const account = await stripe.accounts.create({
+  //     type: "express",
+  //     email: otpEntry.userData.email,
+  //     capabilities: {
+  //       transfers: { requested: true },
+  //     },
+  //   });
+  //   newUser.stripeAccountId = account.id;
+  // }
+
   await newUser.save();
 
-  const account = await stripe.accounts.create({
-    type: "express",
-    email: otpEntry.userData.email,
-    capabilities: {
-      transfers: { requested: true },
-    },
-  });
-
-  newUser.stripeAccountId = account.id;
-  await newUser.save();
-
-  // 5. Delete the OTP record so it can't be reused
   await OTP.deleteOne({ email });
 
-  // 6. Return the user data (excluding password) for the frontend session
   const userResponse = newUser.toObject();
   delete userResponse.password;
 
-  // ✅ Issue JWT token so user is auto-logged in after signup
   generateToken(newUser, newUser.role, req, res);
 
   res.status(200).json({

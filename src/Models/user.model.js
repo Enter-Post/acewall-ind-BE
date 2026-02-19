@@ -104,8 +104,11 @@ const UserSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      default: null,
     },
+    referralPoints : {
+      type: Number,
+      default: 0,
+    }
   },
   { timestamps: true }
 );

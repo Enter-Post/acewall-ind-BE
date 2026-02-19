@@ -14,22 +14,22 @@ import { EXCLUDED_ENROLLMENT_STATUSES } from "./notificationConstants.js";
 export const sendNotification = async ({ recipient, sender = null, message, type = "general", link = null }) => {
   try {
     // Save to database
-    const notification = await createNotification({ 
-      recipient, 
-      sender, 
-      message, 
-      type, 
-      link 
+    const notification = await createNotification({
+      recipient,
+      sender,
+      message,
+      type,
+      link
     });
-    
+
     if (!notification) return null;
-    
+
     // Send real-time via Socket.io
     const recipientSocketId = getRecieverSocketId(recipient.toString());
     if (recipientSocketId) {
       io.to(recipientSocketId).emit("newNotification", notification);
     }
-    
+
     return notification;
   } catch (error) {
     console.error("❌ sendNotification failed:", error.message);
@@ -43,7 +43,7 @@ export const sendNotification = async ({ recipient, sender = null, message, type
 export const sendBulkNotifications = async ({ recipients, message, type = "general", link = null, sender = null }) => {
   try {
     if (!recipients || recipients.length === 0) return [];
-    
+
     // Prepare bulk insert data
     const notifications = recipients.map(recipientId => ({
       recipient: recipientId,
@@ -52,10 +52,10 @@ export const sendBulkNotifications = async ({ recipients, message, type = "gener
       type,
       link,
     }));
-    
+
     // Database bulk insert (efficient)
     const created = await Notification.insertMany(notifications);
-    
+
     // Socket.io real-time delivery for online users
     recipients.forEach(recipientId => {
       const socketId = getRecieverSocketId(recipientId.toString());
@@ -63,7 +63,7 @@ export const sendBulkNotifications = async ({ recipients, message, type = "gener
         io.to(socketId).emit("newNotification", { message, type, link });
       }
     });
-    
+
     console.log(`✅ Sent ${created.length} bulk notifications`);
     return created;
   } catch (error) {
@@ -94,21 +94,21 @@ export const notifyEnrollmentSuccess = async (studentId, enrollmentId, courseNam
 export const notifyNewChapter = async (courseId, courseName, chapterTitle, chapterId, teacherId) => {
   try {
     // Get all active enrolled students with their enrollmentIds
-    const enrollments = await Enrollment.find({ 
-      course: courseId, 
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    const enrollments = await Enrollment.find({
+      course: courseId,
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
     }).select("student _id course");
-    
+
     if (enrollments.length === 0) {
       console.log("No active students to notify for new chapter");
       return [];
     }
-    
+
     const courseIdStr = courseId.toString();
     const chapterIdStr = chapterId.toString();
-    
+
     // Send individual notifications with chapter detail link
-    const notificationPromises = enrollments.map(enr => 
+    const notificationPromises = enrollments.map(enr =>
       sendNotification({
         recipient: enr.student,
         sender: teacherId,
@@ -117,7 +117,7 @@ export const notifyNewChapter = async (courseId, courseName, chapterTitle, chapt
         link: `/student/mycourses/${courseIdStr}/chapters/chapter/${chapterIdStr}`,
       })
     );
-    
+
     const results = await Promise.all(notificationPromises);
     console.log(`✅ Sent ${results.filter(r => r).length} chapter notifications`);
     return results;
@@ -153,15 +153,15 @@ export const notifySubscriptionRenewed = async (studentId, courseId, courseName)
  */
 export const notifyAssessmentAssigned = async (courseId, assessmentTitle, dueDate, teacherId) => {
   try {
-    const enrollments = await Enrollment.find({ 
-      course: courseId, 
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    const enrollments = await Enrollment.find({
+      course: courseId,
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
     }).select("student");
-    
+
     if (enrollments.length === 0) return [];
-    
+
     const studentIds = enrollments.map(enr => enr.student);
-    
+
     return await sendBulkNotifications({
       recipients: studentIds,
       sender: teacherId,
@@ -189,15 +189,15 @@ export const notifyGradePosted = async (studentId, assessmentTitle, grade, total
  */
 export const notifyAnnouncementPosted = async (courseId, courseName, teacherName, teacherId) => {
   try {
-    const enrollments = await Enrollment.find({ 
-      course: courseId, 
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    const enrollments = await Enrollment.find({
+      course: courseId,
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
     }).select("student");
-    
+
     if (enrollments.length === 0) return [];
-    
+
     const studentIds = enrollments.map(enr => enr.student);
-    
+
     return await sendBulkNotifications({
       recipients: studentIds,
       sender: teacherId,
@@ -216,15 +216,15 @@ export const notifyAnnouncementPosted = async (courseId, courseName, teacherName
  */
 export const notifyLiveClassScheduled = async (courseId, topic, teacherId) => {
   try {
-    const enrollments = await Enrollment.find({ 
-      course: courseId, 
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    const enrollments = await Enrollment.find({
+      course: courseId,
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
     }).select("student");
-    
+
     if (enrollments.length === 0) return [];
-    
+
     const studentIds = enrollments.map(enr => enr.student);
-    
+
     return await sendBulkNotifications({
       recipients: studentIds,
       sender: teacherId,
@@ -237,3 +237,11 @@ export const notifyLiveClassScheduled = async (courseId, topic, teacherId) => {
     return [];
   }
 };
+
+export const notifyReferralPointsUpdated = async (studentId, points) => {
+  return await sendNotification({
+    recipient: studentId,
+    message: `You earned ${points} referral points! Check your profile for details.`,
+    link: `/student/account`,
+  });
+}
