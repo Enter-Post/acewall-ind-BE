@@ -12,6 +12,7 @@ import {
   NotFoundError,
 } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+import { notifyGradePosted } from "../Utiles/notificationService.js";
 
 dotenv.config();
 
@@ -203,6 +204,15 @@ export const submission = asyncHandler(async (req, res) => {
           // Do not fail the request due to email failure
         }
       }
+
+      // Send in-app notification for auto-graded assessment
+      await notifyGradePosted(
+        studentId,
+        assessment.title,
+        totalScore,
+        maxScore,
+        assessment.course
+      );
     }
 
     return res.status(201).json({
@@ -406,6 +416,15 @@ export const teacherGrading = asyncHandler(async (req, res) => {
         "assessment"
       );
     }
+
+    // Send in-app notification for manual grading
+    await notifyGradePosted(
+      submission.studentId._id,
+      assessment.title,
+      submission.totalScore,
+      allcourseMaxPoint,
+      assessment.course
+    );
 
     // ✅ Send email only if the user has an email
     const student = submission.studentId;

@@ -1,5 +1,6 @@
 import Discussion from "../../Models/discussion.model.js";
 import DiscussionComment from "../../Models/discussionComment.model.js";
+import User from "../../Models/user.model.js";
 import { updateGradebookOnSubmission } from "../../Utiles/updateGradebookOnSubmission.js";
 import {
   ValidationError,
@@ -7,6 +8,7 @@ import {
   ConflictError,
 } from "../../Utiles/errors.js";
 import { asyncHandler } from "../../middlewares/errorHandler.middleware.js";
+import { notifyDiscussionComment, notifyDiscussionGraded } from "../../Utiles/notificationService.js";
 
 export const getDiscussionComments = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -55,6 +57,25 @@ export const sendDiscussionComment = asyncHandler(async (req, res) => {
     discussion: id,
   });
   await newDiscussionComment.save();
+
+  // Send notification to discussion author
+  try {
+    const discussion = await Discussion.findById(id).populate('createdby', 'firstName lastName role');
+    if (discussion && discussion.createdby) {
+      const commenterName = `${user.firstName} ${user.lastName}`;
+      await notifyDiscussionComment(
+        id,
+        discussion.topic,
+        discussion.createdby._id,
+        commenterName,
+        user._id,
+        discussion.createdby.role
+      );
+    }
+  } catch (error) {
+    console.error("Discussion comment notification error:", error.message);
+  }
+
   return res.status(200).json({
     newDiscussionComment,
     message: "Comment sent successfully"
@@ -118,6 +139,20 @@ export const gradeDiscussionofStd = asyncHandler(async (req, res) => {
     discID,                // itemId
     "discussion"           // type
   );
+
+  // Send notification to student
+  try {
+    await notifyDiscussionGraded(
+      studentId,
+      discussion._id,
+      discussion.topic,
+      obtainedMarks,
+      discussion.totalMarks,
+      req.user._id
+    );
+  } catch (error) {
+    console.error("Discussion grading notification error:", error.message);
+  }
 
   return res.status(200).json({ 
     message: "Marks graded successfully" 

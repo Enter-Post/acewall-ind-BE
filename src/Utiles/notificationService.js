@@ -14,25 +14,26 @@ import { EXCLUDED_ENROLLMENT_STATUSES } from "./notificationConstants.js";
 export const sendNotification = async ({ recipient, sender = null, message, type = "general", link = null }) => {
   try {
     // Save to database
-    const notification = await createNotification({
-      recipient,
-      sender,
-      message,
-      type,
-      link
+    const notification = await createNotification({ 
+      recipient, 
+      sender, 
+      message, 
+      type, 
+      link 
     });
-
+    
     if (!notification) return null;
-
+    
     // Send real-time via Socket.io
     const recipientSocketId = getRecieverSocketId(recipient.toString());
+    
     if (recipientSocketId) {
       io.to(recipientSocketId).emit("newNotification", notification);
     }
-
+    
     return notification;
   } catch (error) {
-    console.error("❌ sendNotification failed:", error.message);
+    console.error("sendNotification failed:", error.message);
     return null;
   }
 };
@@ -42,8 +43,13 @@ export const sendNotification = async ({ recipient, sender = null, message, type
  */
 export const sendBulkNotifications = async ({ recipients, message, type = "general", link = null, sender = null }) => {
   try {
-    if (!recipients || recipients.length === 0) return [];
-
+    console.log("📤 sendBulkNotifications called with:", { recipientCount: recipients?.length, message, type, link });
+    
+    if (!recipients || recipients.length === 0) {
+      console.log("⚠️ No recipients provided");
+      return [];
+    }
+    
     // Prepare bulk insert data
     const notifications = recipients.map(recipientId => ({
       recipient: recipientId,
@@ -52,22 +58,25 @@ export const sendBulkNotifications = async ({ recipients, message, type = "gener
       type,
       link,
     }));
-
+    
     // Database bulk insert (efficient)
     const created = await Notification.insertMany(notifications);
-
+    console.log(`💾 Saved ${created.length} notifications to database`);
+    
     // Socket.io real-time delivery for online users
+    let socketsSent = 0;
     recipients.forEach(recipientId => {
       const socketId = getRecieverSocketId(recipientId.toString());
       if (socketId) {
         io.to(socketId).emit("newNotification", { message, type, link });
+        socketsSent++;
       }
     });
-
-    console.log(`✅ Sent ${created.length} bulk notifications`);
+    
+    console.log(`🔌 Sent to ${socketsSent}/${recipients.length} online users via Socket.io`);
     return created;
   } catch (error) {
-    console.error("❌ sendBulkNotifications failed:", error.message);
+    console.error("❌ sendBulkNotifications failed:", error.message, error);
     return [];
   }
 };
@@ -94,21 +103,20 @@ export const notifyEnrollmentSuccess = async (studentId, enrollmentId, courseNam
 export const notifyNewChapter = async (courseId, courseName, chapterTitle, chapterId, teacherId) => {
   try {
     // Get all active enrolled students with their enrollmentIds
-    const enrollments = await Enrollment.find({
-      course: courseId,
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
+    const enrollments = await Enrollment.find({ 
+      course: courseId, 
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
     }).select("student _id course");
-
+    
     if (enrollments.length === 0) {
-      console.log("No active students to notify for new chapter");
       return [];
     }
-
+    
     const courseIdStr = courseId.toString();
     const chapterIdStr = chapterId.toString();
-
+    
     // Send individual notifications with chapter detail link
-    const notificationPromises = enrollments.map(enr =>
+    const notificationPromises = enrollments.map(enr => 
       sendNotification({
         recipient: enr.student,
         sender: teacherId,
@@ -117,131 +125,293 @@ export const notifyNewChapter = async (courseId, courseName, chapterTitle, chapt
         link: `/student/mycourses/${courseIdStr}/chapters/chapter/${chapterIdStr}`,
       })
     );
-
+    
     const results = await Promise.all(notificationPromises);
-    console.log(`✅ Sent ${results.filter(r => r).length} chapter notifications`);
     return results;
   } catch (error) {
-    console.error("❌ notifyNewChapter failed:", error.message);
+    console.error("notifyNewChapter failed:", error.message);
     return [];
   }
 };
 
 /**
- * SUBSCRIPTION NOTIFICATIONS (for future implementation)
+ * ASSESSMENT NOTIFICATIONS
  */
-export const notifySubscriptionCancelled = async (studentId, cancellationDate) => {
-  return await sendNotification({
-    recipient: studentId,
-    message: `Your subscription has been cancelled. Access until ${cancellationDate}. You can renew anytime.`,
-    type: "general",
-    link: `/student/my-courses`,
-  });
-};
-
-export const notifySubscriptionRenewed = async (studentId, courseId, courseName) => {
-  return await sendNotification({
-    recipient: studentId,
-    message: `Subscription renewed successfully! Welcome back to ${courseName}.`,
-    type: "general",
-    link: `/student/mycourses/${courseId}`,
-  });
-};
-
-/**
- * ASSESSMENT NOTIFICATIONS (for future implementation)
- */
-export const notifyAssessmentAssigned = async (courseId, assessmentTitle, dueDate, teacherId) => {
+export const notifyAssessmentAssigned = async (courseId, courseName, assessmentTitle, teacherId) => {
   try {
-    const enrollments = await Enrollment.find({
-      course: courseId,
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
+    // Get all active enrolled students
+    const enrollments = await Enrollment.find({ 
+      course: courseId, 
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
     }).select("student");
-
-    if (enrollments.length === 0) return [];
-
-    const studentIds = enrollments.map(enr => enr.student);
-
-    return await sendBulkNotifications({
-      recipients: studentIds,
-      sender: teacherId,
-      message: `New assignment: ${assessmentTitle} - Due ${dueDate}`,
-      type: "assignment",
-      link: `/student/mycourses/assessment/${courseId}`,
-    });
+    
+    if (enrollments.length === 0) {
+      return [];
+    }
+    
+    const courseIdStr = courseId.toString();
+    
+    // Send individual notifications with assessment list link
+    const notificationPromises = enrollments.map(enr => 
+      sendNotification({
+        recipient: enr.student,
+        sender: teacherId,
+        message: `New assessment assigned in ${courseName}: ${assessmentTitle}`,
+        type: "assignment",
+        link: `/student/assessment/bycourse/${courseIdStr}`,
+      })
+    );
+    
+    const results = await Promise.all(notificationPromises);
+    return results;
   } catch (error) {
-    console.error("❌ notifyAssessmentAssigned failed:", error.message);
+    console.error("notifyAssessmentAssigned failed:", error.message);
     return [];
   }
 };
 
-export const notifyGradePosted = async (studentId, assessmentTitle, grade, totalMarks, submissionId) => {
+/**
+ * GRADING NOTIFICATIONS
+ */
+export const notifyGradePosted = async (studentId, assessmentTitle, score, maxScore, courseId) => {
   return await sendNotification({
     recipient: studentId,
-    message: `Your grade for '${assessmentTitle}' is ready: ${grade}/${totalMarks}`,
+    message: `Your grade for "${assessmentTitle}" is ready: ${score}/${maxScore}`,
     type: "assignment",
-    link: `/student/mycourses/assessment/submission/${submissionId}`,
+    link: `/student/analytics/${courseId}`,
   });
 };
 
 /**
- * ANNOUNCEMENT NOTIFICATIONS (for future implementation)
+ * ANNOUNCEMENT NOTIFICATIONS
  */
-export const notifyAnnouncementPosted = async (courseId, courseName, teacherName, teacherId) => {
+export const notifyNewAnnouncement = async (courseId, courseName, announcementTitle, teacherId) => {
   try {
-    const enrollments = await Enrollment.find({
-      course: courseId,
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
+    // Get all active enrolled students
+    const enrollments = await Enrollment.find({ 
+      course: courseId, 
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
     }).select("student");
-
-    if (enrollments.length === 0) return [];
-
+    
+    if (enrollments.length === 0) {
+      return [];
+    }
+    
     const studentIds = enrollments.map(enr => enr.student);
-
-    return await sendBulkNotifications({
+    const courseIdStr = courseId.toString();
+    
+    // Send bulk notifications
+    const result = await sendBulkNotifications({
       recipients: studentIds,
       sender: teacherId,
-      message: `${teacherName} posted an announcement in ${courseName}`,
+      message: `New announcement in ${courseName}: ${announcementTitle}`,
       type: "announcement",
-      link: `/student/mycourses/announcement/${courseId}`,
+      link: `/student/announcements/${courseIdStr}`,
     });
+    
+    return result;
   } catch (error) {
-    console.error("❌ notifyAnnouncementPosted failed:", error.message);
+    console.error("notifyNewAnnouncement failed:", error.message);
     return [];
   }
 };
 
 /**
- * LIVE CLASS NOTIFICATIONS (for future implementation)
+ * DISCUSSION NOTIFICATIONS
  */
-export const notifyLiveClassScheduled = async (courseId, topic, teacherId) => {
+export const notifyNewDiscussion = async (courseId, courseName, discussionTopic, discussionId, teacherId) => {
   try {
-    const enrollments = await Enrollment.find({
-      course: courseId,
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
+    console.log("📢 notifyNewDiscussion called with:", { courseId, courseName, discussionTopic, discussionId: discussionId.toString() });
+    
+    // Get all active enrolled students
+    const enrollments = await Enrollment.find({ 
+      course: courseId, 
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
     }).select("student");
-
-    if (enrollments.length === 0) return [];
-
+    
+    console.log(`📊 Found ${enrollments.length} active enrollments`);
+    console.log("Excluded statuses:", EXCLUDED_ENROLLMENT_STATUSES);
+    
+    if (enrollments.length === 0) {
+      console.log("⚠️ No active students to notify for new discussion");
+      return [];
+    }
+    
     const studentIds = enrollments.map(enr => enr.student);
-
-    return await sendBulkNotifications({
+    const discussionIdStr = discussionId.toString();
+    
+    console.log("Student IDs to notify:", studentIds.map(id => id.toString()));
+    
+    // Send bulk notifications
+    const result = await sendBulkNotifications({
       recipients: studentIds,
       sender: teacherId,
-      message: `New Zoom Class Scheduled: ${topic}`,
-      type: "live-class",
-      link: `/student/mycourses/live-list/${courseId}`,
+      message: `New discussion in ${courseName}: ${discussionTopic}`,
+      type: "general",
+      link: `/student/discussions/${discussionIdStr}`,
     });
+    
+    console.log(`✅ Sent ${result.length} discussion notifications`);
+    return result;
   } catch (error) {
-    console.error("❌ notifyLiveClassScheduled failed:", error.message);
+    console.error("❌ notifyNewDiscussion failed:", error.message, error);
     return [];
   }
 };
 
-export const notifyReferralPointsUpdated = async (studentId, points) => {
-  return await sendNotification({
-    recipient: studentId,
-    message: `You earned ${points} referral points! Check your profile for details.`,
-    link: `/student/account`,
-  });
-}
+export const notifyDiscussionComment = async (discussionId, discussionTopic, discussionAuthorId, commenterName, commenterId, recipientRole) => {
+  try {
+    // Don't notify if commenter is the discussion author (self-comment)
+    if (discussionAuthorId.toString() === commenterId.toString()) {
+      return null;
+    }
+    
+    const discussionIdStr = discussionId.toString();
+    const rolePrefix = recipientRole === "teacher" ? "teacher" : "student";
+    
+    return await sendNotification({
+      recipient: discussionAuthorId,
+      sender: commenterId,
+      message: `${commenterName} commented on your discussion "${discussionTopic}"`,
+      type: "general",
+      link: `/${rolePrefix}/discussions/${discussionIdStr}`,
+    });
+  } catch (error) {
+    console.error("notifyDiscussionComment failed:", error.message);
+    return null;
+  }
+};
+
+export const notifyDiscussionReply = async (discussionId, commentAuthorId, replierName, replierId, recipientRole) => {
+  try {
+    // Don't notify if replier is the comment author (self-reply)
+    if (commentAuthorId.toString() === replierId.toString()) {
+      return null;
+    }
+    
+    const discussionIdStr = discussionId.toString();
+    const rolePrefix = recipientRole === "teacher" ? "teacher" : "student";
+    
+    return await sendNotification({
+      recipient: commentAuthorId,
+      sender: replierId,
+      message: `${replierName} replied to your comment`,
+      type: "general",
+      link: `/${rolePrefix}/discussions/${discussionIdStr}`,
+    });
+  } catch (error) {
+    console.error("notifyDiscussionReply failed:", error.message);
+    return null;
+  }
+};
+
+/**
+ * SOCIAL POST NOTIFICATIONS
+ */
+export const notifySocialPostComment = async (postId, postAuthorId, commenterName, commenterId, recipientRole) => {
+  try {
+    // Don't notify if commenter is the post author (self-comment)
+    if (postAuthorId.toString() === commenterId.toString()) {
+      return null;
+    }
+    
+    const rolePrefix = recipientRole === "teacher" ? "teacher" : "student";
+    
+    return await sendNotification({
+      recipient: postAuthorId,
+      sender: commenterId,
+      message: `${commenterName} commented on your post`,
+      type: "general",
+      link: `/${rolePrefix}/social`,
+    });
+  } catch (error) {
+    console.error("notifySocialPostComment failed:", error.message);
+    return null;
+  }
+};
+
+/**
+ * DISCUSSION GRADING NOTIFICATION
+ */
+export const notifyDiscussionGraded = async (studentId, discussionId, discussionTopic, marksObtained, totalMarks, teacherId) => {
+  try {
+    return await sendNotification({
+      recipient: studentId,
+      sender: teacherId,
+      message: `Your discussion "${discussionTopic}" has been graded: ${marksObtained}/${totalMarks}`,
+      type: "assignment",
+      link: `/student/discussions/${discussionId}`,
+    });
+  } catch (error) {
+    console.error("notifyDiscussionGraded failed:", error.message);
+    return null;
+  }
+};
+
+/**
+ * COURSE POST NOTIFICATION (Bulk)
+ */
+export const notifyNewCoursePost = async (postId, courseId, courseName, authorName, authorId) => {
+  try {
+    // Get all active enrolled students
+    const enrollments = await Enrollment.find({ 
+      course: courseId, 
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    }).select("student");
+    
+    if (enrollments.length === 0) {
+      return [];
+    }
+    
+    const studentIds = enrollments.map(enr => enr.student);
+    
+    // Filter out the post author from recipients
+    const recipients = studentIds.filter(id => id.toString() !== authorId.toString());
+    
+    if (recipients.length === 0) {
+      return [];
+    }
+    
+    const courseIdStr = courseId.toString();
+    
+    const result = await sendBulkNotifications({
+      recipients: recipients,
+      sender: authorId,
+      message: `${authorName} posted in ${courseName}`,
+      type: "general",
+      link: `/student/social`,
+    });
+    
+    return result;
+  } catch (error) {
+    console.error("notifyNewCoursePost failed:", error.message);
+    return [];
+  }
+};
+
+/**
+ * MESSAGE NOTIFICATION
+ */
+export const notifyMessageReceived = async (receiverId, senderName, senderId, receiverRole, conversationId) => {
+  try {
+    // Don't notify if sender is the receiver (shouldn't happen, but just in case)
+    if (receiverId.toString() === senderId.toString()) {
+      return null;
+    }
+    
+    const rolePrefix = receiverRole === "teacher" ? "teacher" : "student";
+    const conversationIdStr = conversationId.toString();
+    
+    return await sendNotification({
+      recipient: receiverId,
+      sender: senderId,
+      message: `${senderName} sent you a message`,
+      type: "general",
+      link: `/${rolePrefix}/messages`,
+    });
+  } catch (error) {
+    console.error("notifyMessageReceived failed:", error.message);
+    return null;
+  }
+};
+
