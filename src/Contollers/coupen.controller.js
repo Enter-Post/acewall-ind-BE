@@ -1,44 +1,136 @@
 import mongoose from "mongoose";
-import CoupenCode from "../Models/coupenCode.model.js";
 import {
   ValidationError,
   NotFoundError,
 } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+import CourseSch from "../Models/courses.model.sch.js";
+import Coupon from "../Models/coupenCode.model.js";
+import stripe from "../config/stripe.js";
 
-export const requestCoupen = asyncHandler(async (req, res) => {
-  const newCoupon = new CoupenCode({
-    ...req.body,
-    demandedBy: req.user._id, // From auth middleware
-    status: 'pending',
-    isActive: false
-  });
-  await newCoupon.save();
-  return res.status(201).json({ 
-    message: "Request sent to Admin",
-    coupon: newCoupon
-  });
-});
+export const createCoupon = asyncHandler(async (req, res) => {
+  const {
+    name,
+    code,
+    courseId,
+    discountType,
+    percentageOff,
+    amountOff,
+    expiresAt,
+    maxRedemptions,
+    currency = "usd",
+  } = req.body;
 
-export const reviewCoupen = asyncHandler(async (req, res) => {
-  const { status } = req.body;
-  const isActive = status === 'accepted';
+  // find course
+  const course = await CourseSch.findById(courseId);
 
-  const coupon = await CoupenCode.findByIdAndUpdate(
-    req.params.id,
-    { status, isActive },
-    { new: true }
-  );
-
-  if (!coupon) {
-    throw new NotFoundError("Coupon not found", "CPN_001");
+  if (!course) {
+    return res.status(404).json({
+      success: false,
+      message: "Course not found",
+    });
   }
 
-  return res.json({
-    message: "Coupon status updated",
-    coupon
+  const stripeCoupon = await stripe.coupons.create({
+    percent_off:
+      discountType === "percentage" ? percentageOff : undefined,
+
+    amount_off:
+      discountType === "fixed" ? amountOff * 100 : undefined,
+
+    currency:
+      discountType === "fixed" ? currency : undefined,
+
+    duration: "once", // KEY PART
+
+    max_redemptions: maxRedemptions,
+
+    redeem_by: expiresAt
+      ? Math.floor(new Date(expiresAt).getTime() / 1000)
+      : undefined,
+
+    applies_to: {
+      products: [course.stripeProductId],
+    },
+
+    name,
+  });
+
+  // create promotion code
+  const promotionCode =
+    await stripe.promotionCodes.create({
+      coupon: stripeCoupon.id,
+      code: code.toUpperCase(),
+    });
+
+  // save in DB
+  const coupon = await Coupon.create({
+    name,
+    code,
+    stripeCouponId: stripeCoupon.id,
+    stripePromotionCodeId: promotionCode.id,
+
+    course: course._id,
+
+    stripeProductId: course.stripeProductId,
+    stripePriceId: course.stripePriceId,
+
+    courseType: course.courseType,
+
+    discountType,
+    percentageOff,
+    amountOff,
+
+    expiresAt,
+    maxRedemptions,
+  });
+
+  res.status(201).json({
+    success: true,
+    message: "Coupon created successfully",
+    data: coupon,
   });
 });
+
+export const updateCoupon = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body; 
+
+  const coupon = await Coupon.findById(id);
+
+  if(coupon.expiresAt && coupon.expiresAt < new Date()) {
+    return res.status(400).json({
+      success: false,
+      message: "Cannot update expired coupon",
+    });
+  }
+
+  if (!coupon) {
+    return res.status(404).json({
+      success: false,
+      message: "Coupon not found",
+    });
+  }
+
+  // deactivate / activate promotion code in Stripe
+  await stripe.promotionCodes.update(
+    coupon.stripePromotionCodeId,
+    {
+      active: status,
+    }
+  );
+
+  // update in database
+  coupon.isActive = status;
+  await coupon.save();
+
+  res.status(200).json({
+    success: true,
+    message: `Coupon ${status ? "activated" : "deactivated"} successfully`,
+    data: coupon,
+  });
+});
+
 
 export const getCouponsByStatus = asyncHandler(async (req, res) => {
   const { status } = req.query;
@@ -54,7 +146,7 @@ export const getCouponsByStatus = asyncHandler(async (req, res) => {
 
   const query = status ? { status } : {};
 
-  const coupons = await CoupenCode.find(query)
+  const coupons = await Coupon.find(query)
     .populate("demandedBy", "firstName lastName email")
     .populate("course", "courseTitle stripeProductId")
     .sort({ createdAt: -1 });
@@ -74,9 +166,8 @@ export const getCouponsByCourse = asyncHandler(async (req, res) => {
     throw new ValidationError("Invalid Course ID format", "CPN_003");
   }
 
-  const coupons = await CoupenCode.find({
+  const coupons = await Coupon.find({
     course: courseId,
-    demandedBy: req.user._id // Ensures teachers only see their own requests
   }).sort({ createdAt: -1 });
 
   return res.status(200).json({

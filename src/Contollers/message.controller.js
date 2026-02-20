@@ -1,10 +1,12 @@
 import { getRecieverSocketId, io } from "../lib/socket.io.js";
 import Conversation from "../Models/conversation.model.js";
 import Message from "../Models/messages.model.js";
+import User from "../Models/user.model.js";
 import {
   NotFoundError,
 } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+import { notifyMessageReceived } from "../Utiles/notificationService.js";
 
 export const createMessage = asyncHandler(async (req, res) => {
   const { conversationId } = req.params;
@@ -42,6 +44,23 @@ export const createMessage = asyncHandler(async (req, res) => {
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("newMessage", newMessage);
     }
+
+  // Send notification to receiver
+  try {
+    const receiver = await User.findById(receiverId).select('role');
+    if (receiver) {
+      const senderName = `${req.user.firstName} ${req.user.lastName}`;
+      await notifyMessageReceived(
+        receiverId,
+        senderName,
+        myId,
+        receiver.role,
+        conversationId
+      );
+    }
+  } catch (error) {
+    console.error("Message notification error:", error.message);
+  }
 
   // 3. Populate sender data
   const populatedMessage = await newMessage.populate(

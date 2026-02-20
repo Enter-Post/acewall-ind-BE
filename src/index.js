@@ -1,3 +1,6 @@
+import dns from "dns";
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
+
 import express from "express";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
@@ -5,6 +8,8 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import { connectDB } from "./lib/connectDB.js";
 import { app, server, io } from "./lib/socket.io.js";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./Utiles/swaggerSpec.js";
 
 /// Routes
 import authRoutes from "./Routes/Auth.Routes.js";
@@ -116,6 +121,15 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+// Swagger UI - interactive API docs 
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Serve raw OpenAPI JSON for CI/consumers
+app.get("/openapi.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.send(swaggerSpec);
+});
+
 app.use("/api/assessmentCategory", AssessmentCategoryRoutes);
 app.use("/api/stripe", stripeRoutes);
 app.use("/api/auth", authRoutes);
@@ -169,7 +183,7 @@ app.use(errorHandler);
 server.listen(PORT, async () => {
   console.log(`This app is running on localhost ${PORT}`);
   console.log(`🔗 Webhook endpoint: https://acewell-production.up.railway.app/api/stripe/webhook`);
-  
+
   // Connect to database with error handling
   try {
     await connectDB();

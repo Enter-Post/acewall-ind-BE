@@ -8,6 +8,7 @@ import Purchase from "../Models/purchase.model.js"; // Assuming you have this mo
 import TestClock from "../Models/testClock.model.js";
 import User from "../Models/user.model.js";
 import { notifyEnrollmentSuccess } from "../Utiles/notificationService.js";
+import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 
 // Create Mobile-Only Checkout Session
 export const createMobileCheckoutSession = async (req, res) => {
@@ -167,7 +168,7 @@ export const handleStripeWebhook = async (req, res) => {
           student: studentId,
           course: courseId,
         });
-        
+
         // Send enrollment success notification
         const courseData = await CourseSch.findById(courseId).select("courseTitle");
         if (courseData) {
@@ -188,12 +189,14 @@ export const stripeOnboarding = async (req, res) => {
   try {
     const teacher = req.user;
 
-    if (!teacher.stripeAccountId) {
+    const teacherAcc = await User.findById(teacher._id);
+
+    if (!teacherAcc.stripeAccountId) {
       return res.status(400).json({ error: "No Stripe account ID found for this user." });
     }
 
     const link = await stripe.accountLinks.create({
-      account: teacher.stripeAccountId,
+      account: teacherAcc.stripeAccountId,
       refresh_url: `${process.env.CLIENT_URL}/teacher/onboarding-failed`,
       return_url: `${process.env.CLIENT_URL}/teacher/onboarding-success`,
       type: "account_onboarding",
@@ -213,8 +216,9 @@ export const stripeOnboarding = async (req, res) => {
 export const checkOnboarding = async (req, res) => {
   try {
     const teacher = req.user;
+    const { stripeAccountId } = req.body
 
-    if (!teacher.stripeAccountId) {
+    if (!teacher.stripeAccountId && !stripeAccountId) {
       return res.json({
         onboarded: false,
         reason: "Stripe account not created",
@@ -222,7 +226,7 @@ export const checkOnboarding = async (req, res) => {
     }
 
     const account = await stripe.accounts.retrieve(
-      teacher.stripeAccountId
+      teacher.stripeAccountId || stripeAccountId
     );
 
     return res.json({
@@ -263,9 +267,36 @@ export const getStripeLoginLink = async (req, res) => {
   }
 };
 
+export const createAccount = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      throw new ValidationError("Email is required.", "VAL_001");
+    }
+
+    const user = await User.findOne({ email });
+
+    const account = await stripe.accounts.create({
+      type: "express",
+      email: email,
+      capabilities: {
+        transfers: { requested: true },
+      },
+    });
+
+    user.stripeAccountId = account.id;
+    await user.save();
+    res.json({ account, message: "Stripe account created successfully" });
+  } catch (error) {
+    console.log(error, "error in create account")
+    res.status(500).json({ error: "Failed to create Stripe account", details: error.message });
+  }
+}
+
 
 export const createCheckoutSessionConnect = async (req, res) => {
-  const { courseId, studentId } = req.body;
+  const { courseId, studentId, refCode = null } = req.body;
 
   try {
     const course = await CourseSch.findById(courseId).populate("createdby");
@@ -319,10 +350,10 @@ export const createCheckoutSessionConnect = async (req, res) => {
     // FREE COURSE
     if (course.paymentType === "FREE") {
       const freeEnrollment = await Enrollment.create({ student: studentId, course: courseId, status: "ACTIVE", enrollmentType: "FREE" });
-      
+
       // Send enrollment success notification
       await notifyEnrollmentSuccess(studentId, freeEnrollment._id, course.courseTitle);
-      
+
       return res.json({ success: true, free: true });
     }
 
@@ -358,6 +389,7 @@ export const createCheckoutSessionConnect = async (req, res) => {
         metadata: {
           courseId,
           studentId,
+          refCode,
           teacherId: teacher._id.toString(),
           paymentType: "ONETIME",
         },
@@ -385,6 +417,7 @@ export const createCheckoutSessionConnect = async (req, res) => {
         metadata: {
           courseId,
           studentId,
+          refCode,
           teacherId: teacher._id.toString(),
           paymentType: "SUBSCRIPTION",
         },
@@ -430,7 +463,12 @@ export const handleStripeWebhookConnect = async (req, res) => {
       case "checkout.session.completed": {
         const session = event.data.object;
 
-        const { courseId, studentId, teacherId, paymentType } = session.metadata || {};
+        const { courseId, studentId, teacherId, paymentType, refCode } = session.metadata || {};
+
+        console.log(refCode, "refCode in webhook")
+        console.log(refCode, "refCode in webhook")
+
+        const userByRefCode = await User.findOne({ referralCode: refCode });
 
         if (!courseId || !studentId) {
           console.log("⚠️ Missing courseId or studentId in session metadata");
@@ -620,13 +658,22 @@ export const handleStripeWebhookConnect = async (req, res) => {
                 ? { status: true, endDate: new Date(subscription.trial_end * 1000) }
                 : { status: false },
             });
-            
+
+            // Update user referred points
+            if (userByRefCode) {
+              userByRefCode.referralPoints = (userByRefCode.referralPoints || 0) + 5;
+              await userByRefCode.save();
+              // notifyReferralPointsUpdated(userByRefCode._id, 5);
+            }
+
+
+
             // Send enrollment success notification
             const courseData = await CourseSch.findById(subCourseId).select("courseTitle");
             if (courseData) {
               await notifyEnrollmentSuccess(subStudentId, newEnrollment._id, courseData.courseTitle);
             }
-            
+
             console.log("✅ Subscription enrollment created");
           } else {
             // RE-ACTIVATE existing enrollment
@@ -667,13 +714,20 @@ export const handleStripeWebhookConnect = async (req, res) => {
               enrollmentType: "ONETIME",
               stripeInvoiceId: manualInvoiceId,
             });
-            
+
+            if (userByRefCode) {
+              userByRefCode.referralPoints = (userByRefCode.referralPoints || 0) + 5;
+              await userByRefCode.save();
+
+              // notifyReferralPointsUpdated(userByRefCode._id, 5);
+            }
+
             // Send enrollment success notification
             const courseData = await CourseSch.findById(courseId).select("courseTitle");
             if (courseData) {
               await notifyEnrollmentSuccess(studentId, oneTimeEnrollment._id, courseData.courseTitle);
             }
-            
+
             console.log("✅ One-time enrollment created");
           } else {
             console.log("ℹ️ Student already enrolled");
@@ -1164,9 +1218,9 @@ export const renewSubscription = async (req, res) => {
     }).populate("course");
 
     if (!enrollment) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Cancelled subscription enrollment not found" 
+      return res.status(404).json({
+        success: false,
+        message: "Cancelled subscription enrollment not found"
       });
     }
 

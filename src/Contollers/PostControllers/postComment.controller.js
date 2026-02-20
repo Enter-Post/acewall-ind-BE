@@ -2,10 +2,12 @@
 
 import Posts from "../../Models/PostModels/post.model.js";
 import PostComments from "../../Models/PostModels/postComment.model.js";
+import User from "../../Models/user.model.js";
 import {
   NotFoundError,
 } from "../../Utiles/errors.js";
 import { asyncHandler } from "../../middlewares/errorHandler.middleware.js";
+import { notifySocialPostComment } from "../../Utiles/notificationService.js";
 
 export const sendPostComment = asyncHandler(async (req, res) => {
   const userId = req.user._id;
@@ -25,6 +27,24 @@ export const sendPostComment = asyncHandler(async (req, res) => {
   });
 
   await newComment.save();
+
+  // Send notification to post author
+  try {
+    const post = await Posts.findById(id).populate('author', 'firstName lastName role');
+    const commenter = await User.findById(userId).select('firstName lastName');
+    if (post && post.author && commenter) {
+      const commenterName = `${commenter.firstName} ${commenter.lastName}`;
+      await notifySocialPostComment(
+        id,
+        post.author._id,
+        commenterName,
+        userId,
+        post.author.role
+      );
+    }
+  } catch (error) {
+    console.error("Social post comment notification error:", error.message);
+  }
 
   // 🪄 Populate author right after saving
   const populatedComment = await newComment.populate({
