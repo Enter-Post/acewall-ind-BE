@@ -279,9 +279,15 @@ export const createAccount = async (req, res) => {
 
     const account = await stripe.accounts.create({
       type: "express",
-      email: email,
+      email: otpEntry.userData.email,
       capabilities: {
+        card_payments: { requested: true },
         transfers: { requested: true },
+      },
+      business_type: "individual",
+      business_profile: {
+        url: "https://acewallscholarslearningonline.org",
+        product_description: "Online courses and live classes sold via LMS platform",
       },
     });
 

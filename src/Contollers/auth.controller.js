@@ -311,16 +311,22 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
     newUser.referralCode = refCode;
   }
 
-  // if (role === "teacher") {
-  //   const account = await stripe.accounts.create({
-  //     type: "express",
-  //     email: otpEntry.userData.email,
-  //     capabilities: {
-  //       transfers: { requested: true },
-  //     },
-  //   });
-  //   newUser.stripeAccountId = account.id;
-  // }
+  if (role === "teacher") {
+    const account = await stripe.accounts.create({
+      type: "express",
+      email: otpEntry.userData.email,
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
+      business_type: "individual",
+      business_profile: {
+        url: "https://acewallscholarslearningonline.org",
+        product_description: "Online courses and live classes sold via LMS platform",
+      },
+    });
+    newUser.stripeAccountId = account.id;
+  }
 
   await newUser.save();
 
