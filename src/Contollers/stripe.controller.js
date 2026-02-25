@@ -7,8 +7,12 @@ import Enrollment from "../Models/Enrollement.model.js";
 import Purchase from "../Models/purchase.model.js"; // Assuming you have this model
 import TestClock from "../Models/testClock.model.js";
 import User from "../Models/user.model.js";
-import { notifyEnrollmentSuccess } from "../Utiles/notificationService.js";
+import { notifyEnrollmentSuccess, notifyReferralPointsUpdated } from "../Utiles/notificationService.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+import { createTransporter } from "../Utiles/nodemailer.tranporter.js";
+import { baseEmailTemplate } from "../Utiles/emailTemplete.js";
+
+const transporter = createTransporter();
 
 // Create Mobile-Only Checkout Session
 export const createMobileCheckoutSession = async (req, res) => {
@@ -353,9 +357,34 @@ export const createCheckoutSessionConnect = async (req, res) => {
       });
     }
 
+    console.log("teacher log for", teacher)
+
     // FREE COURSE
     if (course.paymentType === "FREE") {
       const freeEnrollment = await Enrollment.create({ student: studentId, course: courseId, status: "ACTIVE", enrollmentType: "FREE" });
+
+      try {
+
+
+
+        await transporter.sendMail({
+          from: `"Learning Vault by Acewall Scholars" <${process.env.MAIL_USER}>`,
+          to: teacher.email,
+          subject: "New Enrollment",
+          html: baseEmailTemplate({
+            title: "New Enrollment",
+            content: `
+        <p>Hello ${teacher.firstName},</p>
+        <p>You have a new enrollment in your course "<strong>${course.courseTitle}</strong>".</p>
+      `,
+          }),
+        });
+
+        console.log("✅ Email sent successfully");
+      } catch (error) {
+        console.error("❌ Error sending email:", error.message);
+      }
+
 
       // Send enrollment success notification
       await notifyEnrollmentSuccess(studentId, freeEnrollment._id, course.courseTitle);
@@ -457,8 +486,6 @@ export const handleStripeWebhookConnect = async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  console.log("✅ Webhook received:", event.type);
-
   try {
     switch (event.type) {
       /**
@@ -471,9 +498,6 @@ export const handleStripeWebhookConnect = async (req, res) => {
 
         const { courseId, studentId, teacherId, paymentType, refCode } = session.metadata || {};
 
-        console.log(refCode, "refCode in webhook")
-        console.log(refCode, "refCode in webhook")
-
         const userByRefCode = await User.findOne({ referralCode: refCode });
 
         if (!courseId || !studentId) {
@@ -481,14 +505,8 @@ export const handleStripeWebhookConnect = async (req, res) => {
           break;
         }
 
-        console.log("📋 Processing checkout for:", {
-          paymentType,
-          courseId,
-          studentId,
-          sessionId: session.id
-        });
-
         const course = await CourseSch.findById(courseId);
+        const teacher = await User.findById(teacherId);
 
         let purchase = await Purchase.findOne({ stripeSessionId: session.id });
 
@@ -664,12 +682,26 @@ export const handleStripeWebhookConnect = async (req, res) => {
                 ? { status: true, endDate: new Date(subscription.trial_end * 1000) }
                 : { status: false },
             });
+            try {
+              transporter.sendMail({
+                from: `"Learning Vault by Acewall Scholars" <${process.env.MAIL_USER}>`,
+                to: teacher.email,
+                subject: "New Enrollment",
+                html: baseEmailTemplate({
+                  title: "New Enrollment",
+                  content: `<p>Hello ${teacher.firstName},</p><p>You have a new enrollment in your course "${course.courseTitle}".</p>`,
+                })
+              });
+            } catch (err) {
+              console.error("Error sending enrollment email:", err);
+            }
+
 
             // Update user referred points
             if (userByRefCode) {
               userByRefCode.referralPoints = (userByRefCode.referralPoints || 0) + 5;
               await userByRefCode.save();
-              // notifyReferralPointsUpdated(userByRefCode._id, 5);
+              notifyReferralPointsUpdated(userByRefCode._id, 5);
             }
 
 
@@ -721,11 +753,26 @@ export const handleStripeWebhookConnect = async (req, res) => {
               stripeInvoiceId: manualInvoiceId,
             });
 
+            try {
+              transporter.sendMail({
+                from: `"Learning Vault by Acewall Scholars" <${process.env.MAIL_USER}>`,
+                to: teacher.email,
+                subject: "New Enrollment",
+                html: baseEmailTemplate({
+                  title: "New Enrollment",
+                  content: `<p>Hello ${teacher.firstName},</p><p>You have a new enrollment in your course "${course.courseTitle}".</p>`,
+                })
+              });
+            } catch (err) {
+              console.error("Error sending enrollment email:", err);
+            }
+
+
             if (userByRefCode) {
               userByRefCode.referralPoints = (userByRefCode.referralPoints || 0) + 5;
               await userByRefCode.save();
 
-              // notifyReferralPointsUpdated(userByRefCode._id, 5);
+              notifyReferralPointsUpdated(userByRefCode._id, 5);
             }
 
             // Send enrollment success notification
@@ -1122,6 +1169,7 @@ export const handleStripeWebhookConnect = async (req, res) => {
     res.status(500).json({ error: "Webhook handler failed" });
   }
 };
+
 export const getpurchases = async (req, res) => {
   try {
     const userId = req.user._id;
