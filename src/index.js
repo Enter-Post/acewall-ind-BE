@@ -90,6 +90,21 @@ app.post(
   handleStripeWebhookConnect,
 );
 
+app.post(
+  "/api/stripe/webhook/mobile",
+  express.raw({ type: "application/json" }),
+  (req, res, next) => {
+    // console.log("🚀 WEBHOOK RECEIVED!", new Date().toISOString());
+    // console.log("📝 Method:", req.method);
+    // console.log("📝 URL:", req.url);
+    // console.log("📦 Body length:", req.body?.length || 0);
+    // console.log("🔐 Stripe signature present:", !!req.headers['stripe-signature']);
+    // console.log("🔑 Webhook secret configured:", !!process.env.STRIPE_WEBHOOK_SECRET);
+    next();
+  },
+  handleStripeWebhook,
+);
+
 // Add test route for webhook
 app.get("/api/stripe/webhook", (req, res) => {
   console.log("🧪 TEST: Webhook GET request received");

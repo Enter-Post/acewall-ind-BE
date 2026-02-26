@@ -14,23 +14,23 @@ import { EXCLUDED_ENROLLMENT_STATUSES } from "./notificationConstants.js";
 export const sendNotification = async ({ recipient, sender = null, message, type = "general", link = null }) => {
   try {
     // Save to database
-    const notification = await createNotification({ 
-      recipient, 
-      sender, 
-      message, 
-      type, 
-      link 
+    const notification = await createNotification({
+      recipient,
+      sender,
+      message,
+      type,
+      link
     });
-    
+
     if (!notification) return null;
-    
+
     // Send real-time via Socket.io
     const recipientSocketId = getRecieverSocketId(recipient.toString());
-    
+
     if (recipientSocketId) {
       io.to(recipientSocketId).emit("newNotification", notification);
     }
-    
+
     return notification;
   } catch (error) {
     console.error("sendNotification failed:", error.message);
@@ -44,12 +44,12 @@ export const sendNotification = async ({ recipient, sender = null, message, type
 export const sendBulkNotifications = async ({ recipients, message, type = "general", link = null, sender = null }) => {
   try {
     console.log("📤 sendBulkNotifications called with:", { recipientCount: recipients?.length, message, type, link });
-    
+
     if (!recipients || recipients.length === 0) {
       console.log("⚠️ No recipients provided");
       return [];
     }
-    
+
     // Prepare bulk insert data
     const notifications = recipients.map(recipientId => ({
       recipient: recipientId,
@@ -58,11 +58,11 @@ export const sendBulkNotifications = async ({ recipients, message, type = "gener
       type,
       link,
     }));
-    
+
     // Database bulk insert (efficient)
     const created = await Notification.insertMany(notifications);
     console.log(`💾 Saved ${created.length} notifications to database`);
-    
+
     // Socket.io real-time delivery for online users
     let socketsSent = 0;
     recipients.forEach(recipientId => {
@@ -72,7 +72,7 @@ export const sendBulkNotifications = async ({ recipients, message, type = "gener
         socketsSent++;
       }
     });
-    
+
     console.log(`🔌 Sent to ${socketsSent}/${recipients.length} online users via Socket.io`);
     return created;
   } catch (error) {
@@ -103,20 +103,20 @@ export const notifyEnrollmentSuccess = async (studentId, enrollmentId, courseNam
 export const notifyNewChapter = async (courseId, courseName, chapterTitle, chapterId, teacherId) => {
   try {
     // Get all active enrolled students with their enrollmentIds
-    const enrollments = await Enrollment.find({ 
-      course: courseId, 
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    const enrollments = await Enrollment.find({
+      course: courseId,
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
     }).select("student _id course");
-    
+
     if (enrollments.length === 0) {
       return [];
     }
-    
+
     const courseIdStr = courseId.toString();
     const chapterIdStr = chapterId.toString();
-    
+
     // Send individual notifications with chapter detail link
-    const notificationPromises = enrollments.map(enr => 
+    const notificationPromises = enrollments.map(enr =>
       sendNotification({
         recipient: enr.student,
         sender: teacherId,
@@ -125,7 +125,7 @@ export const notifyNewChapter = async (courseId, courseName, chapterTitle, chapt
         link: `/student/mycourses/${courseIdStr}/chapters/chapter/${chapterIdStr}`,
       })
     );
-    
+
     const results = await Promise.all(notificationPromises);
     return results;
   } catch (error) {
@@ -140,19 +140,19 @@ export const notifyNewChapter = async (courseId, courseName, chapterTitle, chapt
 export const notifyAssessmentAssigned = async (courseId, courseName, assessmentTitle, teacherId) => {
   try {
     // Get all active enrolled students
-    const enrollments = await Enrollment.find({ 
-      course: courseId, 
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    const enrollments = await Enrollment.find({
+      course: courseId,
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
     }).select("student");
-    
+
     if (enrollments.length === 0) {
       return [];
     }
-    
+
     const courseIdStr = courseId.toString();
-    
+
     // Send individual notifications with assessment list link
-    const notificationPromises = enrollments.map(enr => 
+    const notificationPromises = enrollments.map(enr =>
       sendNotification({
         recipient: enr.student,
         sender: teacherId,
@@ -161,7 +161,7 @@ export const notifyAssessmentAssigned = async (courseId, courseName, assessmentT
         link: `/student/assessment/bycourse/${courseIdStr}`,
       })
     );
-    
+
     const results = await Promise.all(notificationPromises);
     return results;
   } catch (error) {
@@ -188,18 +188,18 @@ export const notifyGradePosted = async (studentId, assessmentTitle, score, maxSc
 export const notifyNewAnnouncement = async (courseId, courseName, announcementTitle, teacherId) => {
   try {
     // Get all active enrolled students
-    const enrollments = await Enrollment.find({ 
-      course: courseId, 
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    const enrollments = await Enrollment.find({
+      course: courseId,
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
     }).select("student");
-    
+
     if (enrollments.length === 0) {
       return [];
     }
-    
+
     const studentIds = enrollments.map(enr => enr.student);
     const courseIdStr = courseId.toString();
-    
+
     // Send bulk notifications
     const result = await sendBulkNotifications({
       recipients: studentIds,
@@ -208,7 +208,7 @@ export const notifyNewAnnouncement = async (courseId, courseName, announcementTi
       type: "announcement",
       link: `/student/announcements/${courseIdStr}`,
     });
-    
+
     return result;
   } catch (error) {
     console.error("notifyNewAnnouncement failed:", error.message);
@@ -222,26 +222,26 @@ export const notifyNewAnnouncement = async (courseId, courseName, announcementTi
 export const notifyNewDiscussion = async (courseId, courseName, discussionTopic, discussionId, teacherId) => {
   try {
     console.log("📢 notifyNewDiscussion called with:", { courseId, courseName, discussionTopic, discussionId: discussionId.toString() });
-    
+
     // Get all active enrolled students
-    const enrollments = await Enrollment.find({ 
-      course: courseId, 
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    const enrollments = await Enrollment.find({
+      course: courseId,
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
     }).select("student");
-    
+
     console.log(`📊 Found ${enrollments.length} active enrollments`);
     console.log("Excluded statuses:", EXCLUDED_ENROLLMENT_STATUSES);
-    
+
     if (enrollments.length === 0) {
       console.log("⚠️ No active students to notify for new discussion");
       return [];
     }
-    
+
     const studentIds = enrollments.map(enr => enr.student);
     const discussionIdStr = discussionId.toString();
-    
+
     console.log("Student IDs to notify:", studentIds.map(id => id.toString()));
-    
+
     // Send bulk notifications
     const result = await sendBulkNotifications({
       recipients: studentIds,
@@ -250,7 +250,7 @@ export const notifyNewDiscussion = async (courseId, courseName, discussionTopic,
       type: "general",
       link: `/student/discussions/${discussionIdStr}`,
     });
-    
+
     console.log(`✅ Sent ${result.length} discussion notifications`);
     return result;
   } catch (error) {
@@ -265,10 +265,10 @@ export const notifyDiscussionComment = async (discussionId, discussionTopic, dis
     if (discussionAuthorId.toString() === commenterId.toString()) {
       return null;
     }
-    
+
     const discussionIdStr = discussionId.toString();
     const rolePrefix = recipientRole === "teacher" ? "teacher" : "student";
-    
+
     return await sendNotification({
       recipient: discussionAuthorId,
       sender: commenterId,
@@ -288,10 +288,10 @@ export const notifyDiscussionReply = async (discussionId, commentAuthorId, repli
     if (commentAuthorId.toString() === replierId.toString()) {
       return null;
     }
-    
+
     const discussionIdStr = discussionId.toString();
     const rolePrefix = recipientRole === "teacher" ? "teacher" : "student";
-    
+
     return await sendNotification({
       recipient: commentAuthorId,
       sender: replierId,
@@ -314,9 +314,9 @@ export const notifySocialPostComment = async (postId, postAuthorId, commenterNam
     if (postAuthorId.toString() === commenterId.toString()) {
       return null;
     }
-    
+
     const rolePrefix = recipientRole === "teacher" ? "teacher" : "student";
-    
+
     return await sendNotification({
       recipient: postAuthorId,
       sender: commenterId,
@@ -354,26 +354,26 @@ export const notifyDiscussionGraded = async (studentId, discussionId, discussion
 export const notifyNewCoursePost = async (postId, courseId, courseName, authorName, authorId) => {
   try {
     // Get all active enrolled students
-    const enrollments = await Enrollment.find({ 
-      course: courseId, 
-      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES } 
+    const enrollments = await Enrollment.find({
+      course: courseId,
+      status: { $nin: EXCLUDED_ENROLLMENT_STATUSES }
     }).select("student");
-    
+
     if (enrollments.length === 0) {
       return [];
     }
-    
+
     const studentIds = enrollments.map(enr => enr.student);
-    
+
     // Filter out the post author from recipients
     const recipients = studentIds.filter(id => id.toString() !== authorId.toString());
-    
+
     if (recipients.length === 0) {
       return [];
     }
-    
+
     const courseIdStr = courseId.toString();
-    
+
     const result = await sendBulkNotifications({
       recipients: recipients,
       sender: authorId,
@@ -381,7 +381,7 @@ export const notifyNewCoursePost = async (postId, courseId, courseName, authorNa
       type: "general",
       link: `/student/social`,
     });
-    
+
     return result;
   } catch (error) {
     console.error("notifyNewCoursePost failed:", error.message);
@@ -398,10 +398,10 @@ export const notifyMessageReceived = async (receiverId, senderName, senderId, re
     if (receiverId.toString() === senderId.toString()) {
       return null;
     }
-    
+
     const rolePrefix = receiverRole === "teacher" ? "teacher" : "student";
     const conversationIdStr = conversationId.toString();
-    
+
     return await sendNotification({
       recipient: receiverId,
       sender: senderId,
@@ -415,3 +415,16 @@ export const notifyMessageReceived = async (receiverId, senderName, senderId, re
   }
 };
 
+
+export const notifyReferralPointsUpdated = async (userId, pointsAdded) => {
+  try {
+    return await sendNotification({
+      recipient: userId,
+      message: `You have been awarded ${pointsAdded} referral points`,
+      type: "referral",
+      link: `/student/account`});
+  } catch (error) {
+    console.error("notifyReferralPointsUpdated failed:", error.message);
+    return null;
+  }
+};

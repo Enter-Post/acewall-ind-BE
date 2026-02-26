@@ -7,8 +7,12 @@ import Enrollment from "../Models/Enrollement.model.js";
 import Purchase from "../Models/purchase.model.js"; // Assuming you have this model
 import TestClock from "../Models/testClock.model.js";
 import User from "../Models/user.model.js";
-import { notifyEnrollmentSuccess } from "../Utiles/notificationService.js";
+import { notifyEnrollmentSuccess, notifyReferralPointsUpdated } from "../Utiles/notificationService.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+import { createTransporter } from "../Utiles/nodemailer.tranporter.js";
+import { baseEmailTemplate } from "../Utiles/emailTemplete.js";
+
+const transporter = createTransporter();
 
 // Create Mobile-Only Checkout Session
 export const createMobileCheckoutSession = async (req, res) => {
@@ -137,9 +141,14 @@ export const createCheckoutSession = async (req, res) => {
 // Webhook Handler for Payment Confirmation
 export const handleStripeWebhook = async (req, res) => {
   const sig = req.headers["stripe-signature"];
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET_MOBILE;
+
+  console.log("🔔 BELL 1 ")
+  console.log(endpointSecret, "endpoint secret")
 
   let event;
+  console.log("🔔 BELL 2 ")
+  console.log("req.body ===>", req.body)
 
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
@@ -148,7 +157,12 @@ export const handleStripeWebhook = async (req, res) => {
       case "checkout.session.completed":
         const session = event.data.object;
 
+        console.log("🔔 BELL 3 ")
+
         const { studentId, courseId, teacherId, teacherEarning, platformFee } = session.metadata;
+
+
+        console.log(session.metadata, "session metadata in webhook")
 
         const purchase = await Purchase.create({
           student: studentId,
@@ -163,11 +177,16 @@ export const handleStripeWebhook = async (req, res) => {
           paymentMethod: "stripe",
         });
 
+        console.log(purchase, "purchase created in webhook")
 
         const enrollment = await Enrollment.create({
           student: studentId,
           course: courseId,
         });
+
+
+
+        console.log(enrollment, "enrollment created in webhook")
 
         // Send enrollment success notification
         const courseData = await CourseSch.findById(courseId).select("courseTitle");
@@ -279,9 +298,15 @@ export const createAccount = async (req, res) => {
 
     const account = await stripe.accounts.create({
       type: "express",
-      email: email,
+      email: otpEntry.userData.email,
       capabilities: {
+        card_payments: { requested: true },
         transfers: { requested: true },
+      },
+      business_type: "individual",
+      business_profile: {
+        url: "https://acewallscholarslearningonline.org",
+        product_description: "Online courses and live classes sold via LMS platform",
       },
     });
 
@@ -347,9 +372,42 @@ export const createCheckoutSessionConnect = async (req, res) => {
       });
     }
 
+    console.log("teacher log for", teacher)
+
     // FREE COURSE
     if (course.paymentType === "FREE") {
       const freeEnrollment = await Enrollment.create({ student: studentId, course: courseId, status: "ACTIVE", enrollmentType: "FREE" });
+
+      try {
+        await transporter.sendMail({
+          from: `"Learning Vault by Acewall Scholars" <${process.env.MAIL_USER}>`,
+          to: teacher.email,
+          subject: "New Enrollment",
+          html: baseEmailTemplate({
+            title: "New Enrollment",
+            content: `
+        <p>Hello ${teacher.firstName},</p>
+        <p>You have a new enrollment in your course "<strong>${course.courseTitle}</strong>".</p>
+      `,
+          }),
+        });
+
+        await transporter.sendMail({
+          from: `"Learning Vault by Acewall Scholars" <${process.env.MAIL_USER}>`,
+          to: student.email,
+          subject: "Enrollment Confirmation",
+          html: baseEmailTemplate({
+            title: "Enrollment Confirmation",
+            content: `<p>Dear ${student.firstName},</p>
+              <p>You have been enrolled in the course "${course.courseTitle}".</p>
+              <p>Best regards,<br>Learning Vault by Acewall Scholars</p>`,
+          }),
+        })
+
+      } catch (error) {
+        console.error("❌ Error sending email:", error.message);
+      }
+
 
       // Send enrollment success notification
       await notifyEnrollmentSuccess(studentId, freeEnrollment._id, course.courseTitle);
@@ -451,8 +509,6 @@ export const handleStripeWebhookConnect = async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  console.log("✅ Webhook received:", event.type);
-
   try {
     switch (event.type) {
       /**
@@ -465,9 +521,6 @@ export const handleStripeWebhookConnect = async (req, res) => {
 
         const { courseId, studentId, teacherId, paymentType, refCode } = session.metadata || {};
 
-        console.log(refCode, "refCode in webhook")
-        console.log(refCode, "refCode in webhook")
-
         const userByRefCode = await User.findOne({ referralCode: refCode });
 
         if (!courseId || !studentId) {
@@ -475,14 +528,9 @@ export const handleStripeWebhookConnect = async (req, res) => {
           break;
         }
 
-        console.log("📋 Processing checkout for:", {
-          paymentType,
-          courseId,
-          studentId,
-          sessionId: session.id
-        });
-
         const course = await CourseSch.findById(courseId);
+        const teacher = await User.findById(teacherId);
+        const student = await User.findById(studentId);
 
         let purchase = await Purchase.findOne({ stripeSessionId: session.id });
 
@@ -608,10 +656,23 @@ export const handleStripeWebhookConnect = async (req, res) => {
             currency: session.currency,
             paymentMethod: "stripe",
             paymentType,
-            // Use subscription invoice ID for subscriptions, manual invoice for one-time
             stripeInvoiceId: subscriptionInvoiceId || manualInvoiceId,
             receiptUrl: receiptUrl,
           });
+
+          await transporter.sendMail({
+            from: `"Learning Vault by Acewall Scholars" <${process.env.MAIL_USER}>`,
+            to: student.email,
+            subject: "Payment Confirmation",
+            html: baseEmailTemplate({
+              title: "Payment Confirmation",
+              content: `<p>Dear ${student.firstName},</p>
+              <p>Thank you for your payment of $${session.amount_total / 100} for the course "${course.courseTitle}".</p>
+              <p>Please find your receipt below:</p>
+              <p><a href="${receiptUrl}">View Receipt</a></p>
+              <p>Best regards,<br>Learning Vault by Acewall Scholars</p>`,
+            }),
+          })
 
           console.log("✅ Purchase created:", purchase);
         } else {
@@ -658,12 +719,26 @@ export const handleStripeWebhookConnect = async (req, res) => {
                 ? { status: true, endDate: new Date(subscription.trial_end * 1000) }
                 : { status: false },
             });
+            try {
+              transporter.sendMail({
+                from: `"Learning Vault by Acewall Scholars" <${process.env.MAIL_USER}>`,
+                to: teacher.email,
+                subject: "New Enrollment",
+                html: baseEmailTemplate({
+                  title: "New Enrollment",
+                  content: `<p>Hello ${teacher.firstName},</p><p>You have a new enrollment in your course "${course.courseTitle}".</p>`,
+                })
+              });
+            } catch (err) {
+              console.error("Error sending enrollment email:", err);
+            }
+
 
             // Update user referred points
             if (userByRefCode) {
               userByRefCode.referralPoints = (userByRefCode.referralPoints || 0) + 5;
               await userByRefCode.save();
-              // notifyReferralPointsUpdated(userByRefCode._id, 5);
+              notifyReferralPointsUpdated(userByRefCode._id, 5);
             }
 
 
@@ -715,11 +790,26 @@ export const handleStripeWebhookConnect = async (req, res) => {
               stripeInvoiceId: manualInvoiceId,
             });
 
+            try {
+              transporter.sendMail({
+                from: `"Learning Vault by Acewall Scholars" <${process.env.MAIL_USER}>`,
+                to: teacher.email,
+                subject: "New Enrollment",
+                html: baseEmailTemplate({
+                  title: "New Enrollment",
+                  content: `<p>Hello ${teacher.firstName},</p><p>You have a new enrollment in your course "${course.courseTitle}".</p>`,
+                })
+              });
+            } catch (err) {
+              console.error("Error sending enrollment email:", err);
+            }
+
+
             if (userByRefCode) {
               userByRefCode.referralPoints = (userByRefCode.referralPoints || 0) + 5;
               await userByRefCode.save();
 
-              // notifyReferralPointsUpdated(userByRefCode._id, 5);
+              notifyReferralPointsUpdated(userByRefCode._id, 5);
             }
 
             // Send enrollment success notification
@@ -810,7 +900,7 @@ export const handleStripeWebhookConnect = async (req, res) => {
         });
 
         // ================================
-        // GET RECEIPT URL FROM CHARGE
+        // GET RECEIPT URL
         // ================================
         let receiptUrl = null;
 
@@ -822,12 +912,10 @@ export const handleStripeWebhookConnect = async (req, res) => {
           } catch (error) {
             console.error("⚠️ Error retrieving charge:", error.message);
           }
-        } else {
-          console.log("⚠️ No charge found on invoice");
         }
 
         // ================================
-        // UPDATE PURCHASE WITH RECEIPT
+        // UPDATE PURCHASE
         // ================================
         const updateData = {
           invoiceUrl: invoice.hosted_invoice_url,
@@ -840,18 +928,16 @@ export const handleStripeWebhookConnect = async (req, res) => {
           updateData.receiptUrl = receiptUrl;
         }
 
-        // Try to find purchase by subscription ID first (for recurring payments)
         let purchase = null;
 
         if (invoice.subscription) {
           purchase = await Purchase.findOneAndUpdate(
             { subscriptionId: invoice.subscription },
             updateData,
-            { new: true, sort: { createdAt: -1 } } // Get most recent
+            { new: true, sort: { createdAt: -1 } }
           );
         }
 
-        // Fallback to invoice ID
         if (!purchase) {
           purchase = await Purchase.findOneAndUpdate(
             { stripeInvoiceId: invoice.id },
@@ -860,25 +946,61 @@ export const handleStripeWebhookConnect = async (req, res) => {
           );
         }
 
-        if (purchase) {
-          console.log("✅ Purchase updated:", {
-            id: purchase._id,
-            receiptUrl: purchase.receiptUrl,
-            status: purchase.status
-          });
-        } else {
-          console.log("⚠️ No purchase found for invoice:", invoice.id);
+        if (!purchase) {
+          console.log("⚠️ No purchase found");
+          break;
         }
 
+        console.log("✅ Purchase updated:", purchase._id);
+
         // ================================
-        // ACTIVATE SUBSCRIPTION ENROLLMENT
+        // ACTIVATE ENROLLMENT
         // ================================
-        if (invoice.subscription) {
-          await Enrollment.updateOne(
-            { subscriptionId: invoice.subscription },
-            { $set: { status: "ACTIVE" } }
-          );
-          console.log("✅ Enrollment activated for subscription");
+        await Enrollment.updateOne(
+          { subscriptionId: invoice.subscription },
+          { $set: { status: "ACTIVE" } }
+        );
+
+        console.log("✅ Enrollment activated");
+
+        // ================================
+        // SEND EMAIL ONLY FOR RENEWAL
+        // ================================
+        if (invoice.billing_reason === "subscription_cycle") {
+          try {
+            const student = await User.findById(purchase.student);
+            const course = await CourseSch.findById(purchase.course);
+
+            await transporter.sendMail({
+              from: `"Learning Vault by Acewall Scholars" <${process.env.MAIL_USER}>`,
+              to: student.email,
+              subject: "Subscription Renewed Successfully",
+              html: baseEmailTemplate({
+                title: "Subscription Renewed",
+                content: `
+            <p>Dear ${student.firstName},</p>
+
+            <p>Your subscription for the course "<strong>${course.courseTitle}</strong>" has been renewed successfully.</p>
+
+            <p><strong>Amount Paid:</strong> $${invoice.amount_paid / 100}</p>
+
+            ${receiptUrl
+                    ? `<p><a href="${receiptUrl}">View Receipt</a></p>`
+                    : ""
+                  }
+
+            <p>Your access remains active. Thank you for continuing your learning journey with us.</p>
+
+            <p>Best regards,<br>
+            Learning Vault by Acewall Scholars</p>
+          `,
+              }),
+            });
+
+            console.log("✅ Renewal email sent");
+          } catch (error) {
+            console.error("❌ Failed to send renewal email:", error.message);
+          }
         }
 
         break;
@@ -1065,14 +1187,22 @@ export const handleStripeWebhookConnect = async (req, res) => {
 
         console.log("❌ Payment failed:", {
           invoiceId: invoice.id,
-          subscription: invoice.subscription
+          subscription: invoice.subscription,
+          amountDue: invoice.amount_due / 100
         });
 
-        await Purchase.updateOne(
+        // ================================
+        // UPDATE PURCHASE STATUS
+        // ================================
+        const purchase = await Purchase.findOneAndUpdate(
           { stripeInvoiceId: invoice.id },
-          { $set: { status: "failed" } }
+          { $set: { status: "failed" } },
+          { new: true }
         );
 
+        // ================================
+        // UPDATE ENROLLMENT STATUS
+        // ================================
         if (invoice.subscription) {
           await Enrollment.updateOne(
             { subscriptionId: invoice.subscription },
@@ -1080,9 +1210,52 @@ export const handleStripeWebhookConnect = async (req, res) => {
           );
         }
 
+        // ================================
+        // SEND PAYMENT FAILED EMAIL
+        // ================================
+        if (purchase) {
+          try {
+            const student = await User.findById(purchase.student);
+            const course = await CourseSch.findById(purchase.course);
+
+            await transporter.sendMail({
+              from: `"Learning Vault by Acewall Scholars" <${process.env.MAIL_USER}>`,
+              to: student.email,
+              subject: "Payment Failed – Action Required",
+              html: baseEmailTemplate({
+                title: "Payment Failed",
+                content: `
+            <p>Dear ${student.firstName},</p>
+
+            <p>We were unable to process your subscription payment for the course 
+            "<strong>${course.courseTitle}</strong>".</p>
+
+            <p><strong>Amount Due:</strong> $${invoice.amount_due / 100}</p>
+
+            <p>Please update your payment method to continue your access without interruption.</p>
+            ${invoice.hosted_invoice_url
+                    ? `<p><a href="${invoice.hosted_invoice_url}">Update Payment Method</a></p>`
+                    : ""
+                  }
+
+            <p>If payment is not completed, your access may be suspended.</p>
+
+            <p>Best regards,<br>
+            Learning Vault by Acewall Scholars</p>
+          `,
+              }),
+            });
+
+            console.log("✅ Payment failed email sent");
+          } catch (error) {
+            console.error("❌ Failed to send payment failed email:", error.message);
+          }
+        } else {
+          console.log("⚠️ Purchase not found for failed invoice");
+        }
+
         break;
       }
-
       /**
        * ================================
        * SUBSCRIPTION CANCELED
@@ -1116,6 +1289,7 @@ export const handleStripeWebhookConnect = async (req, res) => {
     res.status(500).json({ error: "Webhook handler failed" });
   }
 };
+
 export const getpurchases = async (req, res) => {
   try {
     const userId = req.user._id;

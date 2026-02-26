@@ -113,7 +113,7 @@ export const createAnnouncement = asyncHandler(async (req, res) => {
         secure: true,
         auth: {
           user: "support@acewallscholars.org",
-          pass: "dmwjwyfxaccrdxwi",
+          pass: "bpwvhmhiivrpkekl",
         },
       });
 
