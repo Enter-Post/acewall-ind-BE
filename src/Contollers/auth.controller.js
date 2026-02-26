@@ -311,16 +311,16 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
     newUser.referralCode = refCode;
   }
 
-  // if (role === "teacher") {
-  //   const account = await stripe.accounts.create({
-  //     type: "express",
-  //     email: otpEntry.userData.email,
-  //     capabilities: {
-  //       transfers: { requested: true },
-  //     },
-  //   });
-  //   newUser.stripeAccountId = account.id;
-  // }
+  if (role === "teacher") {
+    const account = await stripe.accounts.create({
+      type: "express",
+      email: otpEntry.userData.email,
+      capabilities: {
+        transfers: { requested: true },
+      },
+    });
+    newUser.stripeAccountId = account.id;
+  }
 
   await newUser.save();
 
