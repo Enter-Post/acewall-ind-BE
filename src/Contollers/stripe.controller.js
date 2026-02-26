@@ -141,9 +141,14 @@ export const createCheckoutSession = async (req, res) => {
 // Webhook Handler for Payment Confirmation
 export const handleStripeWebhook = async (req, res) => {
   const sig = req.headers["stripe-signature"];
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET_MOBILE;
+
+  console.log("🔔 BELL 1 ")
+  console.log(endpointSecret, "endpoint secret")
 
   let event;
+  console.log("🔔 BELL 2 ")
+  console.log("req.body ===>", req.body)
 
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
@@ -152,7 +157,12 @@ export const handleStripeWebhook = async (req, res) => {
       case "checkout.session.completed":
         const session = event.data.object;
 
+        console.log("🔔 BELL 3 ")
+
         const { studentId, courseId, teacherId, teacherEarning, platformFee } = session.metadata;
+
+
+        console.log(session.metadata, "session metadata in webhook")
 
         const purchase = await Purchase.create({
           student: studentId,
@@ -167,11 +177,16 @@ export const handleStripeWebhook = async (req, res) => {
           paymentMethod: "stripe",
         });
 
+        console.log(purchase, "purchase created in webhook")
 
         const enrollment = await Enrollment.create({
           student: studentId,
           course: courseId,
         });
+
+
+
+        console.log(enrollment, "enrollment created in webhook")
 
         // Send enrollment success notification
         const courseData = await CourseSch.findById(courseId).select("courseTitle");

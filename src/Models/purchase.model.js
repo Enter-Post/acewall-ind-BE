@@ -48,7 +48,7 @@ const purchaseSchema = new mongoose.Schema(
      */
     amount: {
       type: Number,
-      required: true,
+      // required: true,
     },
     currency: {
       type: String,
@@ -61,7 +61,6 @@ const purchaseSchema = new mongoose.Schema(
     paymentType: {
       type: String,
       enum: ["ONETIME", "SUBSCRIPTION"],
-      required: true,
     },
 
     /**
