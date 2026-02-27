@@ -80,7 +80,8 @@ router.get(
 );
 // routes/adminRoutes.js
 
-router.get("/getChapter/:chapterId", isUser, resolveEnrollmentFromChapter, isEnrolledMiddleware, chapterDetails);
+// router.get("/getChapter/:chapterId", isUser, resolveEnrollmentFromChapter, isEnrolledMiddleware, chapterDetails);
+router.get("/getChapter/:chapterId", isUser, resolveEnrollmentFromChapter, chapterDetails);
 
 /**
  * @openapi

@@ -31,7 +31,8 @@ const router = express.Router();
  *       200:
  *         description: Chapters list
  */
-router.get("/chapterofCourse/:courseId", isUser, isEnrolledMiddleware, ChapterofCourse);
+// router.get("/chapterofCourse/:courseId", isUser, isEnrolledMiddleware, ChapterofCourse);
+router.get("/chapterofCourse/:courseId", isUser, ChapterofCourse);
 
 /**
  * @openapi
@@ -125,7 +126,8 @@ router.get("/:courseId/:quarterId", isUser, getChapterOfQuarter);
  *       200:
  *         description: Chapter with lessons
  */
-router.get("/chapter/chapter&lessons/:chapterId", isUser, resolveEnrollmentFromChapter, isEnrolledMiddleware, getChapterwithLessons);
+// router.get("/chapter/chapter&lessons/:chapterId", isUser, resolveEnrollmentFromChapter, isEnrolledMiddleware, getChapterwithLessons);
+router.get("/chapter/chapter&lessons/:chapterId", isUser, resolveEnrollmentFromChapter, getChapterwithLessons);
 
 /**
  * @openapi
