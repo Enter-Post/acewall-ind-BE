@@ -348,18 +348,19 @@ export const createCheckoutSessionConnect = async (req, res) => {
       transfer_data: {
         destination: teacher.stripeAccountId,
       },
+      trial_period_days: 1
     };
 
     const trialDays = course.freeTrialMonths
 
-    if (
-      !alreadyEnrolled ||
-      alreadyEnrolled.status !== "CANCELLED"
-    ) {
-      if (trialDays > 0) {
-        subscriptionData.trial_period_days = trialDays * 30;
-      }
-    }
+    // if (
+    //   !alreadyEnrolled ||
+    //   alreadyEnrolled.status !== "CANCELLED"
+    // ) {
+    //   if (trialDays > 0) {
+    //     subscriptionData.trial_period_days = trialDays * 30;
+    //   }
+    // }
 
     if (!user) {
       return res.status(404).json({ error: "Teacher not found" });

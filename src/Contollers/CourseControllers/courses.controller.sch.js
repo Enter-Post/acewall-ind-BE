@@ -492,10 +492,21 @@ export const createCourseSch = asyncHandler(async (req, res) => {
       currency: 'usd',
     };
 
+    // if (paymentType === "SUBSCRIPTION") {
+    //   stripePriceConfig.recurring = { interval: "month" };
+    //   courseData.freeTrialMonths = Number(freeTrialMonths || 0);
+    // }
+
+    // "Email testing check"
     if (paymentType === "SUBSCRIPTION") {
-      stripePriceConfig.recurring = { interval: "month" };
-      courseData.freeTrialMonths = Number(freeTrialMonths || 0);
+      stripePriceConfig.recurring = {
+        interval: "day",        // change from month → day
+        interval_count: 2,      // charge every 2 days
+      };
+
+      courseData.freeTrialDays = 1; // store trial days
     }
+
 
     const stripePrice = await stripe.prices.create(stripePriceConfig);
 
