@@ -12,6 +12,7 @@ import {
   sendAssessmentReminder,
   setReminderTime,
   uploadFiles,
+  checkFinalAssessmentExists,
 } from "../Contollers/Assessment.controller.js";
 import { upload } from "../lib/multer.config.js";
 import { isUser } from "../middlewares/Auth.Middleware.js";
@@ -48,7 +49,7 @@ const router = express.Router();
 router.post(
   "/:assessmentId/send-reminder",
   isUser, // ensures the sender is authenticated
-  sendAssessmentReminder
+  sendAssessmentReminder,
 );
 
 /**
@@ -87,7 +88,7 @@ router.get("/stats/:assessmentId", isUser, getAssessmentStats);
  *       200:
  *         description: Reminder time details
  */
-router.get("/findReminderTime/:assessmentId", isUser, findReminderTime)
+router.get("/findReminderTime/:assessmentId", isUser, findReminderTime);
 
 /**
  * @openapi
@@ -112,7 +113,30 @@ router.get("/findReminderTime/:assessmentId", isUser, findReminderTime)
  *       200:
  *         description: Reminder set successfully
  */
-router.put("/setReminder/:assessmentId", isUser, setReminderTime)
+router.put("/setReminder/:assessmentId", isUser, setReminderTime);
+
+/**
+ * @openapi
+ * /api/assessment/final-assessment/course/{courseId}:
+ *   get:
+ *     tags:
+ *       - Assessment
+ *     summary: Check if a final assessment exists for a course
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Check result
+ */
+router.get(
+  "/final-assessment/course/:courseId",
+  isUser,
+  checkFinalAssessmentExists,
+);
 
 /**
  * @openapi
@@ -230,7 +254,7 @@ router.delete("/delete/:id", deleteAssessment);
 router.put(
   "/uploadFiles/:assessmentId/:fileId",
   upload.array("files"),
-  uploadFiles
+  uploadFiles,
 );
 
 /**
@@ -274,7 +298,14 @@ router.delete("/deleteFile/:assessmentId/:fileId", deleteFile);
  *       200:
  *         description: Assessment details
  */
-router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, isEnrolledMiddleware, getResultsMiddleware, getAssesmentbyID);
+router.get(
+  "/:assessmentId",
+  isUser,
+  resolveEnrollmentFromAssessment,
+  isEnrolledMiddleware,
+  getResultsMiddleware,
+  getAssesmentbyID,
+);
 
 /**
  * @openapi
@@ -301,7 +332,6 @@ router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, isEnrolled
  */
 router.put("/editAssessment/:assessmentId", isUser, editAssessmentInfo);
 
-
 // prev used api -- router.post("/create", upload.array("files"), isUser, createAssessment);
 /**
  * @openapi
@@ -320,7 +350,11 @@ router.put("/editAssessment/:assessmentId", isUser, editAssessmentInfo);
  *       201:
  *         description: Assessment created successfully
  */
-router.post("/createAssessment/updated", upload.any(), isUser, createAssessment_updated);
-
+router.post(
+  "/createAssessment/updated",
+  upload.any(),
+  isUser,
+  createAssessment_updated,
+);
 
 export default router;

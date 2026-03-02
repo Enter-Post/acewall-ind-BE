@@ -63,14 +63,20 @@ const SchCourseSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    gradingSystem: { type: String, enum: ["normalGrading", "StandardGrading"], default: "normalGrading" },
+    gradingSystem: {
+      type: String,
+      enum: ["normalGrading", "StandardGrading"],
+      default: "normalGrading",
+    },
     paymentType: { type: String, enum: ["SUBSCRIPTION", "ONETIME", "FREE"] },
     freeTrialMonths: { type: Number },
     stripePriceId: { type: String },
     stripeProductId: { type: String },
     referral: { type: Boolean, default: false },
+    offersCertificate: { type: Boolean, default: false },
+    offersTranscript: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const CourseSch = mongoose.model("CourseSch", SchCourseSchema);
