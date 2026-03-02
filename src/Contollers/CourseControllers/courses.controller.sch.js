@@ -444,9 +444,9 @@ export const createCourseSch = asyncHandler(async (req, res) => {
     throw new ValidationError("Category is required");
   }
 
-  if (!paymentType || !["FREE", "ONETIME", "SUBSCRIPTION"].includes(paymentType)) {
-    throw new ValidationError("Valid payment type is required (FREE, ONETIME, SUBSCRIPTION)");
-  }
+  // if (!paymentType || !["FREE", "ONETIME", "SUBSCRIPTION"].includes(paymentType)) {
+  //   throw new ValidationError("Valid payment type is required (FREE, ONETIME, SUBSCRIPTION)");
+  // }
 
   let thumbnail = { url: "", filename: "" };
   if (files?.thumbnail && files.thumbnail[0]) {
