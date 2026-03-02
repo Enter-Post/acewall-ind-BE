@@ -829,7 +829,7 @@ export const getunPurchasedCourseByIdStdPrew = asyncHandler(
                 $expr: {
                   $and: [
                     { $eq: ["$course", "$$courseId"] },
-                    { $eq: ["$type", "Course-assessment"] },
+                    { $eq: ["$type", "final-assessment"] },
                   ],
                 },
               },
@@ -1081,7 +1081,7 @@ export const getCourseDetails = asyncHandler(async (req, res) => {
               $expr: {
                 $and: [
                   { $eq: ["$course", "$$courseId"] },
-                  { $eq: ["$type", "Course-assessment"] },
+                  { $eq: ["$type", "final-assessment"] },
                 ],
               },
             },

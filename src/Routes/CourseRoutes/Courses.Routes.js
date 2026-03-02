@@ -38,6 +38,7 @@ import {
   generateCertificate,
   getCertificateEligibility,
   getCourseProgress,
+  requestTranscript,
 } from "../../Contollers/CourseProgress.controller.js";
 
 const router = express.Router();
@@ -283,6 +284,7 @@ router.get(
   getCertificateEligibility,
 );
 router.post("/:courseId/generate-certificate", isUser, generateCertificate);
+router.post("/:courseId/request-transcript", isUser, requestTranscript);
 
 /**
  * @openapi

@@ -1,7 +1,9 @@
 import CourseProgress from "../Models/CourseProgress.model.js";
 import CourseSch from "../Models/courses.model.sch.js";
 import User from "../Models/user.model.js";
+import TranscriptRequest from "../Models/TranscriptRequest.model.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+import { createTransporter } from "../Utiles/nodemailer.tranporter.js";
 import {
   NotFoundError,
   AuthenticationError,
@@ -75,7 +77,14 @@ export const generateCertificate = asyncHandler(async (req, res) => {
   doc.rect(20, 20, doc.page.width - 40, doc.page.height - 40).stroke("#10b981");
 
   // Certificate Content
-  doc.moveDown(4);
+  doc.moveDown(2);
+  doc
+    .fontSize(15)
+    .font("Helvetica-Bold")
+    .fillColor("#000")
+    .text("Acewall Scholars Academy", { align: "center" });
+
+  doc.moveDown(2);
   doc
     .fontSize(40)
     .font("Helvetica-Bold")
@@ -94,7 +103,10 @@ export const generateCertificate = asyncHandler(async (req, res) => {
     .fontSize(30)
     .font("Helvetica-Bold")
     .fillColor("#000")
-    .text(`${student.firstName} ${student.lastName}`, { align: "center" });
+    .text(`${student.firstName} ${student.lastName}`, {
+      align: "center",
+      underline: true,
+    });
 
   doc.moveDown(1);
   doc
@@ -112,21 +124,110 @@ export const generateCertificate = asyncHandler(async (req, res) => {
 
   doc.moveDown(2);
   doc
-    .fontSize(15)
+    .fontSize(16)
     .font("Helvetica")
     .fillColor("#777")
-    .text(`Completed on: ${progress.completedAt.toLocaleDateString()}`, {
+    .text(`Completion Date: ${progress.completedAt.toLocaleDateString()}`, {
       align: "center",
     });
 
-  doc.moveDown(4);
-  doc
-    .fontSize(12)
-    .font("Helvetica")
-    .fillColor("#999")
-    .text("Acewall Scholars Academy", { align: "center" });
+  const uniqueId = progress._id.toString().toUpperCase().slice(-8);
+  doc.text(`Certificate ID: AS-${uniqueId}`, { align: "center" });
+
+  doc.moveDown(2);
+  // Instructor Name
+  if (course.createdby) {
+    const teacher = await User.findById(course.createdby);
+    if (teacher) {
+      doc
+        .fontSize(14)
+        .text(`Instructor: ${teacher.firstName} ${teacher.lastName}`, {
+          align: "center",
+        });
+    }
+  }
 
   doc.end();
+});
+
+export const requestTranscript = asyncHandler(async (req, res) => {
+  const studentId = req.user._id;
+  const { courseId } = req.params;
+  const {
+    fullName,
+    email,
+    phone,
+    institutionName,
+    deliveryMethod,
+    additionalNotes,
+  } = req.body;
+
+  const course = await CourseSch.findById(courseId);
+  if (!course) throw new NotFoundError("Course not found", "CRS_001");
+
+  if (!course.offersTranscript) {
+    throw new ValidationError(
+      "This course does not offer a transcript.",
+      "CRS_004",
+    );
+  }
+
+  // Verify enrollment
+  const progress = await CourseProgress.findOne({ studentId, courseId });
+  if (!progress) {
+    throw new AuthenticationError(
+      "You are not enrolled in this course.",
+      "CRS_005",
+    );
+  }
+
+  const teacherId = course.createdby;
+  const teacher = await User.findById(teacherId);
+  if (!teacher) throw new NotFoundError("Teacher not found", "TCH_001");
+
+  const transcriptRequest = await TranscriptRequest.create({
+    studentId,
+    teacherId,
+    courseId,
+    fullName,
+    email,
+    phone,
+    institutionName,
+    deliveryMethod,
+    additionalNotes,
+  });
+
+  // Send email to teacher
+  try {
+    const transporter = createTransporter();
+    const mailOptions = {
+      from: process.env.MAIL_USER,
+      to: teacher.email,
+      subject: `New Transcript Request - ${course.courseTitle}`,
+      html: `
+        <h3>New Transcript Request Received</h3>
+        <p><strong>Student Name:</strong> ${fullName}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Phone:</strong> ${phone}</p>
+        <p><strong>Institution:</strong> ${institutionName}</p>
+        <p><strong>Delivery Method:</strong> ${deliveryMethod}</p>
+        <p><strong>Additional Notes:</strong> ${additionalNotes || "N/A"}</p>
+        <br>
+        <p><strong>Course:</strong> ${course.courseTitle}</p>
+        <p><strong>Requested On:</strong> ${new Date().toLocaleDateString()}</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+  } catch (err) {
+    console.error("Failed to send transcript request email:", err);
+    // We still return success as the request is saved in the DB
+  }
+
+  return res.status(200).json({
+    message: "Transcript request sent successfully.",
+    transcriptRequest,
+  });
 });
 
 export const getCourseProgress = asyncHandler(async (req, res) => {

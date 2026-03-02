@@ -137,6 +137,21 @@ export const submission = asyncHandler(async (req, res) => {
     "assessment",
   );
 
+  // Mark course as fully completed if this was a final assessment
+  if (assessment.type === "final-assessment") {
+    await CourseProgress.findOneAndUpdate(
+      { studentId, courseId: assessment.course },
+      {
+        $set: {
+          isCompleted: true,
+          completedAt: new Date(),
+          finalAssessmentId: assessment._id,
+        },
+      },
+      { upsert: true, new: true },
+    );
+  }
+
   // ✅ Send email if the entire assessment was auto-graded
   if (graded) {
     const student = await User.findById(studentId);
@@ -206,19 +221,6 @@ export const submission = asyncHandler(async (req, res) => {
       totalScore,
       maxScore,
       assessment.course,
-    );
-  }
-
-  // ✅ Course Completion Logic (Final Assessment)
-  if (assessment.type === "final-assessment") {
-    await CourseProgress.findOneAndUpdate(
-      { studentId: studentId, courseId: assessment.course },
-      {
-        isCompleted: true,
-        completedAt: new Date(),
-        finalAssessmentId: assessment._id,
-      },
-      { upsert: true, new: true },
     );
   }
 
