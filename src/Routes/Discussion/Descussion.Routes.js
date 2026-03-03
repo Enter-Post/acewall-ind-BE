@@ -87,7 +87,8 @@ router.get("/all", isUser, getDiscussionsOfTeacher);
  *       200:
  *         description: Discussion details
  */
-router.get("/:id", isUser, resolveEnrollmentFromDiscussion, isEnrolledMiddleware, getDiscussionbyId);
+// router.get("/:id", isUser, resolveEnrollmentFromDiscussion, isEnrolledMiddleware, getDiscussionbyId);
+router.get("/:id", isUser, resolveEnrollmentFromDiscussion, getDiscussionbyId);
 
 /**
  * @openapi
@@ -106,7 +107,8 @@ router.get("/:id", isUser, resolveEnrollmentFromDiscussion, isEnrolledMiddleware
  *       200:
  *         description: List of chapter discussions
  */
-router.get("/chapter/:chapterId", isUser, resolveEnrollmentFromChapter, isEnrolledMiddleware, chapterDiscussions);
+// router.get("/chapter/:chapterId", isUser, resolveEnrollmentFromChapter, isEnrolledMiddleware, chapterDiscussions);
+router.get("/chapter/:chapterId", isUser, resolveEnrollmentFromChapter, chapterDiscussions);
 
 /**
  * @openapi
@@ -144,6 +146,7 @@ router.get("/lesson/:lessonId", isUser, lessonDiscussions);
  *       200:
  *         description: List of course discussions
  */
-router.get("/course/:courseId", isUser, isEnrolledMiddleware, courseDiscussions);
+// router.get("/course/:courseId", isUser, isEnrolledMiddleware, courseDiscussions);
+router.get("/course/:courseId", isUser, courseDiscussions);
 
 export default router;

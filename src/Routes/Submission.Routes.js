@@ -46,7 +46,7 @@ router.post(
   "/submission/:assessmentId",
   isUser,
   resolveEnrollmentFromAssessment,
-  isEnrolledMiddleware,
+  // isEnrolledMiddleware,
   upload.array("files"),
   submission
 );
@@ -68,7 +68,8 @@ router.post(
  *       200:
  *         description: Submission details
  */
-router.get("/submission/:submissionId", isUser, resolveEnrollmentFromSubmission, isEnrolledMiddleware, getSubmissionById);
+// router.get("/submission/:submissionId", isUser, resolveEnrollmentFromSubmission, isEnrolledMiddleware, getSubmissionById);
+router.get("/submission/:submissionId", isUser, resolveEnrollmentFromSubmission, getSubmissionById);
 
 /**
  * @openapi

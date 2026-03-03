@@ -476,9 +476,9 @@ export const createCourseSch = asyncHandler(async (req, res) => {
   };
 
   if (paymentType !== "FREE") {
-    if (!price || parseFloat(price) <= 0) {
-      throw new ValidationError("Valid price is required for paid courses");
-    }
+    // if (!price || parseFloat(price) <= 0) {
+    //   throw new ValidationError("Valid price is required for paid courses");
+    // }
 
     const product = await stripe.products.create({
       name: courseTitle,

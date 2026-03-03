@@ -274,7 +274,8 @@ router.delete("/deleteFile/:assessmentId/:fileId", deleteFile);
  *       200:
  *         description: Assessment details
  */
-router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, isEnrolledMiddleware, getResultsMiddleware, getAssesmentbyID);
+// router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, isEnrolledMiddleware, getResultsMiddleware, getAssesmentbyID);
+router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, getResultsMiddleware, getAssesmentbyID);
 
 /**
  * @openapi

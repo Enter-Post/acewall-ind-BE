@@ -14,7 +14,8 @@ import { resolveEnrollmentFromQuery } from "../middlewares/enrollment-resolvers.
 const router = express.Router();
 
 router.get("/getbystudent/:studentId", isUser, getAnnouncementsForStudent);
-router.get("/getannouncementforcourse", isUser, resolveEnrollmentFromQuery, isEnrolledMiddleware, getAnnouncementsForCourse);
+// router.get("/getannouncementforcourse", isUser, resolveEnrollmentFromQuery, isEnrolledMiddleware, getAnnouncementsForCourse);
+router.get("/getannouncementforcourse", isUser, resolveEnrollmentFromQuery, getAnnouncementsForCourse);
 router.post("/createannouncement", isUser, upload.any(), createAnnouncement);
 router.get("/getbyteacher/:teacherId", isUser, getAnnouncementsByTeacher);
 router.delete("/:id", isUser, deleteAnnouncement);
