@@ -2,6 +2,8 @@ import CourseProgress from "../Models/CourseProgress.model.js";
 import CourseSch from "../Models/courses.model.sch.js";
 import User from "../Models/user.model.js";
 import TranscriptRequest from "../Models/TranscriptRequest.model.js";
+import Assessment from "../Models/Assessment.model.js";
+import Submission from "../Models/submission.model.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 import { createTransporter } from "../Utiles/nodemailer.tranporter.js";
 import {
@@ -10,6 +12,27 @@ import {
   ValidationError,
 } from "../Utiles/errors.js";
 import PDFDocument from "pdfkit";
+
+const getFinalAssessmentPercentage = async (studentId, courseId) => {
+  const progress = await CourseProgress.findOne({ studentId, courseId });
+  if (!progress || !progress.finalAssessmentId) return 0;
+
+  const assessment = await Assessment.findById(progress.finalAssessmentId);
+  const submission = await Submission.findOne({
+    studentId,
+    assessment: progress.finalAssessmentId,
+  });
+
+  if (!assessment || !submission) return 0;
+
+  const totalPossiblePoints = assessment.questions.reduce(
+    (acc, q) => acc + (q.points || 0),
+    0,
+  );
+  if (totalPossiblePoints === 0) return 0;
+
+  return (submission.totalScore / totalPossiblePoints) * 100;
+};
 
 export const getCertificateEligibility = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
@@ -37,6 +60,14 @@ export const getCertificateEligibility = asyncHandler(async (req, res) => {
     });
   }
 
+  const percentage = await getFinalAssessmentPercentage(studentId, courseId);
+  if (percentage < 80) {
+    return res.status(200).json({
+      eligible: false,
+      message: "Please score above or equal to 80% to get the certificate.",
+    });
+  }
+
   return res.status(200).json({ eligible: true });
 });
 
@@ -52,6 +83,14 @@ export const generateCertificate = asyncHandler(async (req, res) => {
     throw new AuthenticationError("Course not completed", "CRS_002");
   }
 
+  const percentage = await getFinalAssessmentPercentage(studentId, courseId);
+  if (percentage < 80) {
+    throw new ValidationError(
+      "Please score above or equal to 80% to get the certificate.",
+      "CRS_006",
+    );
+  }
+
   if (!course.offersCertificate) {
     throw new ValidationError(
       "This course does not offer a certificate",
@@ -62,6 +101,8 @@ export const generateCertificate = asyncHandler(async (req, res) => {
   const doc = new PDFDocument({
     layout: "landscape",
     size: "A4",
+    margin: 0,
+    autoFirstPage: true,
   });
 
   // Set response headers
@@ -73,76 +114,130 @@ export const generateCertificate = asyncHandler(async (req, res) => {
 
   doc.pipe(res);
 
-  // Background or border (optional)
-  doc.rect(20, 20, doc.page.width - 40, doc.page.height - 40).stroke("#10b981");
+  const pageWidth = doc.page.width; // ~841 pt (landscape A4)
+  const pageHeight = doc.page.height; // ~595 pt (landscape A4)
 
-  // Certificate Content
-  doc.moveDown(2);
+  // Outer decorative border
   doc
-    .fontSize(15)
+    .rect(20, 20, pageWidth - 40, pageHeight - 40)
+    .lineWidth(2)
+    .stroke("#10b981");
+  // Inner thin border
+  doc
+    .rect(28, 28, pageWidth - 56, pageHeight - 56)
+    .lineWidth(0.5)
+    .stroke("#10b981");
+
+  // --- Academy name ---
+  doc
+    .fontSize(13)
     .font("Helvetica-Bold")
-    .fillColor("#000")
-    .text("Acewall Scholars Academy", { align: "center" });
-
-  doc.moveDown(2);
-  doc
-    .fontSize(40)
-    .font("Helvetica-Bold")
-    .fillColor("#10b981")
-    .text("Certificate of Completion", { align: "center" });
-
-  doc.moveDown(2);
-  doc
-    .fontSize(20)
-    .font("Helvetica")
-    .fillColor("#333")
-    .text("This is to certify that", { align: "center" });
-
-  doc.moveDown(1);
-  doc
-    .fontSize(30)
-    .font("Helvetica-Bold")
-    .fillColor("#000")
-    .text(`${student.firstName} ${student.lastName}`, {
+    .fillColor("#555")
+    .text("Acewall Scholars Academy", 0, 55, {
       align: "center",
-      underline: true,
+      width: pageWidth,
     });
 
-  doc.moveDown(1);
+  // --- Main heading ---
   doc
-    .fontSize(20)
-    .font("Helvetica")
-    .fillColor("#333")
-    .text("has successfully completed the course", { align: "center" });
-
-  doc.moveDown(1);
-  doc
-    .fontSize(25)
+    .fontSize(36)
     .font("Helvetica-Bold")
     .fillColor("#10b981")
-    .text(course.courseTitle, { align: "center" });
+    .text("Certificate of Completion", 0, 90, {
+      align: "center",
+      width: pageWidth,
+    });
 
-  doc.moveDown(2);
+  // Decorative divider line
+  const divY = 142;
+  doc
+    .moveTo(pageWidth * 0.25, divY)
+    .lineTo(pageWidth * 0.75, divY)
+    .lineWidth(1)
+    .stroke("#10b981");
+
+  // --- "This is to certify that" ---
   doc
     .fontSize(16)
     .font("Helvetica")
-    .fillColor("#777")
-    .text(`Completion Date: ${progress.completedAt.toLocaleDateString()}`, {
+    .fillColor("#555")
+    .text("This is to certify that", 0, 158, {
       align: "center",
+      width: pageWidth,
     });
 
-  const uniqueId = progress._id.toString().toUpperCase().slice(-8);
-  doc.text(`Certificate ID: AS-${uniqueId}`, { align: "center" });
+  // --- Student name ---
+  doc
+    .fontSize(28)
+    .font("Helvetica-Bold")
+    .fillColor("#111")
+    .text(`${student.firstName} ${student.lastName}`, 0, 185, {
+      align: "center",
+      width: pageWidth,
+      underline: true,
+    });
 
-  doc.moveDown(2);
-  // Instructor Name
+  // --- "has successfully completed" ---
+  doc
+    .fontSize(16)
+    .font("Helvetica")
+    .fillColor("#555")
+    .text("has successfully completed the course", 0, 228, {
+      align: "center",
+      width: pageWidth,
+    });
+
+  // --- Course title ---
+  doc
+    .fontSize(22)
+    .font("Helvetica-Bold")
+    .fillColor("#10b981")
+    .text(course.courseTitle, 0, 256, { align: "center", width: pageWidth });
+
+  // Divider line below course title
+  const divY2 = 294;
+  doc
+    .moveTo(pageWidth * 0.25, divY2)
+    .lineTo(pageWidth * 0.75, divY2)
+    .lineWidth(1)
+    .stroke("#10b981");
+
+  // --- Completion date & Certificate ID ---
+  const uniqueId = progress._id.toString().toUpperCase().slice(-8);
+  doc
+    .fontSize(13)
+    .font("Helvetica")
+    .fillColor("#777")
+    .text(
+      `Completion Date: ${progress.completedAt.toLocaleDateString()}`,
+      0,
+      308,
+      {
+        align: "center",
+        width: pageWidth,
+      },
+    );
+
+  doc
+    .fontSize(13)
+    .font("Helvetica")
+    .fillColor("#777")
+    .text(`Certificate ID: AS-${uniqueId}`, 0, 328, {
+      align: "center",
+      width: pageWidth,
+    });
+
+  // --- Instructor name ---
   if (course.createdby) {
     const teacher = await User.findById(course.createdby);
     if (teacher) {
       doc
-        .fontSize(14)
-        .text(`Instructor: ${teacher.firstName} ${teacher.lastName}`, {
+        .fontSize(13)
+        .font("Helvetica-Bold")
+        .fillColor("#333")
+        .text(`Instructor: ${teacher.firstName} ${teacher.lastName}`, 0, 360, {
           align: "center",
+          width: pageWidth,
         });
     }
   }
@@ -178,6 +273,21 @@ export const requestTranscript = asyncHandler(async (req, res) => {
     throw new AuthenticationError(
       "You are not enrolled in this course.",
       "CRS_005",
+    );
+  }
+
+  if (!progress.isCompleted) {
+    throw new ValidationError(
+      "You have not completed this course yet.",
+      "CRS_007",
+    );
+  }
+
+  const percentage = await getFinalAssessmentPercentage(studentId, courseId);
+  if (percentage < 80) {
+    throw new ValidationError(
+      "Please score above or equal to 80% to request a transcript.",
+      "CRS_006",
     );
   }
 
@@ -236,7 +346,17 @@ export const getCourseProgress = asyncHandler(async (req, res) => {
 
   const progress = await CourseProgress.findOne({ studentId, courseId });
 
+  let completionPercentage = 0;
+  if (progress && progress.isCompleted) {
+    completionPercentage = await getFinalAssessmentPercentage(
+      studentId,
+      courseId,
+    );
+  }
+
   return res.status(200).json({
-    progress: progress || { isCompleted: false },
+    progress: progress
+      ? { ...progress.toObject(), completionPercentage }
+      : { isCompleted: false, completionPercentage: 0 },
   });
 });

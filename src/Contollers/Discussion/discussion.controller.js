@@ -202,7 +202,7 @@ export const lessonDiscussions = asyncHandler(async (req, res) => {
     throw new NotFoundError("No discussions found for this lesson", "DISC_004");
   }
   return res.status(200).json({ 
-    discussions: discussion,
+    discussion: discussion,
     message: "Discussions fetched successfully"
   });
 });
