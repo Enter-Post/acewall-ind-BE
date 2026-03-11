@@ -456,6 +456,7 @@ export const createCourseSch = asyncHandler(async (req, res) => {
     freeTrialMonths,
     offersCertificate,
     offersTranscript,
+    passingPercentage,
   } = req.body;
 
   const files = req.files;
@@ -502,6 +503,7 @@ export const createCourseSch = asyncHandler(async (req, res) => {
     paymentType,
     offersCertificate: offersCertificate === "true",
     offersTranscript: offersTranscript === "true",
+    passingPercentage: passingPercentage ? Number(passingPercentage) : 80,
   };
 
   if (paymentType !== "FREE") {
@@ -1417,6 +1419,7 @@ export const editCourseInfo = asyncHandler(async (req, res) => {
     courseDescription,
     offersCertificate,
     offersTranscript,
+    passingPercentage,
   } = req.body;
 
   if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
@@ -1471,6 +1474,8 @@ export const editCourseInfo = asyncHandler(async (req, res) => {
     course.offersCertificate = offersCertificate === "true";
   if (offersTranscript !== undefined)
     course.offersTranscript = offersTranscript === "true";
+  if (passingPercentage !== undefined)
+    course.passingPercentage = Number(passingPercentage);
 
   await course.save();
 

@@ -4,6 +4,7 @@ import User from "../Models/user.model.js";
 import TranscriptRequest from "../Models/TranscriptRequest.model.js";
 import Assessment from "../Models/Assessment.model.js";
 import Submission from "../Models/submission.model.js";
+import Gradebook from "../Models/Gradebook.model.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 import { createTransporter } from "../Utiles/nodemailer.tranporter.js";
 import {
@@ -13,25 +14,9 @@ import {
 } from "../Utiles/errors.js";
 import PDFDocument from "pdfkit";
 
-const getFinalAssessmentPercentage = async (studentId, courseId) => {
-  const progress = await CourseProgress.findOne({ studentId, courseId });
-  if (!progress || !progress.finalAssessmentId) return 0;
-
-  const assessment = await Assessment.findById(progress.finalAssessmentId);
-  const submission = await Submission.findOne({
-    studentId,
-    assessment: progress.finalAssessmentId,
-  });
-
-  if (!assessment || !submission) return 0;
-
-  const totalPossiblePoints = assessment.questions.reduce(
-    (acc, q) => acc + (q.points || 0),
-    0,
-  );
-  if (totalPossiblePoints === 0) return 0;
-
-  return (submission.totalScore / totalPossiblePoints) * 100;
+const getOverallCoursePercentage = async (studentId, courseId) => {
+  const gradebook = await Gradebook.findOne({ studentId, courseId });
+  return gradebook ? (gradebook.finalPercentage || 0) : 0;
 };
 
 export const getCertificateEligibility = asyncHandler(async (req, res) => {
@@ -49,7 +34,7 @@ export const getCertificateEligibility = asyncHandler(async (req, res) => {
   if (!progress || !progress.isCompleted) {
     return res.status(200).json({
       eligible: false,
-      message: "You have not completed this course yet.",
+      message: "Please attempt the final assessment to be eligible for the certificate.",
     });
   }
 
@@ -60,11 +45,12 @@ export const getCertificateEligibility = asyncHandler(async (req, res) => {
     });
   }
 
-  const percentage = await getFinalAssessmentPercentage(studentId, courseId);
-  if (percentage < 80) {
+  const percentage = await getOverallCoursePercentage(studentId, courseId);
+  const passingPercentage = course.passingPercentage || 80;
+  if (percentage < passingPercentage) {
     return res.status(200).json({
       eligible: false,
-      message: "Please score above or equal to 80% to get the certificate.",
+      message: `Your overall course score is ${percentage.toFixed(1)}%. Please achieve at least ${passingPercentage}% overall to get the certificate.`,
     });
   }
 
@@ -80,13 +66,14 @@ export const generateCertificate = asyncHandler(async (req, res) => {
   const student = await User.findById(studentId);
 
   if (!progress || !progress.isCompleted) {
-    throw new AuthenticationError("Course not completed", "CRS_002");
+    throw new AuthenticationError("Please attempt the final assessment first.", "CRS_002");
   }
 
-  const percentage = await getFinalAssessmentPercentage(studentId, courseId);
-  if (percentage < 80) {
+  const percentage = await getOverallCoursePercentage(studentId, courseId);
+  const passingPercentage = course.passingPercentage || 80;
+  if (percentage < passingPercentage) {
     throw new ValidationError(
-      "Please score above or equal to 80% to get the certificate.",
+      `Your overall course score is ${percentage.toFixed(1)}%. Please achieve at least ${passingPercentage}% overall to get the certificate.`,
       "CRS_006",
     );
   }
@@ -278,15 +265,16 @@ export const requestTranscript = asyncHandler(async (req, res) => {
 
   if (!progress.isCompleted) {
     throw new ValidationError(
-      "You have not completed this course yet.",
+      "Please attempt the final assessment first to be eligible for a transcript.",
       "CRS_007",
     );
   }
 
-  const percentage = await getFinalAssessmentPercentage(studentId, courseId);
-  if (percentage < 80) {
+  const percentage = await getOverallCoursePercentage(studentId, courseId);
+  const passingPercentage = course.passingPercentage || 80;
+  if (percentage < passingPercentage) {
     throw new ValidationError(
-      "Please score above or equal to 80% to request a transcript.",
+      `Your overall course score is ${percentage.toFixed(1)}%. Please achieve at least ${passingPercentage}% overall to request a transcript.`,
       "CRS_006",
     );
   }
@@ -346,13 +334,10 @@ export const getCourseProgress = asyncHandler(async (req, res) => {
 
   const progress = await CourseProgress.findOne({ studentId, courseId });
 
-  let completionPercentage = 0;
-  if (progress && progress.isCompleted) {
-    completionPercentage = await getFinalAssessmentPercentage(
-      studentId,
-      courseId,
-    );
-  }
+  const completionPercentage = await getOverallCoursePercentage(
+    studentId,
+    courseId,
+  );
 
   return res.status(200).json({
     progress: progress

@@ -75,6 +75,7 @@ const SchCourseSchema = new mongoose.Schema(
     referral: { type: Boolean, default: false },
     offersCertificate: { type: Boolean, default: false },
     offersTranscript: { type: Boolean, default: false },
+    passingPercentage: { type: Number, default: 80 },
   },
   { timestamps: true },
 );
