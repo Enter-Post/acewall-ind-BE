@@ -46,21 +46,47 @@ export const sendDiscussionComment = asyncHandler(async (req, res) => {
     discussion: id,
   });
 
+  const discussion = await Discussion.findById(id).populate('createdby', 'firstName lastName role');
+
   if (user.role !== "teacher" && isCommented) {
     throw new ConflictError("You have already commented on this discussion", "DCOM_001");
+  }
+
+  const dueDate = new Date(discussion.dueDate.date)
+    .toISOString()
+    .split("T")[0];
+  const dueTime = discussion.dueDate.time;
+  const dueDateTime = new Date(`${dueDate}T${dueTime}`);
+  const now = new Date();
+
+  const override = discussion.studentDueDateOverrides.find(
+    o => o.student.toString() === user._id
+  );
+
+  let finalDueDate = dueDateTime;
+
+  if (override) {
+    if (override.newDueDate) {
+      finalDueDate = override.newDueDate;
+    }
+  }
+
+  let status = "before due date";
+  if (now > finalDueDate) {
+    status = "after due date";
   }
 
   const newDiscussionComment = new DiscussionComment({
     text,
     role: user.role,
     createdby: user._id,
+    status,
     discussion: id,
   });
   await newDiscussionComment.save();
 
   // Send notification to discussion author
   try {
-    const discussion = await Discussion.findById(id).populate('createdby', 'firstName lastName role');
     if (discussion && discussion.createdby) {
       const commenterName = `${user.firstName} ${user.lastName}`;
       await notifyDiscussionComment(
@@ -84,14 +110,14 @@ export const sendDiscussionComment = asyncHandler(async (req, res) => {
 
 export const deleteComment = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  
+
   const Comment = await DiscussionComment.findByIdAndDelete(id);
 
   if (!Comment) {
     throw new NotFoundError("Comment not found", "DCOM_002");
   }
-  return res.status(200).json({ 
-    message: "Comment deleted successfully" 
+  return res.status(200).json({
+    message: "Comment deleted successfully"
   });
 });
 
@@ -154,8 +180,8 @@ export const gradeDiscussionofStd = asyncHandler(async (req, res) => {
     console.error("Discussion grading notification error:", error.message);
   }
 
-  return res.status(200).json({ 
-    message: "Marks graded successfully" 
+  return res.status(200).json({
+    message: "Marks graded successfully"
   });
 });
 
@@ -169,13 +195,13 @@ export const isCommentedInDiscussion = asyncHandler(async (req, res) => {
   });
 
   if (user.role !== "teacher" && isCommented) {
-    return res.status(200).json({ 
+    return res.status(200).json({
       commented: true,
       message: "User has commented"
     });
   }
-  
-  return res.status(200).json({ 
+
+  return res.status(200).json({
     commented: false,
     message: "User has not commented"
   });

@@ -94,12 +94,13 @@ export const enrollment = asyncHandler(async (req, res, next) => {
   }
 
   // Check if course is free
-  if (course.paymentType !== "FREE") {
-    throw new ValidationError(
-      "This is a paid course. Please use the payment flow to enroll.",
-      "VAL_002",
-    );
-  }
+
+  // if (course.paymentType !== "FREE") {
+  //   throw new ValidationError(
+  //     "This is a paid course. Please use the payment flow to enroll.",
+  //     "VAL_002"
+  //   );
+  // }
 
   // Check for existing enrollment
   const exists = await Enrollment.findOne({

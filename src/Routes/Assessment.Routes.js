@@ -10,6 +10,7 @@ import {
   getAssesmentbyID,
   getAssessmentStats,
   sendAssessmentReminder,
+  setDueDateForStudent,
   setReminderTime,
   uploadFiles,
   checkFinalAssessmentExists,
@@ -298,14 +299,9 @@ router.delete("/deleteFile/:assessmentId/:fileId", deleteFile);
  *       200:
  *         description: Assessment details
  */
-router.get(
-  "/:assessmentId",
-  isUser,
-  resolveEnrollmentFromAssessment,
-  isEnrolledMiddleware,
-  getResultsMiddleware,
-  getAssesmentbyID,
-);
+
+// router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, isEnrolledMiddleware, getResultsMiddleware, getAssesmentbyID);
+router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, getResultsMiddleware, getAssesmentbyID);
 
 /**
  * @openapi
@@ -350,11 +346,8 @@ router.put("/editAssessment/:assessmentId", isUser, editAssessmentInfo);
  *       201:
  *         description: Assessment created successfully
  */
-router.post(
-  "/createAssessment/updated",
-  upload.any(),
-  isUser,
-  createAssessment_updated,
-);
+
+router.post("/createAssessment/updated", upload.any(), isUser, createAssessment_updated);
+router.put(`/setDueDateForStudent/:assessmentId`, isUser, setDueDateForStudent);
 
 export default router;

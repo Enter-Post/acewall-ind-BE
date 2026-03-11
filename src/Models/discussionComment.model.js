@@ -18,6 +18,7 @@ const DiscussionCommentSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    status: { type: String, enum: ["after due date", "before due date"] },
     // ✅ New fields for grading
     gradedBy: {
       type: mongoose.Schema.Types.ObjectId,

@@ -60,19 +60,35 @@ export const submission = asyncHandler(async (req, res) => {
   let totalScore = 0;
   let maxScore = 0;
 
-  const dueDate = new Date(assessment.dueDate.date).toISOString().split("T")[0];
+
+  const dueDate = new Date(assessment.dueDate.date)
+    .toISOString()
+    .split("T")[0];
   const dueTime = assessment.dueDate.time;
   const dueDateTime = new Date(`${dueDate}T${dueTime}`);
   const now = new Date();
 
+
+  const override = assessment.studentDueDateOverrides.find(
+    o => o.student.toString() === studentId
+  );
+
+  let finalDueDate = dueDateTime;
+
+  if (override) {
+    if (override.newDueDate) {
+      finalDueDate = override.newDueDate;
+    }
+  }
+
   let status = "before due date";
-  if (now > dueDateTime) {
+  if (now > finalDueDate) {
     status = "after due date";
   }
 
   const processedAnswers = finalQuestionsubmitted.map((ans) => {
     const question = assessment.questions.find(
-      (q) => q._id.toString() === ans.questionId,
+      (q) => q._id.toString() === ans.questionId
     );
 
     if (!question) {
@@ -221,6 +237,7 @@ export const submission = asyncHandler(async (req, res) => {
       totalScore,
       maxScore,
       assessment.course,
+
     );
   }
 
@@ -304,25 +321,25 @@ export const getSubmissionsofAssessment_forTeacher = asyncHandler(
       throw new NotFoundError("Assessment not found", "SUB_004");
     }
 
-    const questionMap = {};
-    assessment.questions.forEach((q) => {
-      questionMap[q._id.toString()] = {
-        question: q.question,
-        type: q.type,
-        points: q.points,
-      };
-    });
+  const questionMap = {};
+  assessment.questions.forEach((q) => {
+    questionMap[q._id.toString()] = {
+      question: q.question,
+      type: q.type,
+      points: q.points,
+    };
+  });
 
-    const submissionsWithDetails = submissions.map((sub) => {
-      const answersWithDetails = sub.answers.map((ans) => ({
-        ...ans.toObject(),
-        questionDetails: questionMap[ans.questionId],
-      }));
-      return {
-        ...sub.toObject(),
-        answers: answersWithDetails,
-      };
-    });
+  const submissionsWithDetails = submissions.map((sub) => {
+    const answersWithDetails = sub.answers.map((ans) => ({
+      ...ans.toObject(),
+      questionDetails: questionMap[ans.questionId],
+    }));
+    return {
+      ...sub.toObject(),
+      answers: answersWithDetails,
+    };
+  });
 
     return res.status(200).json({
       submissions: submissionsWithDetails,
@@ -404,7 +421,7 @@ export const teacherGrading = asyncHandler(async (req, res) => {
     const isCorrect = awardedPoints >= maxPoints / 2;
 
     const answer = submission.answers.find(
-      (a) => String(a.questionId) === questionId,
+      (a) => String(a.questionId) === questionId
     );
 
     if (answer) {
@@ -423,7 +440,7 @@ export const teacherGrading = asyncHandler(async (req, res) => {
       submission.studentId,
       assessment.course,
       submission.assessment,
-      "assessment",
+      "assessment"
     );
   }
 
@@ -433,7 +450,8 @@ export const teacherGrading = asyncHandler(async (req, res) => {
     assessment.title,
     submission.totalScore,
     allcourseMaxPoint,
-    assessment.course,
+ assessment.course,
+
   );
 
   // ✅ Send email only if the user has an email
@@ -486,6 +504,7 @@ export const teacherGrading = asyncHandler(async (req, res) => {
   </div>
   `,
     };
+
 
     await transporter.sendMail(mailOptions);
   }

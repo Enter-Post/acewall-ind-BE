@@ -33,6 +33,7 @@ import {
   importCourseFromJSON,
   getCoursesWithMeetings,
   toggleReferral,
+  getStudentofCourse,
 } from "../../Contollers/CourseControllers/courses.controller.sch.js";
 import {
   generateCertificate,
@@ -317,5 +318,9 @@ router.post("/:courseId/request-transcript", isUser, requestTranscript);
  *                   items:
  *                     $ref: '#/components/schemas/CourseStatsItem'
  */
+
+
+router.get("/getStudentofCourse/:courseId", isUser, getStudentofCourse)
+
 
 export default router;

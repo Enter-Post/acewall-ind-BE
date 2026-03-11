@@ -48,7 +48,9 @@ export const sendAssessmentReminder = asyncHandler(async (req, res) => {
 
   console.log(enrollments, "enrollments");
 
-  const filteredEnrollments = enrollments.filter((enr) => enr.student !== null);
+  const filteredEnrollments = enrollments.filter(
+    (enr) => enr.student !== null
+  );
 
   if (!filteredEnrollments.length) {
     throw new NotFoundError("No students enrolled in this course.", "ASS_003");
@@ -83,9 +85,9 @@ export const sendAssessmentReminder = asyncHandler(async (req, res) => {
     if (!student?.email) continue;
 
     const mailOptions = {
-      from: `"${process.env.MAIL_FROM_NAME || "Acewall Scholars"}" <${
-        process.env.MAIL_USER
-      }>`,
+
+      from: `"${process.env.MAIL_FROM_NAME || "Acewall Scholars"}" <${process.env.MAIL_USER
+        }>`,
       to: student.email,
       subject: `Reminder: ${assessment.title} - Due ${dueDate}`,
       html: `
@@ -99,20 +101,17 @@ export const sendAssessmentReminder = asyncHandler(async (req, res) => {
 
             <!-- Body -->
             <div style="padding: 20px; color: #333;">
-              <p style="font-size: 16px;">Hello ${
-                student.firstName + " " + student.lastName
-              },</p>
+              <p style="font-size: 16px;">Hello ${student.firstName + " " + student.lastName
+        },</p>
               <p style="font-size: 16px;">
                 This is a reminder for your upcoming assessment:
               </p>
 
               <div style="margin: 20px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #10b981;">
-                <p style="margin: 5px 0; font-size: 15px;"><strong>Assessment:</strong> ${
-                  assessment.title
-                }</p>
-                <p style="margin: 5px 0; font-size: 15px;"><strong>Course:</strong> ${
-                  assessment.course.courseTitle
-                }</p>
+                <p style="margin: 5px 0; font-size: 15px;"><strong>Assessment:</strong> ${assessment.title
+        }</p>
+                <p style="margin: 5px 0; font-size: 15px;"><strong>Course:</strong> ${assessment.course.courseTitle
+        }</p>
                 <p style="margin: 5px 0; font-size: 15px;"><strong>Due Date:</strong> ${dueDate}</p>
               </div>
 
@@ -124,9 +123,8 @@ export const sendAssessmentReminder = asyncHandler(async (req, res) => {
 
               <p style="font-size: 14px; margin-top: 20px;">
                 Best regards,<br>
-                <strong>${assessment.createdby.firstName} ${
-                  assessment.createdby.lastName
-                }</strong><br>
+                <strong>${assessment.createdby.firstName} ${assessment.createdby.lastName
+        }</strong><br>
                 ${assessment.createdby.email}
               </p>
             </div>
@@ -178,7 +176,7 @@ export const setReminderTime = asyncHandler(async (req, res) => {
 
   await assessment.save();
   return res.status(200).json({
-    message: "Assessment reminder time updated successfully",
+    message: "Assessment reminder time updated successfully"
   });
 });
 
@@ -220,17 +218,11 @@ export const createAssessment = asyncHandler(async (req, res) => {
   if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
     for (const [index, q] of parsedQuestions.entries()) {
       if (!q.type || !["mcq", "truefalse", "qa"].includes(q.type)) {
-        throw new ValidationError(
-          `Invalid question type at index ${index}`,
-          "VAL_007",
-        );
+        throw new ValidationError(`Invalid question type at index ${index}`, "VAL_007");
       }
 
       if (typeof q.points !== "number" || q.points < 1 || q.points > 999) {
-        throw new ValidationError(
-          `Invalid points in question ${index + 1}`,
-          "VAL_008",
-        );
+        throw new ValidationError(`Invalid points in question ${index + 1}`, "VAL_008");
       }
 
       if (q.type === "mcq") {
@@ -239,15 +231,13 @@ export const createAssessment = asyncHandler(async (req, res) => {
           q.options.length < 2 ||
           q.options.length > 4
         ) {
-          throw new ValidationError(
-            `Question ${index + 1} must have 2–4 options`,
-            "VAL_009",
-          );
+
+          throw new ValidationError(`Question ${index + 1} must have 2–4 options`, "VAL_009");
         }
         if (!q.correctAnswer || typeof q.correctAnswer !== "string") {
           throw new ValidationError(
             `Correct answer is required for question ${index + 1}`,
-            "VAL_010",
+            "VAL_010"
           );
         }
       }
@@ -256,7 +246,7 @@ export const createAssessment = asyncHandler(async (req, res) => {
         if (!["true", "false"].includes(q.correctAnswer)) {
           throw new ValidationError(
             `Correct answer must be true/false in question ${index + 1}`,
-            "VAL_011",
+            "VAL_011"
           );
         }
       }
@@ -446,7 +436,7 @@ export const getAssesmentbyID = asyncHandler(async (req, res) => {
   const validObjectId = new mongoose.Types.ObjectId(assessmentId);
 
   console.log(assessmentId, validObjectId);
-  const assessment = await Assessment.findById(validObjectId);
+  const assessment = await Assessment.findById(validObjectId).populate("category");
 
   if (!assessment) {
     throw new NotFoundError("Assessment not found", "ASS_013");
@@ -494,6 +484,7 @@ export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
 
   const courseIds = allEnrollmentofStudent.map(
     (enrollment) => new mongoose.Types.ObjectId(enrollment.course),
+
   );
 
   // Common lookups for both Assessments and Discussions
@@ -573,9 +564,7 @@ export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
               $expr: {
                 $and: [
                   { $eq: ["$assessment", "$$assessmentId"] },
-                  {
-                    $eq: ["$studentId", new mongoose.Types.ObjectId(studentId)],
-                  },
+                  { $eq: ["$studentId", new mongoose.Types.ObjectId(studentId)] },
                 ],
               },
             },
@@ -586,9 +575,36 @@ export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
     },
     {
       $addFields: {
+        // 1. Find the specific override for this student
+        studentOverride: {
+          $arrayElemAt: [
+            {
+              $filter: {
+                input: { $ifNull: ["$studentDueDateOverrides", []] },
+                as: "override",
+                cond: { $eq: ["$$override.student", new mongoose.Types.ObjectId(studentId)] }
+              }
+            },
+            0
+          ]
+        }
+      }
+    },
+    {
+      $addFields: {
         isSubmitted: { $gt: [{ $size: "$submissions" }, 0] },
         source: "assessment",
-      },
+        // 2. Determine if the due date is extended
+        isExtended: { $gt: ["$studentOverride", null] },
+        // 3. Override the original dueDate if an override exists
+        dueDate: {
+          $cond: {
+            if: { $gt: ["$studentOverride", null] },
+            then: "$studentOverride.newDueDate",
+            else: "$dueDate"
+          }
+        }
+      }
     },
     {
       $project: {
@@ -596,7 +612,8 @@ export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
         type: 1,
         title: 1,
         description: 1,
-        dueDate: 1,
+        dueDate: 1,         // This will now show the overridden date if applicable
+        isExtended: 1,      // Boolean flag for frontend UI
         createdAt: 1,
         isSubmitted: 1,
         category: 1,
@@ -604,7 +621,7 @@ export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
         "course._id": 1,
         "course.courseTitle": 1,
         "course.thumbnail": 1,
-        "course.semesterbased": 1, // Added to check logic on frontend
+        "course.semesterbased": 1,
         "semester.name": 1,
         "quarter.name": 1,
         "chapter._id": 1,
@@ -616,61 +633,87 @@ export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
   ]);
 
   // 3. Fetch discussions
-  const discussions = await Discussion.aggregate([
-    { $match: { course: { $in: courseIds } } },
-    ...commonLookups,
-    {
-      $lookup: {
-        from: "discussioncomments",
-        let: { discussionId: "$_id" },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ["$discussion", "$$discussionId"] },
-                  {
-                    $eq: ["$createdby", new mongoose.Types.ObjectId(studentId)],
-                  },
-                ],
-              },
+const discussions = await Discussion.aggregate([
+  { $match: { course: { $in: courseIds } } },
+  ...commonLookups,
+  {
+    $lookup: {
+      from: "discussioncomments",
+      let: { discussionId: "$_id" },
+      pipeline: [
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $eq: ["$discussion", "$$discussionId"] },
+                { $eq: ["$createdby", new mongoose.Types.ObjectId(studentId)] },
+              ],
             },
           },
-        ],
-        as: "comments",
-      },
+        },
+      ],
+      as: "comments",
     },
-    {
-      $addFields: {
-        isSubmitted: { $gt: [{ $size: "$comments" }, 0] },
-        title: "$topic",
-        source: "discussion",
-      },
+  },
+  {
+    $addFields: {
+      // 1. Find the specific override for this student
+      studentOverride: {
+        $arrayElemAt: [
+          {
+            $filter: {
+              input: { $ifNull: ["$studentDueDateOverrides", []] },
+              as: "override",
+              cond: { $eq: ["$$override.student", new mongoose.Types.ObjectId(studentId)] }
+            }
+          },
+          0
+        ]
+      }
+    }
+  },
+  {
+    $addFields: {
+      isSubmitted: { $gt: [{ $size: "$comments" }, 0] },
+      title: "$topic",
+      source: "discussion",
+      // 2. Determine if the due date is extended
+      isExtended: { $gt: ["$studentOverride", null] },
+      // 3. Override the original dueDate object if an override exists
+      dueDate: {
+        $cond: {
+          if: { $gt: ["$studentOverride", null] },
+          then: "$studentOverride.newDueDate",
+          else: "$dueDate"
+        }
+      }
+    }
+  },
+  {
+    $project: {
+      _id: 1,
+      type: 1,
+      title: 1,
+      description: 1,
+      dueDate: 1,         // Will show { date, time } from either source
+      isExtended: 1,      // Useful for highlighting the date in the UI
+      createdAt: 1,
+      isSubmitted: 1,
+      category: 1,
+      source: 1,
+      "course._id": 1,
+      "course.courseTitle": 1,
+      "course.thumbnail": 1,
+      "course.semesterbased": 1,
+      "chapter._id": 1,
+      "lesson._id": 1,
+      "semester.name": 1,
+      "quarter.name": 1,
+      "chapter.title": 1,
+      "lesson.title": 1,
     },
-    {
-      $project: {
-        _id: 1,
-        type: 1,
-        title: 1,
-        description: 1,
-        dueDate: 1,
-        createdAt: 1,
-        isSubmitted: 1,
-        category: 1,
-        source: 1,
-        "course._id": 1,
-        "course.courseTitle": 1,
-        "course.thumbnail": 1,
-        "course.semesterbased": 1,
-        "chapter._id": 1,
-        "lesson._id": 1,
-        "semester.name": 1,
-        "quarter.name": 1,
-        "chapter.title": 1,
-        "lesson.title": 1,
-      },
-    },
-  ]);
+  },
+]);
 
   // 4. Merge and sort
   const combined = [...assessments, ...discussions].sort((a, b) => {
@@ -731,14 +774,11 @@ export const getAssessmentStats = asyncHandler(async (req, res) => {
   // 2. Count Late Submissions
   const lateCount = await Submission.countDocuments({
     assessment: assessmentId,
-    status: "after due date",
+    status: "after due date"
   });
 
   // 3. Get total students enrolled in the course
-  const totalEnrolled = await Enrollment.countDocuments({
-    course: assessment.course,
-  });
-
+  const totalEnrolled = await Enrollment.countDocuments({ course: assessment.course });
   const submittedCount = onTimeCount + lateCount;
   const notSubmittedCount = Math.max(0, totalEnrolled - submittedCount);
 
@@ -770,5 +810,42 @@ export const checkFinalAssessmentExists = asyncHandler(async (req, res) => {
           title: existingFinal.title,
         }
       : null,
+  });
+});
+export const setDueDateForStudent = asyncHandler(async (req, res) => {
+  const { assessmentId } = req.params;
+  const { studentId, newDueDate } = req.body;
+
+  const assessment = await Assessment.findById(assessmentId);
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found", "ASS_016");
+  }
+
+  // Check if the student is enrolled in the course
+  const enrollment = await Enrollment.findOne({ course: assessment.course, student: studentId });
+  if (!enrollment) {
+    throw new NotFoundError("Student not enrolled in this course", "ENR_001");
+  }
+
+  // Update the due date for the specific student
+  const dueDateObj = {
+    date: new Date(newDueDate.date),
+    time: newDueDate.time
+  };
+
+  // Find or create a student-specific due date override
+  const studentOverrideIndex = assessment.studentDueDateOverrides.findIndex(override => override.student.toString() === studentId);
+  if (studentOverrideIndex !== -1) {
+    assessment.studentDueDateOverrides[studentOverrideIndex].newDueDate = dueDateObj;
+  } else {
+    assessment.studentDueDateOverrides.push({
+      student: new mongoose.Types.ObjectId(studentId),
+      newDueDate: dueDateObj
+    });
+  }
+
+  await assessment.save();
+  return res.status(200).json({
+    message: "Due date updated for student"
   });
 });
