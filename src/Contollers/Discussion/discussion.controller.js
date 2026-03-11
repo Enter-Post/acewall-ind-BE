@@ -126,24 +126,31 @@ export const getDiscussionsOfTeacher = asyncHandler(async (req, res) => {
 
 export const getDiscussionbyId = asyncHandler(async (req, res) => {
   const id = req.params.id;
+  const userId = req.user._id; // current logged-in user
 
   const discussion = await Discussion.findById(id)
     .populate("course", "courseTitle thumbnail")
     .populate("chapter", "title")
     .populate("lesson", "title")
-    .populate("createdby", "firstName middleName lastName profileImg")
-  // .populate("category");
+    .populate("createdby", "firstName middleName lastName profileImg").lean();
 
   if (!discussion) {
     throw new NotFoundError("Discussion not found", "DISC_001");
   }
 
-  return res
-    .status(200)
-    .json({
-      discussion,
-      message: "Discussion fetched successfully"
-    });
+  const override = discussion.studentDueDateOverrides?.find(
+    (item) => item.student.toString() === userId.toString()
+  );
+
+  if (override) {
+    discussion.isExtended = true;
+    discussion.extendedDueDate = override.newDueDate;
+  }
+
+  return res.status(200).json({
+    discussion,
+    message: "Discussion fetched successfully",
+  });
 });
 
 export const discussionforStudent = asyncHandler(async (req, res) => {
