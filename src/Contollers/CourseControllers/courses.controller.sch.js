@@ -2161,3 +2161,44 @@ export const toggleReferral = asyncHandler(async (req, res) => {
     referral: course.referral,
   });
 });
+
+
+export const getStudentofCourse = asyncHandler(async (req, res) => {
+  const { courseId } = req.params;
+  const { search } = req.query;
+
+  if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new ValidationError("Valid course ID is required");
+  }
+
+  const enrollments = await Enrollment.find({ course: courseId })
+    .populate("student", "firstName middleName lastName email profileImg");
+
+  if (!enrollments || enrollments.length === 0) {
+    return res.status(200).json({
+      students: [],
+      message: "No students enrolled in this course"
+    });
+  }
+
+  let students = enrollments
+    .filter(enrollment => enrollment.student !== null)
+    .map(enrollment => enrollment.student);
+
+  // Search filter
+  if (search) {
+    const searchLower = search.toLowerCase();
+
+    students = students.filter(student =>
+      student.firstName?.toLowerCase().includes(searchLower) ||
+      student.middleName?.toLowerCase().includes(searchLower) ||
+      student.lastName?.toLowerCase().includes(searchLower) ||
+      student.email?.toLowerCase().includes(searchLower)
+    );
+  }
+
+  res.status(200).json({
+    count: students.length,
+    students
+  });
+});

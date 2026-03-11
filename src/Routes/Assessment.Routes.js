@@ -10,6 +10,7 @@ import {
   getAssesmentbyID,
   getAssessmentStats,
   sendAssessmentReminder,
+  setDueDateForStudent,
   setReminderTime,
   uploadFiles,
 } from "../Contollers/Assessment.controller.js";
@@ -322,6 +323,6 @@ router.put("/editAssessment/:assessmentId", isUser, editAssessmentInfo);
  *         description: Assessment created successfully
  */
 router.post("/createAssessment/updated", upload.any(), isUser, createAssessment_updated);
-
+router.put(`/setDueDateForStudent/:assessmentId`, isUser, setDueDateForStudent);
 
 export default router;

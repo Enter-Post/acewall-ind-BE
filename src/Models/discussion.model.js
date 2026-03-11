@@ -21,6 +21,18 @@ const discussionSchema = new mongoose.Schema(
       date: { type: Date },
       time: { type: String },
     },
+    studentDueDateOverrides: [
+      {
+        student: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        newDueDate: {
+          date: { type: Date },
+          time: { type: String },
+        },
+      },
+    ],
     category: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "AssessmentCategory",

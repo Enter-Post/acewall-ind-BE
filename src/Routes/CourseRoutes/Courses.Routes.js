@@ -33,6 +33,7 @@ import {
   importCourseFromJSON,
   getCoursesWithMeetings,
   toggleReferral,
+  getStudentofCourse,
 } from "../../Contollers/CourseControllers/courses.controller.sch.js";
 
 const router = express.Router();
@@ -297,5 +298,8 @@ router.get('/stats/:courseId', getCourseEnrollmentStats);
  *                   items:
  *                     $ref: '#/components/schemas/CourseStatsItem'
  */
+
+router.get("/getStudentofCourse/:courseId", isUser, getStudentofCourse)
+
 
 export default router;
