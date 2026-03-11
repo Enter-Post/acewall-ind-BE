@@ -22,13 +22,19 @@ export const createChapter = async (req, res) => {
     }
 
     const chapter = await Chapter.create(chapterObject);
-    
+
     // Send new chapter notification to enrolled students
     const courseData = await Course.findById(course).select("courseTitle");
     if (courseData) {
-      await notifyNewChapter(course, courseData.courseTitle, title, chapter._id, createdby);
+      await notifyNewChapter(
+        course,
+        courseData.courseTitle,
+        title,
+        chapter._id,
+        createdby,
+      );
     }
-    
+
     res.status(201).json({ message: "Chapter created successfully", chapter });
   } catch (error) {
     console.log("error in creating chapter", error);
@@ -176,7 +182,12 @@ export const getChapterwithLessons = async (req, res) => {
                 $expr: {
                   $and: [
                     { $eq: ["$chapter", "$$chapterId"] },
-                    { $eq: ["$type", "chapter-assessment"] },
+                    {
+                      $in: [
+                        "$type",
+                        ["chapter-assessment", "final-assessment"],
+                      ],
+                    },
                   ],
                 },
               },
@@ -214,7 +225,6 @@ export const getChapterwithLessons = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 
 export const getChapterOfQuarter = async (req, res) => {
   const { courseId, quarterId } = req.params;
@@ -310,7 +320,12 @@ export const getChapterOfQuarter = async (req, res) => {
                 $expr: {
                   $and: [
                     { $eq: ["$chapter", "$$chapterId"] },
-                    { $eq: ["$type", "chapter-assessment"] },
+                    {
+                      $in: [
+                        "$type",
+                        ["chapter-assessment", "final-assessment"],
+                      ],
+                    },
                   ],
                 },
               },
@@ -355,7 +370,6 @@ export const getChapterOfQuarter = async (req, res) => {
 };
 
 export const ChapterofCourse = async (req, res) => {
-
   try {
     const { courseId } = req.params;
 
@@ -364,7 +378,7 @@ export const ChapterofCourse = async (req, res) => {
     }
     const chapters = await Chapter.find({ course: courseId });
 
-    console.log(chapters, "chapters")
+    console.log(chapters, "chapters");
 
     res.status(200).json({ message: "Chapter found successfully", chapters });
   } catch (error) {

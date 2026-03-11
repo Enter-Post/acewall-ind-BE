@@ -54,6 +54,18 @@ const assessmentSchema = new Schema(
       date: { type: Date },
       time: { type: String },
     },
+    studentDueDateOverrides: [
+      {
+        student: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        newDueDate: {
+          date: { type: Date },
+          time: { type: String },
+        },
+      },
+    ],
     stutus: { type: String, enum: ["active", "inactive"], default: "active" },
     questions: {
       type: [questionSchema],

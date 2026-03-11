@@ -1,16 +1,14 @@
 import mongoose from "mongoose";
 import Assessment from "../Models/Assessment.model.js";
 import Submission from "../Models/submission.model.js";
+import CourseProgress from "../Models/CourseProgress.model.js";
 
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import User from "../Models/user.model.js";
 import { uploadToCloudinary } from "../lib/cloudinary-course.config.js";
 import { updateGradebookOnSubmission } from "../Utiles/updateGradebookOnSubmission.js";
-import {
-  ValidationError,
-  NotFoundError,
-} from "../Utiles/errors.js";
+import { ValidationError, NotFoundError } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 import { notifyGradePosted } from "../Utiles/notificationService.js";
 
@@ -32,136 +30,164 @@ export const submission = asyncHandler(async (req, res) => {
   if (alreadySubmitted) {
     throw new ValidationError(
       "You have already submitted this assessment",
-      "SUB_001"
+      "SUB_001",
     );
   }
 
-    const assessment = await Assessment.findById(assessmentId);
+  const assessment = await Assessment.findById(assessmentId);
 
-    let answerFiles = [];
+  let answerFiles = [];
 
-    for (const file of files) {
-      const result = await uploadToCloudinary(file.buffer, "assessment_files");
-      answerFiles.push({
-        url: result.secure_url,
-        filename: file.originalname,
-        public_id: result.public_id,
-      });
-    }
+  for (const file of files) {
+    const result = await uploadToCloudinary(file.buffer, "assessment_files");
+    answerFiles.push({
+      url: result.secure_url,
+      filename: file.originalname,
+      public_id: result.public_id,
+    });
+  }
 
-    if (assessment.assessmentType === "file") {
-      finalQuestionsubmitted = [answers];
-    } else {
-      finalQuestionsubmitted = answers.answers;
-    }
+  if (assessment.assessmentType === "file") {
+    finalQuestionsubmitted = [answers];
+  } else {
+    finalQuestionsubmitted = answers.answers;
+  }
 
   if (!assessment) {
     throw new NotFoundError("Assessment not found", "SUB_002");
   }
 
-    let totalScore = 0;
-    let maxScore = 0;
+  let totalScore = 0;
+  let maxScore = 0;
 
-    const dueDate = new Date(assessment.dueDate.date)
-      .toISOString()
-      .split("T")[0];
-    const dueTime = assessment.dueDate.time;
-    const dueDateTime = new Date(`${dueDate}T${dueTime}`);
-    const now = new Date();
 
-    let status = "before due date";
-    if (now > dueDateTime) {
-      status = "after due date";
+  const dueDate = new Date(assessment.dueDate.date)
+    .toISOString()
+    .split("T")[0];
+  const dueTime = assessment.dueDate.time;
+  const dueDateTime = new Date(`${dueDate}T${dueTime}`);
+  const now = new Date();
+
+
+  const override = assessment.studentDueDateOverrides.find(
+    o => o.student.toString() === studentId
+  );
+
+  let finalDueDate = dueDateTime;
+
+  if (override) {
+    if (override.newDueDate) {
+      finalDueDate = override.newDueDate;
     }
+  }
 
-    const processedAnswers = finalQuestionsubmitted.map((ans) => {
-      const question = assessment.questions.find(
-        (q) => q._id.toString() === ans.questionId
-      );
+  let status = "before due date";
+  if (now > finalDueDate) {
+    status = "after due date";
+  }
+
+  const processedAnswers = finalQuestionsubmitted.map((ans) => {
+    const question = assessment.questions.find(
+      (q) => q._id.toString() === ans.questionId
+    );
 
     if (!question) {
       throw new ValidationError("Invalid questionId in submission.", "SUB_003");
     }
 
-      if (question.type === "mcq" || question.type === "truefalse") {
-        const isCorrect = question.correctAnswer === ans.selectedAnswer;
-        const pointsAwarded = isCorrect ? question.points : 0;
-        totalScore += pointsAwarded;
+    if (question.type === "mcq" || question.type === "truefalse") {
+      const isCorrect = question.correctAnswer === ans.selectedAnswer;
+      const pointsAwarded = isCorrect ? question.points : 0;
+      totalScore += pointsAwarded;
 
-        maxScore += question.points;
+      maxScore += question.points;
 
-        console.log(isCorrect, "isCorrect");
+      console.log(isCorrect, "isCorrect");
 
-        return {
-          questionId: ans.questionId,
-          selectedAnswer: ans.selectedAnswer,
-          isCorrect,
-          status,
-          pointsAwarded,
-          requiresManualCheck: false,
-        };
-      } else if (question.type === "file") {
-        return {
-          questionId: ans.questionId,
-          file: answerFiles,
-          isCorrect: null,
-          status,
-          pointsAwarded: 0,
-          requiresManualCheck: true,
-        };
-      } else {
-        return {
-          questionId: ans.questionId,
-          selectedAnswer: ans.selectedAnswer,
-          isCorrect: null,
-          status,
-          pointsAwarded: 0,
-          requiresManualCheck: true,
-        };
-      }
-    });
+      return {
+        questionId: ans.questionId,
+        selectedAnswer: ans.selectedAnswer,
+        isCorrect,
+        status,
+        pointsAwarded,
+        requiresManualCheck: false,
+      };
+    } else if (question.type === "file") {
+      return {
+        questionId: ans.questionId,
+        file: answerFiles,
+        isCorrect: null,
+        status,
+        pointsAwarded: 0,
+        requiresManualCheck: true,
+      };
+    } else {
+      return {
+        questionId: ans.questionId,
+        selectedAnswer: ans.selectedAnswer,
+        isCorrect: null,
+        status,
+        pointsAwarded: 0,
+        requiresManualCheck: true,
+      };
+    }
+  });
 
+  const graded = processedAnswers.every((a) => !a.requiresManualCheck);
 
-    const graded = processedAnswers.every((a) => !a.requiresManualCheck);
+  const submission = new Submission({
+    assessment: assessmentId,
+    studentId,
+    answers: processedAnswers,
+    status,
+    totalScore,
+    graded,
+  });
 
-    const submission = new Submission({
-      assessment: assessmentId,
-      studentId,
-      answers: processedAnswers,
-      status,
-      totalScore,
-      graded,
-    });
+  await submission.save();
 
-    await submission.save();
+  await updateGradebookOnSubmission(
+    submission.studentId,
+    assessment.course,
+    submission.assessment,
+    "assessment",
+  );
 
-    await updateGradebookOnSubmission(
-      submission.studentId,
-      assessment.course,
-      submission.assessment,
-      "assessment"
+  // Mark course as fully completed if this was a final assessment
+  if (assessment.type === "final-assessment") {
+    await CourseProgress.findOneAndUpdate(
+      { studentId, courseId: assessment.course },
+      {
+        $set: {
+          isCompleted: true,
+          completedAt: new Date(),
+          finalAssessmentId: assessment._id,
+        },
+      },
+      { upsert: true, new: true },
     );
+  }
 
-    // ✅ Send email if the entire assessment was auto-graded
-    if (graded) {
-      const student = await User.findById(studentId);
+  // ✅ Send email if the entire assessment was auto-graded
+  if (graded) {
+    const student = await User.findById(studentId);
 
-      if (student && student.email) {
-        const transporter = nodemailer.createTransport({
-          host: process.env.MAIL_HOST,
-          port: Number(process.env.MAIL_PORT),
-          secure: Number(process.env.MAIL_PORT) === 465,
-          auth: {
-            user: process.env.MAIL_USER,
-            pass: process.env.MAIL_PASS,
-          },
-        });
+    if (student && student.email) {
+      const transporter = nodemailer.createTransport({
+        host: process.env.MAIL_HOST,
+        port: Number(process.env.MAIL_PORT),
+        secure: Number(process.env.MAIL_PORT) === 465,
+        auth: {
+          user: process.env.MAIL_USER,
+          pass: process.env.MAIL_PASS,
+        },
+      });
 
-        const mailOptions = {
-          from: `"${process.env.MAIL_FROM_NAME || "Assessment System"}" <${process.env.MAIL_USER}>`,
-          to: student.email,
-          subject: `Assessment Submitted: ${assessment.title}`,
-          html: `
+      const mailOptions = {
+        from: `"${process.env.MAIL_FROM_NAME || "Assessment System"}" <${process.env.MAIL_USER}>`,
+        to: student.email,
+        subject: `Assessment Submitted: ${assessment.title}`,
+        html: `
   <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
     <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
       
@@ -194,31 +220,31 @@ export const submission = asyncHandler(async (req, res) => {
     </div>
   </div>
   `,
-        };
+      };
 
-
-        try {
-          await transporter.sendMail(mailOptions);
-        } catch (emailErr) {
-          console.error("Error sending email:", emailErr);
-          // Do not fail the request due to email failure
-        }
+      try {
+        await transporter.sendMail(mailOptions);
+      } catch (emailErr) {
+        console.error("Error sending email:", emailErr);
+        // Do not fail the request due to email failure
       }
-
-      // Send in-app notification for auto-graded assessment
-      await notifyGradePosted(
-        studentId,
-        assessment.title,
-        totalScore,
-        maxScore,
-        assessment.course
-      );
     }
 
-    return res.status(201).json({
-      submission,
-      message: "Submission recorded successfully",
-    });
+    // Send in-app notification for auto-graded assessment
+    await notifyGradePosted(
+      studentId,
+      assessment.title,
+      totalScore,
+      maxScore,
+      assessment.course,
+
+    );
+  }
+
+  return res.status(201).json({
+    submission,
+    message: "Submission recorded successfully",
+  });
 });
 
 export const getSubmissionsforStudent = asyncHandler(async (req, res) => {
@@ -239,9 +265,9 @@ export const getSubmissionforAssessmentbyId = asyncHandler(async (req, res) => {
     assessment: assessmentId,
   });
 
-  return res.status(200).json({ 
+  return res.status(200).json({
     submission,
-    message: "Submission found", 
+    message: "Submission found",
   });
 });
 
@@ -253,22 +279,22 @@ export const getSubmissionById = asyncHandler(async (req, res) => {
     select: "firstName lastName email profileImg",
   });
 
-    const assessment = await Assessment.findById(submission.assessment);
+  const assessment = await Assessment.findById(submission.assessment);
 
-    const questionMap = {};
-    assessment.questions.forEach((q) => {
-      questionMap[q._id.toString()] = {
-        question: q.question,
-        file: q.files,
-        type: q.type,
-        points: q.points,
-      };
-    });
+  const questionMap = {};
+  assessment.questions.forEach((q) => {
+    questionMap[q._id.toString()] = {
+      question: q.question,
+      file: q.files,
+      type: q.type,
+      points: q.points,
+    };
+  });
 
-    const answersWithDetails = submission.answers.map((ans) => ({
-      ...ans.toObject(),
-      questionDetails: questionMap[ans.questionId],
-    }));
+  const answersWithDetails = submission.answers.map((ans) => ({
+    ...ans.toObject(),
+    questionDetails: questionMap[ans.questionId],
+  }));
 
   return res.status(200).json({
     submission: {
@@ -279,46 +305,48 @@ export const getSubmissionById = asyncHandler(async (req, res) => {
   });
 });
 
-export const getSubmissionsofAssessment_forTeacher = asyncHandler(async (req, res) => {
-  const { assessmentId } = req.params;
+export const getSubmissionsofAssessment_forTeacher = asyncHandler(
+  async (req, res) => {
+    const { assessmentId } = req.params;
 
-  const submissions = await Submission.find({
-    assessment: assessmentId,
-  }).populate({
-    path: "studentId",
-    select: "firstName lastName email profileImg",
-  });
-
-  const assessment = await Assessment.findById(assessmentId);
-  if (!assessment) {
-    throw new NotFoundError("Assessment not found", "SUB_004");
-  }
-
-    const questionMap = {};
-    assessment.questions.forEach((q) => {
-      questionMap[q._id.toString()] = {
-        question: q.question,
-        type: q.type,
-        points: q.points,
-      };
+    const submissions = await Submission.find({
+      assessment: assessmentId,
+    }).populate({
+      path: "studentId",
+      select: "firstName lastName email profileImg",
     });
 
-    const submissionsWithDetails = submissions.map((sub) => {
-      const answersWithDetails = sub.answers.map((ans) => ({
-        ...ans.toObject(),
-        questionDetails: questionMap[ans.questionId],
-      }));
-      return {
-        ...sub.toObject(),
-        answers: answersWithDetails,
-      };
-    });
+    const assessment = await Assessment.findById(assessmentId);
+    if (!assessment) {
+      throw new NotFoundError("Assessment not found", "SUB_004");
+    }
 
-  return res.status(200).json({
-    submissions: submissionsWithDetails,
-    message: "Submissions found",
+  const questionMap = {};
+  assessment.questions.forEach((q) => {
+    questionMap[q._id.toString()] = {
+      question: q.question,
+      type: q.type,
+      points: q.points,
+    };
   });
-});
+
+  const submissionsWithDetails = submissions.map((sub) => {
+    const answersWithDetails = sub.answers.map((ans) => ({
+      ...ans.toObject(),
+      questionDetails: questionMap[ans.questionId],
+    }));
+    return {
+      ...sub.toObject(),
+      answers: answersWithDetails,
+    };
+  });
+
+    return res.status(200).json({
+      submissions: submissionsWithDetails,
+      message: "Submissions found",
+    });
+  },
+);
 
 // export const checkbyTeacher = async (req, res) => {
 //   try {
@@ -363,87 +391,87 @@ export const teacherGrading = asyncHandler(async (req, res) => {
   const manualGrades = req.body;
 
   // ✅ Populate studentId from User model
-  const submission = await Submission.findById(submissionId).populate(
-    "studentId"
-  );
+  const submission =
+    await Submission.findById(submissionId).populate("studentId");
 
   const assessment = await Assessment.findById(submission.assessment);
 
   if (!submission) {
     throw new NotFoundError("Submission not found", "SUB_005");
   }
-    let allcourseMaxPoint = 0;
+  let allcourseMaxPoint = 0;
 
-    // Grade each manually graded question
-    for (const questionId in manualGrades) {
-      const { awardedPoints, maxPoints } = manualGrades[questionId];
-      allcourseMaxPoint += maxPoints;
+  // Grade each manually graded question
+  for (const questionId in manualGrades) {
+    const { awardedPoints, maxPoints } = manualGrades[questionId];
+    allcourseMaxPoint += maxPoints;
 
     if (awardedPoints > maxPoints) {
       throw new ValidationError(
         `Points for question ${questionId} can't exceed max points.`,
-        "SUB_006"
+        "SUB_006",
       );
     } else if (awardedPoints < 0) {
       throw new ValidationError(
         `Points for question ${questionId} can't be negative.`,
-        "SUB_007"
+        "SUB_007",
       );
     }
 
-      const isCorrect = awardedPoints >= maxPoints / 2;
+    const isCorrect = awardedPoints >= maxPoints / 2;
 
-      const answer = submission.answers.find(
-        (a) => String(a.questionId) === questionId
-      );
-
-      if (answer) {
-        answer.pointsAwarded = awardedPoints;
-        answer.isCorrect = isCorrect;
-        submission.totalScore += awardedPoints;
-        answer.requiresManualCheck = false;
-      }
-    }
-
-    submission.graded = true;
-    await submission.save();
-
-    if (submission.graded) {
-      await updateGradebookOnSubmission(
-        submission.studentId,
-        assessment.course,
-        submission.assessment,
-        "assessment"
-      );
-    }
-
-    // Send in-app notification for manual grading
-    await notifyGradePosted(
-      submission.studentId._id,
-      assessment.title,
-      submission.totalScore,
-      allcourseMaxPoint,
-      assessment.course
+    const answer = submission.answers.find(
+      (a) => String(a.questionId) === questionId
     );
 
-    // ✅ Send email only if the user has an email
-    const student = submission.studentId;
-    if (student?.email) {
-      const transporter = nodemailer.createTransport({
-        host: process.env.MAIL_HOST,
-        port: Number(process.env.MAIL_PORT),
-        secure: Number(process.env.MAIL_PORT) === 465,
-        auth: {
-          user: process.env.MAIL_USER,
-          pass: process.env.MAIL_PASS,
-        },
-      });
+    if (answer) {
+      answer.pointsAwarded = awardedPoints;
+      answer.isCorrect = isCorrect;
+      submission.totalScore += awardedPoints;
+      answer.requiresManualCheck = false;
+    }
+  }
 
-      const mailOptions = {
-        from: `"${process.env.MAIL_FROM_NAME}" <${process.env.MAIL_USER}>`,
-        to: student.email,
-        subject: "Your Assessment Has Been Graded",
-        html: `
+  submission.graded = true;
+  await submission.save();
+
+  if (submission.graded) {
+    await updateGradebookOnSubmission(
+      submission.studentId,
+      assessment.course,
+      submission.assessment,
+      "assessment"
+    );
+  }
+
+  // Send in-app notification for manual grading
+  await notifyGradePosted(
+    submission.studentId._id,
+    assessment.title,
+    submission.totalScore,
+    allcourseMaxPoint,
+ assessment.course,
+
+  );
+
+  // ✅ Send email only if the user has an email
+  const student = submission.studentId;
+  if (student?.email) {
+    const transporter = nodemailer.createTransport({
+      host: process.env.MAIL_HOST,
+      port: Number(process.env.MAIL_PORT),
+      secure: Number(process.env.MAIL_PORT) === 465,
+      auth: {
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: `"${process.env.MAIL_FROM_NAME}" <${process.env.MAIL_USER}>`,
+      to: student.email,
+      subject: "Your Assessment Has Been Graded",
+      html: `
   <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
     <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
       
@@ -475,15 +503,15 @@ export const teacherGrading = asyncHandler(async (req, res) => {
     </div>
   </div>
   `,
-      };
+    };
 
 
     await transporter.sendMail(mailOptions);
   }
 
-  return res.status(200).json({ 
+  return res.status(200).json({
     submission,
-    message: "Submission graded", 
+    message: "Submission graded",
   });
 });
 
