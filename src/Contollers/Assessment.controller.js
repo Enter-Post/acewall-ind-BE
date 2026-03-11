@@ -36,7 +36,7 @@ export const sendAssessmentReminder = asyncHandler(async (req, res) => {
   if (assessment.createdby._id.toString() !== teacherId.toString()) {
     throw new AuthenticationError(
       "You are not authorized to send reminders for this assessment.",
-      "ASS_002"
+      "ASS_002",
     );
   }
 
@@ -85,6 +85,7 @@ export const sendAssessmentReminder = asyncHandler(async (req, res) => {
     if (!student?.email) continue;
 
     const mailOptions = {
+
       from: `"${process.env.MAIL_FROM_NAME || "Acewall Scholars"}" <${process.env.MAIL_USER
         }>`,
       to: student.email,
@@ -205,6 +206,7 @@ export const createAssessment = asyncHandler(async (req, res) => {
     quarter,
     dueDate,
     category,
+    type: requestType,
   } = req.body;
 
   const files = req.files;
@@ -229,6 +231,7 @@ export const createAssessment = asyncHandler(async (req, res) => {
           q.options.length < 2 ||
           q.options.length > 4
         ) {
+
           throw new ValidationError(`Question ${index + 1} must have 2–4 options`, "VAL_009");
         }
         if (!q.correctAnswer || typeof q.correctAnswer !== "string") {
@@ -281,7 +284,8 @@ export const createAssessment = asyncHandler(async (req, res) => {
     finalChapter = foundLesson.chapter._id;
 
     const foundChapter = await Chapter.findById(finalChapter);
-    if (!foundChapter) throw new NotFoundError("Associated chapter not found", "ASS_008");
+    if (!foundChapter)
+      throw new NotFoundError("Associated chapter not found", "ASS_008");
     finalCourse = foundChapter.course;
   }
 
@@ -300,8 +304,29 @@ export const createAssessment = asyncHandler(async (req, res) => {
     return null;
   };
 
-  const type = determineType();
-  if (!type) throw new ValidationError("Assessment type could not be determined", "VAL_013");
+  let type = requestType;
+  if (!type) {
+    type = determineType();
+  }
+
+  if (type === "final-assessment") {
+    const existingFinal = await Assessment.findOne({
+      course: finalCourse,
+      type: "final-assessment",
+    });
+    if (existingFinal) {
+      throw new ValidationError(
+        "Final assessment already exists for this course.",
+        "VAL_014",
+      );
+    }
+  }
+
+  if (!type)
+    throw new ValidationError(
+      "Assessment type could not be determined",
+      "VAL_013",
+    );
 
   // ✅ Save to DB
   const newAssessment = new Assessment({
@@ -330,7 +355,7 @@ export const createAssessment = asyncHandler(async (req, res) => {
         finalCourse,
         courseData.courseTitle,
         title,
-        createdby
+        createdby,
       );
     }
   } catch (error) {
@@ -350,7 +375,7 @@ export const deleteAssessment = asyncHandler(async (req, res) => {
     throw new NotFoundError("Assessment not found", "ASS_009");
   }
   return res.status(200).json({
-    message: "Assessment deleted successfully"
+    message: "Assessment deleted successfully",
   });
 });
 
@@ -374,7 +399,7 @@ export const uploadFiles = asyncHandler(async (req, res) => {
     await assessment.save();
 
     return res.status(200).json({
-      message: "Files uploaded successfully"
+      message: "Files uploaded successfully",
     });
   }
 });
@@ -388,7 +413,7 @@ export const deleteFile = asyncHandler(async (req, res) => {
   }
 
   const fileIndex = assessment.files.findIndex(
-    (file) => file._id.toString() === fileId
+    (file) => file._id.toString() === fileId,
   );
   if (fileIndex === -1) {
     throw new NotFoundError("File not found", "ASS_012");
@@ -402,7 +427,7 @@ export const deleteFile = asyncHandler(async (req, res) => {
   await assessment.save();
 
   return res.status(200).json({
-    message: "File deleted successfully"
+    message: "File deleted successfully",
   });
 });
 
@@ -433,11 +458,11 @@ export const allAssessmentByTeacher = asyncHandler(async (req, res) => {
   // Fetch the assessments created by the teacher and populate the relevant fields
   const assessments = await Assessment.find({ createdby })
     .select(
-      "dueDate title description course chapter lesson createdAt category type"
+      "dueDate title description course chapter lesson createdAt category type",
     )
     .populate({
       path: "course", // Populate the course information from the CourseSch model
-      select: "courseTitle thumbnail isVerified semesterbased gradingSystem",  // Select the needed fields
+      select: "courseTitle thumbnail isVerified semesterbased gradingSystem", // Select the needed fields
     })
     .populate({ path: "chapter", select: "title" })
     .populate({ path: "lesson", select: "title" })
@@ -454,11 +479,12 @@ export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
   // 1. Get all ACTIVE enrollments (exclude CANCELLED)
   const allEnrollmentofStudent = await Enrollment.find({
     student: studentId,
-    status: { $ne: "CANCELLED" }
+    status: { $ne: "CANCELLED" },
   });
 
   const courseIds = allEnrollmentofStudent.map(
-    (enrollment) => new mongoose.Types.ObjectId(enrollment.course)
+    (enrollment) => new mongoose.Types.ObjectId(enrollment.course),
+
   );
 
   // Common lookups for both Assessments and Discussions
@@ -693,7 +719,10 @@ const discussions = await Discussion.aggregate([
   const combined = [...assessments, ...discussions].sort((a, b) => {
     // Sort by submission status first, then by date
     if (a.isSubmitted === b.isSubmitted) {
-      return new Date(a.dueDate?.date || a.createdAt) - new Date(b.dueDate?.date || b.createdAt);
+      return (
+        new Date(a.dueDate?.date || a.createdAt) -
+        new Date(b.dueDate?.date || b.createdAt)
+      );
     }
     return a.isSubmitted ? 1 : -1;
   });
@@ -724,11 +753,9 @@ export const editAssessmentInfo = asyncHandler(async (req, res) => {
 
   await assessment.save();
   return res.status(200).json({
-    message: "Assessment updated successfully"
+    message: "Assessment updated successfully",
   });
 });
-
-
 
 export const getAssessmentStats = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
@@ -741,7 +768,7 @@ export const getAssessmentStats = asyncHandler(async (req, res) => {
   // 1. Count On-Time Submissions
   const onTimeCount = await Submission.countDocuments({
     assessment: assessmentId,
-    status: "before due date"
+    status: "before due date",
   });
 
   // 2. Count Late Submissions
@@ -752,7 +779,6 @@ export const getAssessmentStats = asyncHandler(async (req, res) => {
 
   // 3. Get total students enrolled in the course
   const totalEnrolled = await Enrollment.countDocuments({ course: assessment.course });
-
   const submittedCount = onTimeCount + lateCount;
   const notSubmittedCount = Math.max(0, totalEnrolled - submittedCount);
 
@@ -762,10 +788,30 @@ export const getAssessmentStats = asyncHandler(async (req, res) => {
     lateCount,
     submittedCount,
     notSubmittedCount,
-    completionRate: totalEnrolled > 0 ? ((submittedCount / totalEnrolled) * 100).toFixed(1) : 0
+    completionRate:
+      totalEnrolled > 0
+        ? ((submittedCount / totalEnrolled) * 100).toFixed(1)
+        : 0,
   });
 });
 
+export const checkFinalAssessmentExists = asyncHandler(async (req, res) => {
+  const { courseId } = req.params;
+  const existingFinal = await Assessment.findOne({
+    course: courseId,
+    type: "final-assessment",
+  });
+
+  return res.status(200).json({
+    exists: !!existingFinal,
+    assessment: existingFinal
+      ? {
+          _id: existingFinal._id,
+          title: existingFinal.title,
+        }
+      : null,
+  });
+});
 export const setDueDateForStudent = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const { studentId, newDueDate } = req.body;

@@ -209,7 +209,7 @@ export const lessonDiscussions = asyncHandler(async (req, res) => {
   if (!discussion || discussion.length === 0) {
     throw new NotFoundError("No discussions found for this lesson", "DISC_004");
   }
-  return res.status(200).json({
+  return res.status(200).json({ 
     discussion: discussion,
     message: "Discussions fetched successfully"
   });

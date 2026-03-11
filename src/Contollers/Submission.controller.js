@@ -1,16 +1,14 @@
 import mongoose from "mongoose";
 import Assessment from "../Models/Assessment.model.js";
 import Submission from "../Models/submission.model.js";
+import CourseProgress from "../Models/CourseProgress.model.js";
 
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import User from "../Models/user.model.js";
 import { uploadToCloudinary } from "../lib/cloudinary-course.config.js";
 import { updateGradebookOnSubmission } from "../Utiles/updateGradebookOnSubmission.js";
-import {
-  ValidationError,
-  NotFoundError,
-} from "../Utiles/errors.js";
+import { ValidationError, NotFoundError } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 import { notifyGradePosted } from "../Utiles/notificationService.js";
 
@@ -32,7 +30,7 @@ export const submission = asyncHandler(async (req, res) => {
   if (alreadySubmitted) {
     throw new ValidationError(
       "You have already submitted this assessment",
-      "SUB_001"
+      "SUB_001",
     );
   }
 
@@ -62,12 +60,14 @@ export const submission = asyncHandler(async (req, res) => {
   let totalScore = 0;
   let maxScore = 0;
 
+
   const dueDate = new Date(assessment.dueDate.date)
     .toISOString()
     .split("T")[0];
   const dueTime = assessment.dueDate.time;
   const dueDateTime = new Date(`${dueDate}T${dueTime}`);
   const now = new Date();
+
 
   const override = assessment.studentDueDateOverrides.find(
     o => o.student.toString() === studentId
@@ -133,7 +133,6 @@ export const submission = asyncHandler(async (req, res) => {
     }
   });
 
-
   const graded = processedAnswers.every((a) => !a.requiresManualCheck);
 
   const submission = new Submission({
@@ -151,8 +150,23 @@ export const submission = asyncHandler(async (req, res) => {
     submission.studentId,
     assessment.course,
     submission.assessment,
-    "assessment"
+    "assessment",
   );
+
+  // Mark course as fully completed if this was a final assessment
+  if (assessment.type === "final-assessment") {
+    await CourseProgress.findOneAndUpdate(
+      { studentId, courseId: assessment.course },
+      {
+        $set: {
+          isCompleted: true,
+          completedAt: new Date(),
+          finalAssessmentId: assessment._id,
+        },
+      },
+      { upsert: true, new: true },
+    );
+  }
 
   // ✅ Send email if the entire assessment was auto-graded
   if (graded) {
@@ -208,7 +222,6 @@ export const submission = asyncHandler(async (req, res) => {
   `,
       };
 
-
       try {
         await transporter.sendMail(mailOptions);
       } catch (emailErr) {
@@ -223,7 +236,8 @@ export const submission = asyncHandler(async (req, res) => {
       assessment.title,
       totalScore,
       maxScore,
-      assessment.course
+      assessment.course,
+
     );
   }
 
@@ -291,20 +305,21 @@ export const getSubmissionById = asyncHandler(async (req, res) => {
   });
 });
 
-export const getSubmissionsofAssessment_forTeacher = asyncHandler(async (req, res) => {
-  const { assessmentId } = req.params;
+export const getSubmissionsofAssessment_forTeacher = asyncHandler(
+  async (req, res) => {
+    const { assessmentId } = req.params;
 
-  const submissions = await Submission.find({
-    assessment: assessmentId,
-  }).populate({
-    path: "studentId",
-    select: "firstName lastName email profileImg",
-  });
+    const submissions = await Submission.find({
+      assessment: assessmentId,
+    }).populate({
+      path: "studentId",
+      select: "firstName lastName email profileImg",
+    });
 
-  const assessment = await Assessment.findById(assessmentId);
-  if (!assessment) {
-    throw new NotFoundError("Assessment not found", "SUB_004");
-  }
+    const assessment = await Assessment.findById(assessmentId);
+    if (!assessment) {
+      throw new NotFoundError("Assessment not found", "SUB_004");
+    }
 
   const questionMap = {};
   assessment.questions.forEach((q) => {
@@ -326,11 +341,12 @@ export const getSubmissionsofAssessment_forTeacher = asyncHandler(async (req, re
     };
   });
 
-  return res.status(200).json({
-    submissions: submissionsWithDetails,
-    message: "Submissions found",
-  });
-});
+    return res.status(200).json({
+      submissions: submissionsWithDetails,
+      message: "Submissions found",
+    });
+  },
+);
 
 // export const checkbyTeacher = async (req, res) => {
 //   try {
@@ -375,9 +391,8 @@ export const teacherGrading = asyncHandler(async (req, res) => {
   const manualGrades = req.body;
 
   // ✅ Populate studentId from User model
-  const submission = await Submission.findById(submissionId).populate(
-    "studentId"
-  );
+  const submission =
+    await Submission.findById(submissionId).populate("studentId");
 
   const assessment = await Assessment.findById(submission.assessment);
 
@@ -394,12 +409,12 @@ export const teacherGrading = asyncHandler(async (req, res) => {
     if (awardedPoints > maxPoints) {
       throw new ValidationError(
         `Points for question ${questionId} can't exceed max points.`,
-        "SUB_006"
+        "SUB_006",
       );
     } else if (awardedPoints < 0) {
       throw new ValidationError(
         `Points for question ${questionId} can't be negative.`,
-        "SUB_007"
+        "SUB_007",
       );
     }
 
@@ -435,7 +450,8 @@ export const teacherGrading = asyncHandler(async (req, res) => {
     assessment.title,
     submission.totalScore,
     allcourseMaxPoint,
-    assessment.course
+ assessment.course,
+
   );
 
   // ✅ Send email only if the user has an email

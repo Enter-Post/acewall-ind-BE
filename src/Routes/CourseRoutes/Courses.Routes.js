@@ -35,6 +35,12 @@ import {
   toggleReferral,
   getStudentofCourse,
 } from "../../Contollers/CourseControllers/courses.controller.sch.js";
+import {
+  generateCertificate,
+  getCertificateEligibility,
+  getCourseProgress,
+  requestTranscript,
+} from "../../Contollers/CourseProgress.controller.js";
 
 const router = express.Router();
 router.get("/with-meetings", isUser, getCoursesWithMeetings);
@@ -67,7 +73,7 @@ router.get("/:courseId/export", getFullCourseData);
  *       404:
  *         description: Course not found
  */
-router.post('/import-full-course', isUser, importCourseFromJSON);
+router.post("/import-full-course", isUser, importCourseFromJSON);
 /**
  * @openapi
  * /api/course/import-full-course:
@@ -124,14 +130,14 @@ router.post(
     { name: "governmentId", maxCount: 1 },
     { name: "transcript", maxCount: 1 },
   ]),
-  createCourseSch
+  createCourseSch,
 );
 router.get("/getVerifiedCourses", isUser, getVerifiedCourses);
 router.get("/all", getAllCoursesSch);
 router.get("/getindividualcourse", isUser, getCoursesByTeacherSch);
 router.get("/getCoursesforadminofteacher", isUser, getCoursesforadminofteacher);
 router.get("/getallCoursesforTeacher", isUser, getallcoursesforteacher);
-router.get("/getTeacherCoursesForDesboard", isUser, teacherCourseForDesboard)
+router.get("/getTeacherCoursesForDesboard", isUser, teacherCourseForDesboard);
 router.get("/:subCategoryId", getCoursesbySubcategorySch);
 router.get("/details/:courseId", isUser, getCourseDetails);
 router.get("/get/:id", getunPurchasedCourseByIdSch);
@@ -143,7 +149,7 @@ router.put(
   "/thumbnail/:courseId",
   isUser,
   upload.single("thumbnail"),
-  thumnailChange
+  thumnailChange,
 );
 /**
  * @openapi
@@ -221,12 +227,17 @@ router.put("/reapply/:courseId", isUser, applyCourseReverification);
 router.put("/rejectCourse/:courseId", isUser, rejectCourse);
 router.put("/archive/:courseId", isUser, archivedCourse);
 router.get("/getCourseDocuments/:courseId", isUser, getRequiredDocumentforEdit);
-router.put("/editCourseDocuments/:courseId", isUser, upload.fields([
-  { name: "resume", maxCount: 1 },
-  { name: "certificate", maxCount: 1 },
-  { name: "governmentId", maxCount: 1 },
-  { name: "transcript", maxCount: 1 }
-]), editCoureDocument);
+router.put(
+  "/editCourseDocuments/:courseId",
+  isUser,
+  upload.fields([
+    { name: "resume", maxCount: 1 },
+    { name: "certificate", maxCount: 1 },
+    { name: "governmentId", maxCount: 1 },
+    { name: "transcript", maxCount: 1 },
+  ]),
+  editCoureDocument,
+);
 /**
  * @openapi
  * /api/course/editCourseDocuments/{courseId}:
@@ -265,7 +276,16 @@ router.put("/editCourseDocuments/:courseId", isUser, upload.fields([
  */
 router.put("/course/:courseId/toggle-grading", toggleGradingSystem);
 router.put("/course/:courseId/toggle-referral", isUser, toggleReferral);
-router.get('/stats/:courseId', getCourseEnrollmentStats);
+router.get("/stats/:courseId", getCourseEnrollmentStats);
+
+router.get("/:courseId/course-progress", isUser, getCourseProgress);
+router.get(
+  "/:courseId/certificate-eligibility",
+  isUser,
+  getCertificateEligibility,
+);
+router.post("/:courseId/generate-certificate", isUser, generateCertificate);
+router.post("/:courseId/request-transcript", isUser, requestTranscript);
 
 /**
  * @openapi
@@ -298,6 +318,7 @@ router.get('/stats/:courseId', getCourseEnrollmentStats);
  *                   items:
  *                     $ref: '#/components/schemas/CourseStatsItem'
  */
+
 
 router.get("/getStudentofCourse/:courseId", isUser, getStudentofCourse)
 
