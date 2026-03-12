@@ -13,6 +13,12 @@ import {
   ValidationError,
 } from "../Utiles/errors.js";
 import PDFDocument from "pdfkit";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 const getOverallCoursePercentage = async (studentId, courseId) => {
   const gradebook = await Gradebook.findOne({ studentId, courseId });
@@ -261,6 +267,16 @@ export const generateCertificate = asyncHandler(async (req, res) => {
   // Certificate ID (No line above)
   const uniqueId = progress._id.toString().toUpperCase().slice(-8);
   doc.fontSize(12).font("Helvetica-Bold").fillColor(black).text(`Certificate ID: AS-${uniqueId}`, pageWidth - 300, footerY, { width: 200, align: "center" });
+
+  // Seal image (Center Bottom)
+  const sealWidth = 90;
+  try {
+    const sealPath = path.join(__dirname, "..", "image", "Seal", "sealimage.png");
+    doc.image(sealPath, (pageWidth - sealWidth) / 2, pageHeight - 130, { width: sealWidth });
+  } catch (error) {
+    console.error("Seal image not found at:", error.message);
+  }
+
 
   // Organization Name at bottom center - moved lower
   doc
