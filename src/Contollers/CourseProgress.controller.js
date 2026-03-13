@@ -19,10 +19,9 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-
 const getOverallCoursePercentage = async (studentId, courseId) => {
   const gradebook = await Gradebook.findOne({ studentId, courseId });
-  return gradebook ? (gradebook.finalPercentage || 0) : 0;
+  return gradebook ? gradebook.finalPercentage || 0 : 0;
 };
 
 export const getCertificateEligibility = asyncHandler(async (req, res) => {
@@ -40,7 +39,8 @@ export const getCertificateEligibility = asyncHandler(async (req, res) => {
   if (!progress || !progress.isCompleted) {
     return res.status(200).json({
       eligible: false,
-      message: "Please attempt the final assessment to be eligible for the certificate.",
+      message:
+        "Please attempt the final assessment to be eligible for the certificate.",
     });
   }
 
@@ -114,71 +114,63 @@ export const generateCertificate = asyncHandler(async (req, res) => {
   const pageHeight = doc.page.height;
 
   // Colors
-  const darkBlue = "#1a365d";
+  const darkGreen = "#008000"; 
+  const accentBlue = "#2a4365";
   const gold = "#d4af37";
   const white = "#ffffff";
   const black = "#000000";
   const gray = "#4a5568";
 
   // --- Background and Borders ---
-  // Fill background
   doc.rect(0, 0, pageWidth, pageHeight).fill(white);
 
-  // Geometric shapes (Triangles in corners like the reference)
-  // Top Left
-  doc
-    .moveTo(0, 0)
-    .lineTo(250, 0)
-    .lineTo(0, 250)
-    .fill(darkBlue);
-  
-  doc
-    .moveTo(0, 0)
-    .lineTo(200, 0)
-    .lineTo(0, 200)
-    .fill("#2a4365"); // Slightly lighter blue
+  // Decorative Corners (Triangles)
+  const corners = [
+    { x: 0, y: 0, dx: 250, dy: 250 }, // Top Left
+    { x: pageWidth, y: 0, dx: -250, dy: 250 }, // Top Right
+    { x: 0, y: pageHeight, dx: 250, dy: -250 }, // Bottom Left
+    { x: pageWidth, y: pageHeight, dx: -250, dy: -250 }, // Bottom Right
+  ];
 
-  // Bottom Right
-  doc
-    .moveTo(pageWidth, pageHeight)
-    .lineTo(pageWidth - 250, pageHeight)
-    .lineTo(pageWidth, pageHeight - 250)
-    .fill(darkBlue);
-
-  doc
-    .moveTo(pageWidth, pageHeight)
-    .lineTo(pageWidth - 200, pageHeight)
-    .lineTo(pageWidth, pageHeight - 200)
-    .fill("#2a4365");
+  corners.forEach((c) => {
+    doc.moveTo(c.x, c.y).lineTo(c.x + c.dx, c.y).lineTo(c.x, c.y + c.dy).fill(darkGreen);
+    doc.moveTo(c.x, c.y).lineTo(c.x + c.dx * 0.8, c.y).lineTo(c.x, c.y + c.dy * 0.8).fill(accentBlue);
+  });
 
   // Gold accent lines in corners
   doc.lineWidth(2).strokeColor(gold);
   doc.moveTo(10, 10).lineTo(230, 10).lineTo(10, 230).closePath().stroke();
+  doc.moveTo(pageWidth - 10, 10).lineTo(pageWidth - 230, 10).lineTo(pageWidth - 10, 230).closePath().stroke();
+  doc.moveTo(10, pageHeight - 10).lineTo(230, pageHeight - 10).lineTo(10, pageHeight - 230).closePath().stroke();
   doc.moveTo(pageWidth - 10, pageHeight - 10).lineTo(pageWidth - 230, pageHeight - 10).lineTo(pageWidth - 10, pageHeight - 230).closePath().stroke();
 
-  // Internal border
-  doc
-    .rect(40, 40, pageWidth - 80, pageHeight - 80)
-    .lineWidth(1)
-    .strokeColor(gold)
-    .stroke();
+  // Internal gold border
+  doc.rect(40, 40, pageWidth - 80, pageHeight - 80).lineWidth(1).strokeColor(gold).stroke();
 
-  // --- Content ---
-  
-  // Title: Certificate of Completion
+  // --- 1. Certificate ID (Top Center, Small, Not Bold) ---
+  const uniqueId = progress._id.toString().toUpperCase().slice(-8);
+  doc
+    .fontSize(11)
+    .font("Helvetica")
+    .fillColor(gray)
+    .text(`Certificate ID: AS-${uniqueId}`, 0, 20, {
+      align: "center",
+      width: pageWidth,
+    });
+
+  // --- 2. Main Title Section ---
   doc
     .fontSize(42)
     .font("Helvetica-Bold")
     .fillColor(black)
     .text("CERTIFICATE", 0, 100, { align: "center", width: pageWidth });
-  
+
   doc
     .fontSize(20)
     .font("Helvetica")
     .fillColor(gray)
     .text("OF COMPLETION", 0, 145, { align: "center", width: pageWidth });
 
-  // "This certificate of completion is presented to"
   doc
     .fontSize(14)
     .font("Helvetica")
@@ -192,21 +184,15 @@ export const generateCertificate = asyncHandler(async (req, res) => {
   doc
     .fontSize(32)
     .font("Helvetica-Bold")
-    .fillColor(darkBlue)
+    .fillColor(darkGreen)
     .text(`${student.firstName} ${student.lastName}`, 0, 220, {
       align: "center",
       width: pageWidth,
     });
 
-  // Underline for name
-  doc
-    .moveTo(pageWidth / 4, 255)
-    .lineTo((3 * pageWidth) / 4, 255)
-    .lineWidth(1)
-    .strokeColor(black)
-    .stroke();
+  // Name Underline
+  doc.moveTo(pageWidth / 4, 255).lineTo((3 * pageWidth) / 4, 255).lineWidth(1).strokeColor(black).stroke();
 
-  // Success message
   doc
     .fontSize(14)
     .font("Helvetica")
@@ -226,64 +212,78 @@ export const generateCertificate = asyncHandler(async (req, res) => {
       width: pageWidth,
     });
 
-  // Underline for course name
-  doc
-    .moveTo(pageWidth / 6, 335)
-    .lineTo((5 * pageWidth) / 6, 335)
-    .lineWidth(0.5)
-    .strokeColor(gray)
-    .stroke();
+  // Course Underline
+  doc.moveTo(pageWidth / 6, 335).lineTo((5 * pageWidth) / 6, 335).lineWidth(0.5).strokeColor(gray).stroke();
 
-  // Date Information
+  // Date
   const date = progress.completedAt || new Date();
   const day = date.getDate();
-  const month = date.toLocaleString('default', { month: 'long' });
+  const month = date.toLocaleString("default", { month: "long" });
   const year = date.getFullYear();
+
+  // Ordinal suffix logic
+  const j = day % 10;
+  const k = day % 100;
+  let suffix = "th";
+  if (j === 1 && k !== 11) suffix = "st";
+  if (j === 2 && k !== 12) suffix = "nd";
+  if (j === 3 && k !== 13) suffix = "rd";
 
   doc
     .fontSize(14)
     .font("Helvetica")
     .fillColor(gray)
-    .text(`On this ${day} Day of ${month} in the year of ${year}`, 0, 360, {
+    .text(`On this ${day}${suffix} Day of ${month} in the year of ${year}`, 0, 360, {
       align: "center",
       width: pageWidth,
     });
 
-  // Footer area (Instructor & Certificate ID)
-  // Instructor Name
+  // --- 3. Footer Section (Instructor & Co-Founder) ---
+  // footerY set to 450 to give more gap from the bottom corner shapes
+  const footerY = 450; 
+
+  // Instructor logic
   let instructorName = "N/A";
   if (course.createdby) {
     const teacher = await User.findById(course.createdby);
-    if (teacher) {
-       instructorName = `${teacher.firstName} ${teacher.lastName}`;
-    }
+    if (teacher) instructorName = `${teacher.firstName} ${teacher.lastName}`;
   }
 
-  const footerY = 460;
-  
-  // Instructor (No line above)
-  doc.fontSize(12).font("Helvetica-Bold").fillColor(black).text(`Instructor: ${instructorName}`, 100, footerY, { width: 200, align: "center" });
+  doc
+    .fontSize(12)
+    .font("Helvetica-Bold")
+    .fillColor(black)
+    .text(`Instructor: ${instructorName}`, 120, footerY, {
+      width: 200,
+      align: "left",
+    });
 
-  // Certificate ID (No line above)
-  const uniqueId = progress._id.toString().toUpperCase().slice(-8);
-  doc.fontSize(12).font("Helvetica-Bold").fillColor(black).text(`Certificate ID: AS-${uniqueId}`, pageWidth - 300, footerY, { width: 200, align: "center" });
+  doc
+    .fontSize(12)
+    .font("Helvetica-Bold")
+    .fillColor(black)
+    .text("CEO/Founder: Keisha Wallace", pageWidth - 320, footerY, {
+      width: 200,
+      align: "right",
+    });
 
-  // Seal image (Center Bottom)
+  // Seal Image (Centered Bottom)
   const sealWidth = 90;
   try {
     const sealPath = path.join(__dirname, "..", "image", "Seal", "sealimage.png");
-    doc.image(sealPath, (pageWidth - sealWidth) / 2, pageHeight - 130, { width: sealWidth });
+    doc.image(sealPath, (pageWidth - sealWidth) / 2, pageHeight - 140, {
+      width: sealWidth,
+    });
   } catch (error) {
-    console.error("Seal image not found at:", error.message);
+    console.error("Seal image not found:", error.message);
   }
 
-
-  // Organization Name at bottom center - moved lower
+  // Organization Name
   doc
     .fontSize(10)
     .font("Helvetica")
     .fillColor(gray)
-    .text("Acewall Scholars Academy", 0, pageHeight - 30, {
+    .text("Acewall Scholars Academy", 0, pageHeight - 35, {
       align: "center",
       width: pageWidth,
     });
