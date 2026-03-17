@@ -434,6 +434,9 @@ export const deleteFile = asyncHandler(async (req, res) => {
 export const getAssesmentbyID = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const validObjectId = new mongoose.Types.ObjectId(assessmentId);
+  const { resubmission } = req.query;
+
+  console.log("resubmission in assessment getting:", resubmission)
 
   console.log(assessmentId, validObjectId);
   const assessment = await Assessment.findById(validObjectId).populate("category");
@@ -445,6 +448,7 @@ export const getAssesmentbyID = asyncHandler(async (req, res) => {
   return res.status(200).json({
     assessment,
     message: "Assessment found",
+    resubmission,
   });
 });
 
@@ -633,87 +637,87 @@ export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
   ]);
 
   // 3. Fetch discussions
-const discussions = await Discussion.aggregate([
-  { $match: { course: { $in: courseIds } } },
-  ...commonLookups,
-  {
-    $lookup: {
-      from: "discussioncomments",
-      let: { discussionId: "$_id" },
-      pipeline: [
-        {
-          $match: {
-            $expr: {
-              $and: [
-                { $eq: ["$discussion", "$$discussionId"] },
-                { $eq: ["$createdby", new mongoose.Types.ObjectId(studentId)] },
-              ],
+  const discussions = await Discussion.aggregate([
+    { $match: { course: { $in: courseIds } } },
+    ...commonLookups,
+    {
+      $lookup: {
+        from: "discussioncomments",
+        let: { discussionId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$discussion", "$$discussionId"] },
+                  { $eq: ["$createdby", new mongoose.Types.ObjectId(studentId)] },
+                ],
+              },
             },
           },
-        },
-      ],
-      as: "comments",
+        ],
+        as: "comments",
+      },
     },
-  },
-  {
-    $addFields: {
-      // 1. Find the specific override for this student
-      studentOverride: {
-        $arrayElemAt: [
-          {
-            $filter: {
-              input: { $ifNull: ["$studentDueDateOverrides", []] },
-              as: "override",
-              cond: { $eq: ["$$override.student", new mongoose.Types.ObjectId(studentId)] }
-            }
-          },
-          0
-        ]
-      }
-    }
-  },
-  {
-    $addFields: {
-      isSubmitted: { $gt: [{ $size: "$comments" }, 0] },
-      title: "$topic",
-      source: "discussion",
-      // 2. Determine if the due date is extended
-      isExtended: { $gt: ["$studentOverride", null] },
-      // 3. Override the original dueDate object if an override exists
-      dueDate: {
-        $cond: {
-          if: { $gt: ["$studentOverride", null] },
-          then: "$studentOverride.newDueDate",
-          else: "$dueDate"
+    {
+      $addFields: {
+        // 1. Find the specific override for this student
+        studentOverride: {
+          $arrayElemAt: [
+            {
+              $filter: {
+                input: { $ifNull: ["$studentDueDateOverrides", []] },
+                as: "override",
+                cond: { $eq: ["$$override.student", new mongoose.Types.ObjectId(studentId)] }
+              }
+            },
+            0
+          ]
         }
       }
-    }
-  },
-  {
-    $project: {
-      _id: 1,
-      type: 1,
-      title: 1,
-      description: 1,
-      dueDate: 1,         // Will show { date, time } from either source
-      isExtended: 1,      // Useful for highlighting the date in the UI
-      createdAt: 1,
-      isSubmitted: 1,
-      category: 1,
-      source: 1,
-      "course._id": 1,
-      "course.courseTitle": 1,
-      "course.thumbnail": 1,
-      "course.semesterbased": 1,
-      "chapter._id": 1,
-      "lesson._id": 1,
-      "semester.name": 1,
-      "quarter.name": 1,
-      "chapter.title": 1,
-      "lesson.title": 1,
     },
-  },
-]);
+    {
+      $addFields: {
+        isSubmitted: { $gt: [{ $size: "$comments" }, 0] },
+        title: "$topic",
+        source: "discussion",
+        // 2. Determine if the due date is extended
+        isExtended: { $gt: ["$studentOverride", null] },
+        // 3. Override the original dueDate object if an override exists
+        dueDate: {
+          $cond: {
+            if: { $gt: ["$studentOverride", null] },
+            then: "$studentOverride.newDueDate",
+            else: "$dueDate"
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        type: 1,
+        title: 1,
+        description: 1,
+        dueDate: 1,         // Will show { date, time } from either source
+        isExtended: 1,      // Useful for highlighting the date in the UI
+        createdAt: 1,
+        isSubmitted: 1,
+        category: 1,
+        source: 1,
+        "course._id": 1,
+        "course.courseTitle": 1,
+        "course.thumbnail": 1,
+        "course.semesterbased": 1,
+        "chapter._id": 1,
+        "lesson._id": 1,
+        "semester.name": 1,
+        "quarter.name": 1,
+        "chapter.title": 1,
+        "lesson.title": 1,
+      },
+    },
+  ]);
 
   // 4. Merge and sort
   const combined = [...assessments, ...discussions].sort((a, b) => {
@@ -806,9 +810,9 @@ export const checkFinalAssessmentExists = asyncHandler(async (req, res) => {
     exists: !!existingFinal,
     assessment: existingFinal
       ? {
-          _id: existingFinal._id,
-          title: existingFinal.title,
-        }
+        _id: existingFinal._id,
+        title: existingFinal.title,
+      }
       : null,
   });
 });
@@ -847,5 +851,27 @@ export const setDueDateForStudent = asyncHandler(async (req, res) => {
   await assessment.save();
   return res.status(200).json({
     message: "Due date updated for student"
+  });
+});
+
+export const settingAllowResubmission = asyncHandler(async (req, res) => {
+  const { assessmentId } = req.params;
+  const { allowResubmission } = req.body;
+
+  const assessment = await Assessment.findById(assessmentId);
+
+  console.log(allowResubmission, "allowResubmission in resubmission setting");
+
+
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found", "ASS_016");
+  }
+
+  assessment.allowResubmission = allowResubmission;
+  await assessment.save();
+
+  return res.status(200).json({
+    message: "Resubmission setting updated successfully",
+    allowResubmission: assessment.allowResubmission
   });
 });

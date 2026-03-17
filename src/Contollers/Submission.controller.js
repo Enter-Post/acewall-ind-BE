@@ -19,6 +19,7 @@ export const submission = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const answers = req.body;
   const files = req.files;
+  const { resubmission } = req.query;
 
   let finalQuestionsubmitted;
 
@@ -27,9 +28,9 @@ export const submission = asyncHandler(async (req, res) => {
     assessment: assessmentId,
   });
 
-  if (alreadySubmitted) {
+  if (alreadySubmitted && !alreadySubmitted.allowResubmission) {
     throw new ValidationError(
-      "You have already submitted this assessment",
+      "You have already submitted this assessment and you are not allowed to resubmit.",
       "SUB_001",
     );
   }
@@ -142,6 +143,8 @@ export const submission = asyncHandler(async (req, res) => {
     status,
     totalScore,
     graded,
+    allowResubmission: assessment.allowResubmission || false,
+    resubmitted: {status: resubmission, count: alreadySubmitted ? alreadySubmitted.resubmitted.count + 1 : 0},
   });
 
   await submission.save();
@@ -321,25 +324,25 @@ export const getSubmissionsofAssessment_forTeacher = asyncHandler(
       throw new NotFoundError("Assessment not found", "SUB_004");
     }
 
-  const questionMap = {};
-  assessment.questions.forEach((q) => {
-    questionMap[q._id.toString()] = {
-      question: q.question,
-      type: q.type,
-      points: q.points,
-    };
-  });
+    const questionMap = {};
+    assessment.questions.forEach((q) => {
+      questionMap[q._id.toString()] = {
+        question: q.question,
+        type: q.type,
+        points: q.points,
+      };
+    });
 
-  const submissionsWithDetails = submissions.map((sub) => {
-    const answersWithDetails = sub.answers.map((ans) => ({
-      ...ans.toObject(),
-      questionDetails: questionMap[ans.questionId],
-    }));
-    return {
-      ...sub.toObject(),
-      answers: answersWithDetails,
-    };
-  });
+    const submissionsWithDetails = submissions.map((sub) => {
+      const answersWithDetails = sub.answers.map((ans) => ({
+        ...ans.toObject(),
+        questionDetails: questionMap[ans.questionId],
+      }));
+      return {
+        ...sub.toObject(),
+        answers: answersWithDetails,
+      };
+    });
 
     return res.status(200).json({
       submissions: submissionsWithDetails,
@@ -450,7 +453,7 @@ export const teacherGrading = asyncHandler(async (req, res) => {
     assessment.title,
     submission.totalScore,
     allcourseMaxPoint,
- assessment.course,
+    assessment.course,
 
   );
 
