@@ -22,11 +22,23 @@ export const submission = asyncHandler(async (req, res) => {
   const { resubmission } = req.query;
 
   let finalQuestionsubmitted;
+  let submissionCount;
 
   const alreadySubmitted = await Submission.findOne({
     studentId,
     assessment: assessmentId,
   });
+
+  if (alreadySubmitted) {
+    const lastSubmission = await Submission.find({
+      studentId,
+      assessment: assessmentId,
+    }).sort({ createdAt: -1 }).limit(1);
+
+    console.log(lastSubmission, "lastSubmission");
+
+    submissionCount = ++lastSubmission[0].resubmitted.count || 0;
+  }
 
   if (alreadySubmitted && !alreadySubmitted.allowResubmission) {
     throw new ValidationError(
@@ -144,7 +156,7 @@ export const submission = asyncHandler(async (req, res) => {
     totalScore,
     graded,
     allowResubmission: assessment.allowResubmission || false,
-    resubmitted: {status: resubmission, count: alreadySubmitted ? alreadySubmitted.resubmitted.count + 1 : 0},
+    resubmitted: { status: resubmission, count: submissionCount },
   });
 
   await submission.save();
