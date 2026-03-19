@@ -13,10 +13,15 @@ import {
   ValidationError,
 } from "../Utiles/errors.js";
 import PDFDocument from "pdfkit";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const getOverallCoursePercentage = async (studentId, courseId) => {
   const gradebook = await Gradebook.findOne({ studentId, courseId });
-  return gradebook ? (gradebook.finalPercentage || 0) : 0;
+  return gradebook ? gradebook.finalPercentage || 0 : 0;
 };
 
 export const getCertificateEligibility = asyncHandler(async (req, res) => {
@@ -34,7 +39,8 @@ export const getCertificateEligibility = asyncHandler(async (req, res) => {
   if (!progress || !progress.isCompleted) {
     return res.status(200).json({
       eligible: false,
-      message: "Please attempt the final assessment to be eligible for the certificate.",
+      message:
+        "Please attempt the final assessment to be eligible for the certificate.",
     });
   }
 
@@ -58,179 +64,580 @@ export const getCertificateEligibility = asyncHandler(async (req, res) => {
 });
 
 export const generateCertificate = asyncHandler(async (req, res) => {
+
   const studentId = req.user._id;
+
   const { courseId } = req.params;
 
+
+
   const progress = await CourseProgress.findOne({ studentId, courseId });
+
   const course = await CourseSch.findById(courseId);
+
   const student = await User.findById(studentId);
 
+
+
   if (!progress || !progress.isCompleted) {
-    throw new AuthenticationError("Please attempt the final assessment first.", "CRS_002");
+
+    throw new AuthenticationError(
+
+      "Please attempt the final assessment first.",
+
+      "CRS_002",
+
+    );
+
   }
+
+
 
   const percentage = await getOverallCoursePercentage(studentId, courseId);
+
   const passingPercentage = course.passingPercentage || 80;
+
   if (percentage < passingPercentage) {
+
     throw new ValidationError(
+
       `Your overall course score is ${percentage.toFixed(1)}%. Please achieve at least ${passingPercentage}% overall to get the certificate.`,
+
       "CRS_006",
+
     );
+
   }
+
+
 
   if (!course.offersCertificate) {
+
     throw new ValidationError(
+
       "This course does not offer a certificate",
+
       "CRS_003",
+
     );
+
   }
 
+
+
   const doc = new PDFDocument({
+
     layout: "landscape",
+
     size: "A4",
+
     margin: 0,
+
     autoFirstPage: true,
+
   });
 
+
+
   // Set response headers
+
   res.setHeader("Content-Type", "application/pdf");
+
   res.setHeader(
+
     "Content-Disposition",
+
     `attachment; filename=${course.courseTitle.replace(/\s+/g, "_")}_Certificate.pdf`,
+
   );
+
+
 
   doc.pipe(res);
 
-  const pageWidth = doc.page.width; // ~841 pt (landscape A4)
-  const pageHeight = doc.page.height; // ~595 pt (landscape A4)
 
-  // Outer decorative border
-  doc
-    .rect(20, 20, pageWidth - 40, pageHeight - 40)
-    .lineWidth(2)
-    .stroke("#10b981");
-  // Inner thin border
-  doc
-    .rect(28, 28, pageWidth - 56, pageHeight - 56)
-    .lineWidth(0.5)
-    .stroke("#10b981");
 
-  // --- Academy name ---
-  doc
-    .fontSize(13)
-    .font("Helvetica-Bold")
-    .fillColor("#555")
-    .text("Acewall Scholars Academy", 0, 55, {
-      align: "center",
-      width: pageWidth,
-    });
+  const pageWidth = doc.page.width;
 
-  // --- Main heading ---
-  doc
-    .fontSize(36)
-    .font("Helvetica-Bold")
-    .fillColor("#10b981")
-    .text("Certificate of Completion", 0, 90, {
-      align: "center",
-      width: pageWidth,
-    });
+  const pageHeight = doc.page.height;
 
-  // Decorative divider line
-  const divY = 142;
+
+
+  // Colors
+
+  const darkBlue = "#008000";
+
+  const gold = "#d4af37";
+
+  const white = "#ffffff";
+
+  const black = "#000000";
+
+  const gray = "#4a5568";
+
+
+
+  // --- Background and Borders ---
+
+  // Fill background
+
+  doc.rect(0, 0, pageWidth, pageHeight).fill(white);
+
+
+
+  // Geometric shapes (Triangles in corners like the reference)
+
+  // Top Left
+
+  doc.moveTo(0, 0).lineTo(250, 0).lineTo(0, 250).fill(darkBlue);
+
+  doc.moveTo(0, 0).lineTo(200, 0).lineTo(0, 200).fill("#2a4365");
+
+
+
+  // 2. Top Right (Added)
+
   doc
-    .moveTo(pageWidth * 0.25, divY)
-    .lineTo(pageWidth * 0.75, divY)
+
+    .moveTo(pageWidth, 0)
+
+    .lineTo(pageWidth - 250, 0)
+
+    .lineTo(pageWidth, 250)
+
+    .fill(darkBlue);
+
+  doc
+
+    .moveTo(pageWidth, 0)
+
+    .lineTo(pageWidth - 200, 0)
+
+    .lineTo(pageWidth, 200)
+
+    .fill("#2a4365");
+
+
+
+  // 3. Bottom Left (Added)
+
+  doc
+
+    .moveTo(0, pageHeight)
+
+    .lineTo(250, pageHeight)
+
+    .lineTo(0, pageHeight - 250)
+
+    .fill(darkBlue);
+
+  doc
+
+    .moveTo(0, pageHeight)
+
+    .lineTo(200, pageHeight)
+
+    .lineTo(0, pageHeight - 200)
+
+    .fill("#2a4365");
+
+
+
+  // 4. Bottom Right
+
+  doc
+
+    .moveTo(pageWidth, pageHeight)
+
+    .lineTo(pageWidth - 250, pageHeight)
+
+    .lineTo(pageWidth, pageHeight - 250)
+
+    .fill(darkBlue);
+
+  doc
+
+    .moveTo(pageWidth, pageHeight)
+
+    .lineTo(pageWidth - 200, pageHeight)
+
+    .lineTo(pageWidth, pageHeight - 200)
+
+    .fill("#2a4365");
+
+
+
+  // Gold accent lines in corners
+
+  doc.lineWidth(2).strokeColor(gold);
+
+  doc.moveTo(10, 10).lineTo(230, 10).lineTo(10, 230).closePath().stroke();
+
+  // Top Right Gold (Added)
+
+  doc
+
+    .moveTo(pageWidth - 10, 10)
+
+    .lineTo(pageWidth - 230, 10)
+
+    .lineTo(pageWidth - 10, 230)
+
+    .closePath()
+
+    .stroke();
+
+  // Bottom Left Gold (Added)
+
+  doc
+
+    .moveTo(10, pageHeight - 10)
+
+    .lineTo(230, pageHeight - 10)
+
+    .lineTo(10, pageHeight - 230)
+
+    .closePath()
+
+    .stroke();
+
+  // Bottom Right Gold
+
+  doc
+
+    .moveTo(pageWidth - 10, pageHeight - 10)
+
+    .lineTo(pageWidth - 230, pageHeight - 10)
+
+    .lineTo(pageWidth - 10, pageHeight - 230)
+
+    .closePath()
+
+    .stroke();
+
+
+
+  // Internal border
+
+  doc
+
+    .rect(40, 40, pageWidth - 80, pageHeight - 80)
+
     .lineWidth(1)
-    .stroke("#10b981");
 
-  // --- "This is to certify that" ---
-  doc
-    .fontSize(16)
-    .font("Helvetica")
-    .fillColor("#555")
-    .text("This is to certify that", 0, 158, {
-      align: "center",
-      width: pageWidth,
-    });
+    .strokeColor(gold)
 
-  // --- Student name ---
+    .stroke();
+
+
+
+  // --- Content ---
+
+
+
+  // Title: Certificate of Completion
+
   doc
-    .fontSize(28)
+
+    .fontSize(42)
+
     .font("Helvetica-Bold")
-    .fillColor("#111")
-    .text(`${student.firstName} ${student.lastName}`, 0, 185, {
-      align: "center",
-      width: pageWidth,
-      underline: true,
-    });
 
-  // --- "has successfully completed" ---
+    .fillColor(black)
+
+    .text("CERTIFICATE", 0, 100, { align: "center", width: pageWidth });
+
+
+
   doc
-    .fontSize(16)
+
+    .fontSize(20)
+
     .font("Helvetica")
-    .fillColor("#555")
-    .text("has successfully completed the course", 0, 228, {
+
+    .fillColor(gray)
+
+    .text("OF COMPLETION", 0, 145, { align: "center", width: pageWidth });
+
+
+
+  // "This certificate of completion is presented to"
+
+  doc
+
+    .fontSize(14)
+
+    .font("Helvetica")
+
+    .fillColor(gray)
+
+    .text("This certificate of completion is presented to", 0, 190, {
+
       align: "center",
+
       width: pageWidth,
+
     });
 
-  // --- Course title ---
-  doc
-    .fontSize(22)
-    .font("Helvetica-Bold")
-    .fillColor("#10b981")
-    .text(course.courseTitle, 0, 256, { align: "center", width: pageWidth });
 
-  // Divider line below course title
-  const divY2 = 294;
+
+  // Student Name
+
   doc
-    .moveTo(pageWidth * 0.25, divY2)
-    .lineTo(pageWidth * 0.75, divY2)
+
+    .fontSize(32)
+
+    .font("Helvetica-Bold")
+
+    .fillColor(darkBlue)
+
+    .text(`${student.firstName} ${student.lastName}`, 0, 220, {
+
+      align: "center",
+
+      width: pageWidth,
+
+    });
+
+
+
+  // Underline for name
+
+  doc
+
+    .moveTo(pageWidth / 4, 255)
+
+    .lineTo((3 * pageWidth) / 4, 255)
+
     .lineWidth(1)
-    .stroke("#10b981");
 
-  // --- Completion date & Certificate ID ---
-  const uniqueId = progress._id.toString().toUpperCase().slice(-8);
+    .strokeColor(black)
+
+    .stroke();
+
+
+
+  // Success message
+
   doc
-    .fontSize(13)
+
+    .fontSize(14)
+
     .font("Helvetica")
-    .fillColor("#777")
+
+    .fillColor(gray)
+
     .text(
-      `Completion Date: ${progress.completedAt.toLocaleDateString()}`,
+
+      "Who has successfully completed and passed the course requirements of",
+
       0,
-      308,
+
+      275,
+
       {
+
         align: "center",
+
         width: pageWidth,
+
       },
+
     );
 
+
+
+  // Course Name
+
   doc
-    .fontSize(13)
-    .font("Helvetica")
-    .fillColor("#777")
-    .text(`Certificate ID: AS-${uniqueId}`, 0, 328, {
+
+    .fontSize(22)
+
+    .font("Helvetica-Bold")
+
+    .fillColor(black)
+
+    .text(course.courseTitle, 0, 305, {
+
       align: "center",
+
       width: pageWidth,
+
     });
 
-  // --- Instructor name ---
+
+
+  // Underline for course name
+
+  doc
+
+    .moveTo(pageWidth / 6, 335)
+
+    .lineTo((5 * pageWidth) / 6, 335)
+
+    .lineWidth(0.5)
+
+    .strokeColor(gray)
+
+    .stroke();
+
+
+
+  // Date Information
+
+  const date = progress.completedAt || new Date();
+
+  const day = date.getDate();
+
+  const month = date.toLocaleString("default", { month: "long" });
+
+  const year = date.getFullYear();
+
+
+
+  doc
+
+    .fontSize(14)
+
+    .font("Helvetica")
+
+    .fillColor(gray)
+
+    .text(`On this ${day} Day of ${month} in the year of ${year}`, 0, 360, {
+
+      align: "center",
+
+      width: pageWidth,
+
+    });
+
+
+
+  // Footer area (Instructor & Certificate ID)
+
+  // Instructor Name
+
+  let instructorName = "N/A";
+
   if (course.createdby) {
+
     const teacher = await User.findById(course.createdby);
+
     if (teacher) {
-      doc
-        .fontSize(13)
-        .font("Helvetica-Bold")
-        .fillColor("#333")
-        .text(`Instructor: ${teacher.firstName} ${teacher.lastName}`, 0, 360, {
-          align: "center",
-          width: pageWidth,
-        });
+
+      instructorName = `${teacher.firstName} ${teacher.lastName}`;
+
     }
+
   }
 
+
+
+  const footerY = 460;
+
+
+
+  // Instructor (No line above)
+
+  doc
+
+    .fontSize(12)
+
+    .font("Helvetica-Bold")
+
+    .fillColor(black)
+
+    .text(`Instructor: ${instructorName}`, 100, footerY, {
+
+      width: 200,
+
+      align: "center",
+
+    });
+
+
+
+  // Certificate ID (No line above)
+
+  const uniqueId = progress._id.toString().toUpperCase().slice(-8);
+
+  doc
+
+    .fontSize(12)
+
+    .font("Helvetica-Bold")
+
+    .fillColor(black)
+
+    .text(`Certificate ID: AS-${uniqueId}`, pageWidth - 300, footerY, {
+
+      width: 200,
+
+      align: "center",
+
+    });
+
+
+
+  // Seal image (Center Bottom)
+
+  const sealWidth = 90;
+
+  try {
+
+    const sealPath = path.join(
+
+      __dirname,
+
+      "..",
+
+      "image",
+
+      "Seal",
+
+      "sealimage.png",
+
+    );
+
+    doc.image(sealPath, (pageWidth - sealWidth) / 2, pageHeight - 130, {
+
+      width: sealWidth,
+
+    });
+
+  } catch (error) {
+
+    console.error("Seal image not found at:", error.message);
+
+  }
+
+
+
+  // Organization Name at bottom center - moved lower
+
+  doc
+
+    .fontSize(10)
+
+    .font("Helvetica")
+
+    .fillColor(gray)
+
+    .text("Acewall Scholars Academy", 0, pageHeight - 30, {
+
+      align: "center",
+
+      width: pageWidth,
+
+    });
+
+
+
   doc.end();
+
 });
+
+
 
 export const requestTranscript = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
