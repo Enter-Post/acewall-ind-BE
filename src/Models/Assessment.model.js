@@ -81,7 +81,8 @@ const assessmentSchema = new Schema(
       type: String,
       enum: ["12hours", "24hours", "48hours", "noReminder"],
       default: "12hours",
-    }, // in hours
+    },
+    allowResubmission: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

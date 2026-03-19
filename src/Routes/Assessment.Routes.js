@@ -14,6 +14,7 @@ import {
   setReminderTime,
   uploadFiles,
   checkFinalAssessmentExists,
+  settingAllowResubmission,
 } from "../Contollers/Assessment.controller.js";
 import { upload } from "../lib/multer.config.js";
 import { isUser } from "../middlewares/Auth.Middleware.js";
@@ -302,6 +303,7 @@ router.delete("/deleteFile/:assessmentId/:fileId", deleteFile);
 
 // router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, isEnrolledMiddleware, getResultsMiddleware, getAssesmentbyID);
 router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, getResultsMiddleware, getAssesmentbyID);
+router.get("/resubmit/:assessmentId", isUser, resolveEnrollmentFromAssessment, getAssesmentbyID);
 
 /**
  * @openapi
@@ -349,5 +351,6 @@ router.put("/editAssessment/:assessmentId", isUser, editAssessmentInfo);
 
 router.post("/createAssessment/updated", upload.any(), isUser, createAssessment_updated);
 router.put(`/setDueDateForStudent/:assessmentId`, isUser, setDueDateForStudent);
+router.put("/setAllowResubmission/:assessmentId", isUser, settingAllowResubmission);
 
 export default router;

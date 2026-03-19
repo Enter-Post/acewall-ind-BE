@@ -44,6 +44,8 @@ const submissionSchema = new mongoose.Schema(
     submittedAt: { type: Date, default: Date.now },
     graded: { type: Boolean, default: false },
     feedback: { type: String },
+    allowResubmission: { type: Boolean, default: false },
+    resubmitted: { status: { type: Boolean, default: false }, count: { type: Number, default: 0 } }, // Track if resubmitted and how many times
   },
   { timestamps: true }
 );
