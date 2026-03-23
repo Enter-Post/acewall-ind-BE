@@ -40,14 +40,15 @@ export const submission = asyncHandler(async (req, res) => {
     submissionCount = ++lastSubmission[0].resubmitted.count || 0;
   }
 
-  if (alreadySubmitted && !alreadySubmitted.allowResubmission) {
+    const assessment = await Assessment.findById(assessmentId);
+
+  if (alreadySubmitted && !assessment.allowResubmission) {
     throw new ValidationError(
       "You have already submitted this assessment and you are not allowed to resubmit.",
       "SUB_001",
     );
   }
 
-  const assessment = await Assessment.findById(assessmentId);
 
   let answerFiles = [];
 
