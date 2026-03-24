@@ -200,7 +200,7 @@ const STATUS_MAP = {
 const buildEnrollmentFilter = (userId, type, status) => {
   const baseFilter = {
     student: userId,
-    enrollmentType: { $ne: "TEACHERENROLLMENT" },
+    // enrollmentType: { $ne: "TEACHERENROLLMENT" },
     status: { $ne: "CANCELLED" },
   };
 
@@ -310,6 +310,8 @@ export const studenCourses = asyncHandler(async (req, res, next) => {
 
     // Build MongoDB filter based on type and status
     const filter = buildEnrollmentFilter(userId, type, status);
+
+    console.log(filter, "Enrollment Filter") // Debug log for filter
 
     // Find enrollments with filter
     let enrolledCourses = await Enrollment.find(filter)
