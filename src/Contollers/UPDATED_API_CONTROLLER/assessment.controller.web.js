@@ -174,6 +174,9 @@ export const createAssessment_updated = asyncHandler(async (req, res) => {
     }
   }
 
+  const finSem = semester !== "undefined" ? semester : null;
+  const finQtr = quarter !== "undefined" ? quarter : null;
+
   // ✅ Save to DB
   const newAssessment = new Assessment({
     title,
@@ -183,8 +186,8 @@ export const createAssessment_updated = asyncHandler(async (req, res) => {
     lesson,
     category,
     type,
-    semester,
-    quarter,
+    semester : finSem,
+    quarter : finQtr,
     questions: parsedQuestions,
     dueDate: dueDateObj,
     files: uploadedFiles,
