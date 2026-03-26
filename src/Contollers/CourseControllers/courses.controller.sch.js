@@ -453,10 +453,7 @@ export const createCourseSch = asyncHandler(async (req, res) => {
     published,
     price,
     paymentType,
-    freeTrialMonths,
-    offersCertificate,
-    offersTranscript,
-    passingPercentage,
+    freeTrialMonths
   } = req.body;
 
   const files = req.files;
@@ -469,16 +466,13 @@ export const createCourseSch = asyncHandler(async (req, res) => {
     throw new ValidationError("Category is required");
   }
 
-  // if (!paymentType || !["FREE", "ONETIME", "SUBSCRIPTION"].includes(paymentType)) {
-  //   throw new ValidationError("Valid payment type is required (FREE, ONETIME, SUBSCRIPTION)");
-  // }
+  if (!paymentType || !["FREE", "ONETIME", "SUBSCRIPTION"].includes(paymentType)) {
+    throw new ValidationError("Valid payment type is required (FREE, ONETIME, SUBSCRIPTION)");
+  }
 
   let thumbnail = { url: "", filename: "" };
   if (files?.thumbnail && files.thumbnail[0]) {
-    const uploadResult = await uploadToCloudinary(
-      files.thumbnail[0].buffer,
-      "course_thumbnails",
-    );
+    const uploadResult = await uploadToCloudinary(files.thumbnail[0].buffer, "course_thumbnails");
     thumbnail = {
       url: uploadResult.secure_url,
       filename: files.thumbnail[0].originalname,
@@ -501,15 +495,12 @@ export const createCourseSch = asyncHandler(async (req, res) => {
     createdby,
     published,
     paymentType,
-    offersCertificate: offersCertificate === "true",
-    offersTranscript: offersTranscript === "true",
-    passingPercentage: passingPercentage ? Number(passingPercentage) : 80,
   };
 
   if (paymentType !== "FREE") {
-    // if (!price || parseFloat(price) <= 0) {
-    //   throw new ValidationError("Valid price is required for paid courses");
-    // }
+    if (!price || parseFloat(price) <= 0) {
+      throw new ValidationError("Valid price is required for paid courses");
+    }
 
     const product = await stripe.products.create({
       name: courseTitle,
@@ -520,13 +511,24 @@ export const createCourseSch = asyncHandler(async (req, res) => {
     const stripePriceConfig = {
       product: product.id,
       unit_amount: priceInCents,
-      currency: "usd",
+      currency: 'usd',
     };
 
+    // if (paymentType === "SUBSCRIPTION") {
+    //   stripePriceConfig.recurring = { interval: "month" };
+    //   courseData.freeTrialMonths = Number(freeTrialMonths || 0);
+    // }
+
+    // "Email testing check"
     if (paymentType === "SUBSCRIPTION") {
-      stripePriceConfig.recurring = { interval: "month" };
-      courseData.freeTrialMonths = Number(freeTrialMonths || 0);
+      stripePriceConfig.recurring = {
+        interval: "day",        // change from month → day
+        interval_count: 2,      // charge every 2 days
+      };
+
+      courseData.freeTrialDays = 1; // store trial days
     }
+
 
     const stripePrice = await stripe.prices.create(stripePriceConfig);
 
@@ -538,16 +540,11 @@ export const createCourseSch = asyncHandler(async (req, res) => {
   const course = new CourseSch(courseData);
   await course.save();
 
-  await Enrollment.create({
-    student: createdby,
-    course: course._id,
-    enrollmentType: "TEACHERENROLLMENT",
-    status: "ACTIVE",
-  });
+  await Enrollment.create({ student: createdby, course: course._id, enrollmentType: "TEACHERENROLLMENT", status: "ACTIVE" });
 
   res.status(201).json({
     course,
-    message: "Course created successfully",
+    message: "Course created successfully"
   });
 });
 

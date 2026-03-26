@@ -348,6 +348,7 @@ export const createCheckoutSessionConnect = async (req, res) => {
       transfer_data: {
         destination: teacher.stripeAccountId,
       },
+      trial_period_days: 1
     };
 
     const trialDays = course.freeTrialMonths
@@ -504,6 +505,8 @@ export const handleStripeWebhookConnect = async (req, res) => {
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
+
+    console.log("✅ Webhook verified:", event.type);
   } catch (err) {
     console.error("❌ Webhook signature verification failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
