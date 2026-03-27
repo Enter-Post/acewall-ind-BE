@@ -435,9 +435,6 @@ export const getAssesmentbyID = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const validObjectId = new mongoose.Types.ObjectId(assessmentId);
   const { resubmission } = req.query;
-
-  console.log("resubmission in assessment getting:", resubmission)
-
   console.log(assessmentId, validObjectId);
   const assessment = await Assessment.findById(validObjectId).populate("category");
 
@@ -873,5 +870,33 @@ export const settingAllowResubmission = asyncHandler(async (req, res) => {
   return res.status(200).json({
     message: "Resubmission setting updated successfully",
     allowResubmission: assessment.allowResubmission
+  });
+});
+
+export const updateLatePolicy = asyncHandler(async (req, res) => {
+  const { assessmentId } = req.params;
+  const { enabled, strategy, deductionType, deductionValue } = req.body;
+
+  const assessment = await Assessment.findByIdAndUpdate(
+    assessmentId,
+    {
+      $set: {
+        "lateSubmissionPolicy.enabled": enabled,
+        "lateSubmissionPolicy.strategy": strategy,
+        "lateSubmissionPolicy.deductionType": deductionType,
+        "lateSubmissionPolicy.deductionValue": deductionValue,
+      },
+    },
+    { new: true }
+  );
+
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found");
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Late penalty policy updated successfully",
+    assessment,
   });
 });

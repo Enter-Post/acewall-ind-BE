@@ -15,6 +15,7 @@ import {
   uploadFiles,
   checkFinalAssessmentExists,
   settingAllowResubmission,
+  updateLatePolicy,
 } from "../Contollers/Assessment.controller.js";
 import { upload } from "../lib/multer.config.js";
 import { isUser } from "../middlewares/Auth.Middleware.js";
@@ -352,5 +353,6 @@ router.put("/editAssessment/:assessmentId", isUser, editAssessmentInfo);
 router.post("/createAssessment/updated", upload.any(), isUser, createAssessment_updated);
 router.put(`/setDueDateForStudent/:assessmentId`, isUser, setDueDateForStudent);
 router.put("/setAllowResubmission/:assessmentId", isUser, settingAllowResubmission);
+router.put("/updateLatePolicy/:assessmentId", isUser, updateLatePolicy);
 
 export default router;

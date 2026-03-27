@@ -41,6 +41,8 @@ const submissionSchema = new mongoose.Schema(
       enum: ["before due date", "after due date"],
     },
     totalScore: { type: Number, default: 0 },
+    latePenaltyApplied: { type: Number, default: 0 }, // Stores the total marks deducted (e.g., 20)
+    daysLate: { type: Number, default: 0 },
     submittedAt: { type: Date, default: Date.now },
     graded: { type: Boolean, default: false },
     feedback: { type: String },

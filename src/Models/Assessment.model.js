@@ -83,6 +83,20 @@ const assessmentSchema = new Schema(
       default: "12hours",
     },
     allowResubmission: { type: Boolean, default: false },
+    lateSubmissionPolicy: {
+      enabled: { type: Boolean, default: false },
+      policyType: {
+        type: String,
+        enum: ["daily", "one-time"],
+        default: "one-time"
+      },
+      deductionType: {
+        type: String,
+        enum: ["points", "percentage"],
+        default: "points"
+      },
+      deductionValue: { type: Number, default: 0 } // e.g., 2 for 2 points or 2%
+    },
   },
   { timestamps: true }
 );
