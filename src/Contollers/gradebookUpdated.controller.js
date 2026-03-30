@@ -52,8 +52,6 @@ function getStandardGrade(percent, standardScale) {
 export const getStudentGradebooksFormatted = asyncHandler(async (req, res) => {
   const studentId = req.user._id;
 
-  console.log("this is working")
-
   const gradingScale = await GradingScale.findOne({});
     const gpaScale = await GPA.findOne({});
     const standardScale = await StandardGrading.findOne({});
@@ -82,8 +80,6 @@ export const getStudentGradebooksFormatted = asyncHandler(async (req, res) => {
     let overallGPA = 0;
     let standardGradesList = [];
 
-    console.log("working 1");
-
     const courses = await Promise.all(
       gradebooks.map(async (gb) => {
         const courseData = await CourseSch.findById(gb.courseId).lean();
@@ -111,8 +107,6 @@ export const getStudentGradebooksFormatted = asyncHandler(async (req, res) => {
           courseItems = items;
         }
 
-        console.log("working 2");
-
         // ---------------------- SEMESTER-BASED ----------------------
         if (gb.semesters && gb.semesters.length > 0) {
           semesters = gb.semesters.map((semester) => {
@@ -131,8 +125,6 @@ export const getStudentGradebooksFormatted = asyncHandler(async (req, res) => {
                 standardScale
               );
             }
-
-            console.log("working 3");
 
             const quarters =
               semester.quarters?.map((quarter) => {
@@ -155,8 +147,6 @@ export const getStudentGradebooksFormatted = asyncHandler(async (req, res) => {
                   );
                 }
 
-                console.log(quarter.items, "working 4");
-
                 const assessments =
                   quarter.items?.map((item) => {
                     return {
@@ -172,8 +162,6 @@ export const getStudentGradebooksFormatted = asyncHandler(async (req, res) => {
                       studentPoints: item.studentPoints,
                     };
                   }) || [];
-
-                console.log("working 5");
 
                 return {
                   quarterId: quarter.quarterId,

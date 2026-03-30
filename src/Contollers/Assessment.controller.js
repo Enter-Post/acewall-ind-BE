@@ -882,7 +882,7 @@ export const updateLatePolicy = asyncHandler(async (req, res) => {
     {
       $set: {
         "lateSubmissionPolicy.enabled": enabled,
-        "lateSubmissionPolicy.strategy": strategy,
+        "lateSubmissionPolicy.policyType": strategy,
         "lateSubmissionPolicy.deductionType": deductionType,
         "lateSubmissionPolicy.deductionValue": deductionValue,
       },

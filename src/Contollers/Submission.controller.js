@@ -11,6 +11,7 @@ import { updateGradebookOnSubmission } from "../Utiles/updateGradebookOnSubmissi
 import { ValidationError, NotFoundError } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 import { notifyGradePosted } from "../Utiles/notificationService.js";
+import { ParticipantListInstance } from "twilio/lib/rest/conversations/v1/conversation/participant.js";
 
 dotenv.config();
 
@@ -149,11 +150,11 @@ export const submission = asyncHandler(async (req, res) => {
 
   // --- LATE PENALTY LOGIC START ---
   let penaltyApplied = 0;
-  if (status === "after due date" && assessment.latePolicy?.enabled) {
-    const diffInMs = now - finalDueDate;
-    const daysLate = Math.ceil(diffInMs / (1000 * 60 * 60 * 24));
+  const diffInMs = now - finalDueDate;
+  const daysLate = Math.ceil(diffInMs / (1000 * 60 * 60 * 24));
 
-    const { strategy, deductionType, deductionValue } = assessment.latePolicy;
+  if (status === "after due date" && assessment.lateSubmissionPolicy?.enabled) {
+    const { strategy, deductionType, deductionValue } = assessment.lateSubmissionPolicy;
 
     let deductionPerUnit = 0;
     if (deductionType === "points") {
@@ -163,17 +164,17 @@ export const submission = asyncHandler(async (req, res) => {
       deductionPerUnit = (maxScore * (deductionValue / 100));
     }
 
+    console.log(deductionPerUnit, "deductionPerUnit")
+
     if (strategy === "daily") {
       penaltyApplied = deductionPerUnit * daysLate;
     } else {
       // One-time deduction
-      penaltyApplied = deductionPerUnit;
+      penaltyApplied = deductionPerUnit * daysLate;
     }
 
-    // Ensure totalScore doesn't go below zero
     totalScore = Math.max(0, totalScore - penaltyApplied);
   }
-  // --- LATE PENALTY LOGIC END ---
 
   const graded = processedAnswers.every((a) => !a.requiresManualCheck);
 
@@ -183,7 +184,7 @@ export const submission = asyncHandler(async (req, res) => {
     answers: processedAnswers,
     status,
     totalScore,
-    latePenalty: penaltyApplied, // Optional: track deduction in DB
+    latePenaltyApplied: penaltyApplied, // Optional: track deduction in DB
     graded,
     allowResubmission: assessment.allowResubmission || false,
     resubmitted: { status: resubmission, count: submissionCount },
