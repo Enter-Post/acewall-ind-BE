@@ -619,6 +619,7 @@ export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
         isSubmitted: 1,
         category: 1,
         source: 1,
+        lateSubmissionPolicy: 1,
         "course._id": 1,
         "course.courseTitle": 1,
         "course.thumbnail": 1,

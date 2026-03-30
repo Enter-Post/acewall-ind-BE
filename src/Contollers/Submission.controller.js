@@ -117,8 +117,6 @@ export const submission = asyncHandler(async (req, res) => {
 
       maxScore += question.points;
 
-      console.log(isCorrect, "isCorrect");
-
       return {
         questionId: ans.questionId,
         selectedAnswer: ans.selectedAnswer,
@@ -163,8 +161,6 @@ export const submission = asyncHandler(async (req, res) => {
       // Percentage based on max possible marks
       deductionPerUnit = (maxScore * (deductionValue / 100));
     }
-
-    console.log(deductionPerUnit, "deductionPerUnit")
 
     if (strategy === "daily") {
       penaltyApplied = deductionPerUnit * daysLate;
@@ -391,44 +387,6 @@ export const getSubmissionsofAssessment_forTeacher = asyncHandler(
   },
 );
 
-// export const checkbyTeacher = async (req, res) => {
-//   try {
-//     const { answers, feedback } = req.body;
-
-//     const submission = await Submission.findById(req.params.id);
-//     if (!submission)
-//       return res.status(404).json({ message: "Submission not found" });
-
-//     let totalScore = 0;
-
-//     submission.answers = submission.answers.map((a) => {
-//       const updated = answers.find(
-//         (u) => u.questionId === a.questionId.toString()
-//       );
-
-//       if (a.requiresManualCheck && updated) {
-//         a.pointsAwarded = updated.pointsAwarded;
-//         a.isCorrect = undefined; // QA may not have a simple correct/incorrect
-//         a.requiresManualCheck = false;
-//       }
-
-//       totalScore += a.pointsAwarded || 0;
-//       return a;
-//     });
-
-//     submission.totalScore = totalScore;
-//     submission.feedback = feedback || "";
-//     submission.graded = true;
-//     await submission.save();
-
-//     res.json({ message: "Submission graded", submission });
-//   } catch (err) {
-//     res
-//       .status(500)
-//       .json({ message: "Error grading submission", error: err.message });
-//   }
-// };
-
 export const teacherGrading = asyncHandler(async (req, res) => {
   const { submissionId } = req.params;
   const manualGrades = req.body;
@@ -494,7 +452,6 @@ export const teacherGrading = asyncHandler(async (req, res) => {
     submission.totalScore,
     allcourseMaxPoint,
     assessment.course,
-
   );
 
   // ✅ Send email only if the user has an email
@@ -557,27 +514,3 @@ export const teacherGrading = asyncHandler(async (req, res) => {
     message: "Submission graded",
   });
 });
-
-// export const TeachersAssessmentSubmissions = async (req, res) => {
-//   const { submissionId } = req.params;
-//   const { feedback, pointsAwarded } = req.body;
-//   const { teacherId } = req.user._id;
-//   try {
-//     const submission = await Submission.findById(submissionId); // Assuming you have a Submission model
-//     if (!submission) {
-//       return res.status(404).json({ message: "Submission not found" });
-//     }
-
-//     submission.feedback = feedback;
-//     submission.totalScore = pointsAwarded;
-//     submission.graded = true;
-//     await submission.save();
-
-//     res.json({ message: "Submission graded", submission });
-//   } catch (err) {
-//     console.error(err);
-//     res
-//       .status(500)
-//       .json({ message: "Error grading submission", error: err.message });
-//   }
-// };
