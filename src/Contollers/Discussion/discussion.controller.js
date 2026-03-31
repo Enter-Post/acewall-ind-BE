@@ -28,10 +28,6 @@ export const createDiscussion = asyncHandler(async (req, res) => {
   const files = req.files;
   const createdby = req.user._id;
 
-  console.log("🔍 DISCUSSION CREATE - req.body:", req.body);
-  console.log("🔍 DISCUSSION CREATE - course field:", course);
-  console.log("🔍 DISCUSSION CREATE - createdby:", createdby);
-
   let uploadedFiles = [];
 
   if (files && files.length > 0) {
@@ -78,8 +74,6 @@ export const createDiscussion = asyncHandler(async (req, res) => {
 
   // Send notification to enrolled students
   try {
-    console.log("📢 Discussion saved, attempting to send notifications...");
-    console.log("Course ID:", course);
     const courseData = await CourseSch.findById(course);
     console.log("Course found:", courseData?.courseTitle);
     if (courseData) {
@@ -209,7 +203,7 @@ export const lessonDiscussions = asyncHandler(async (req, res) => {
   if (!discussion || discussion.length === 0) {
     throw new NotFoundError("No discussions found for this lesson", "DISC_004");
   }
-  return res.status(200).json({ 
+  return res.status(200).json({
     discussion: discussion,
     message: "Discussions fetched successfully"
   });
@@ -258,50 +252,75 @@ export const editDiscussionInfo = asyncHandler(async (req, res) => {
   });
 });
 
-export const setDueDateForStudentDiscussion = asyncHandler(async (req, res) => {
+export const setDueDateForStudentsDiscussion = asyncHandler(async (req, res) => {
   const { discussionId } = req.params;
-  const { studentId, newDueDate } = req.body;
+  const { studentIds, newDueDate } = req.body;
 
+  // 1. Basic Validation
+  if (!Array.isArray(studentIds) || studentIds.length === 0) {
+    throw new BadRequestError("Please provide an array of student IDs", "VAL_001");
+  }
+
+  if (!newDueDate || !newDueDate.date) {
+    throw new BadRequestError("Due date is required", "VAL_002");
+  }
+
+  // 2. Parse and Validate the Date
+  const parsedDate = new Date(newDueDate.date);
+  if (isNaN(parsedDate.getTime())) {
+    throw new BadRequestError("Invalid date format provided", "VAL_003");
+  }
+
+  // 3. Find the Discussion
   const discussion = await Discussion.findById(discussionId);
   if (!discussion) {
     throw new NotFoundError("Discussion not found", "DIS_016");
   }
 
-  // Verify student enrollment to ensure they are allowed in this course
-  const enrollment = await Enrollment.findOne({
-    course: discussion.course,
-    student: studentId
-  });
-
-  if (!enrollment) {
-    throw new NotFoundError("Student not enrolled in this course", "ENR_001");
-  }
-
-  // Format the override date object
+  // Define the common override object
   const dueDateObj = {
-    date: new Date(newDueDate.date),
-    time: newDueDate.time
+    date: parsedDate,
+    time: newDueDate.time || "00:00" // Default if time is missing
   };
 
-  // Find if an override already exists for this specific student
-  const studentOverrideIndex = discussion.studentDueDateOverrides.findIndex(
-    (override) => override.student.toString() === studentId
-  );
+  // 4. Sanitize student IDs and filter out invalid ObjectIds
+  const validStudentIds = studentIds.filter(id => mongoose.Types.ObjectId.isValid(id));
 
-  if (studentOverrideIndex !== -1) {
-    // Update existing override
-    discussion.studentDueDateOverrides[studentOverrideIndex].newDueDate = dueDateObj;
-  } else {
-    // Add new override record
-    discussion.studentDueDateOverrides.push({
-      student: new mongoose.Types.ObjectId(studentId),
-      newDueDate: dueDateObj
+  // 5. Loop through valid students
+  for (const studentId of validStudentIds) {
+    // Check if the student is actually in the course associated with this discussion
+    const enrollment = await Enrollment.findOne({
+      course: discussion.course,
+      student: studentId
     });
+
+    // Skip students not enrolled in this specific course
+    if (!enrollment) continue;
+
+    // Check if an override already exists for this student
+    const studentOverrideIndex = discussion.studentDueDateOverrides.findIndex(
+      (override) => override.student.toString() === studentId.toString()
+    );
+
+    if (studentOverrideIndex !== -1) {
+      // Update existing override
+      discussion.studentDueDateOverrides[studentOverrideIndex].newDueDate = dueDateObj;
+    } else {
+      // Add new override record
+      discussion.studentDueDateOverrides.push({
+        student: new mongoose.Types.ObjectId(studentId),
+        newDueDate: dueDateObj
+      });
+    }
   }
+
+  // 6. Explicitly mark as modified (required for mixed arrays in Mongoose)
+  discussion.markModified('studentDueDateOverrides');
 
   await discussion.save();
 
   return res.status(200).json({
-    message: "Due date updated for student in discussion"
+    success: true,
+    message: `Due dates updated successfully for ${validStudentIds.length} students.`
   });
 });

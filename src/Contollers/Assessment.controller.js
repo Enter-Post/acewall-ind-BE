@@ -435,9 +435,6 @@ export const getAssesmentbyID = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const validObjectId = new mongoose.Types.ObjectId(assessmentId);
   const { resubmission } = req.query;
-
-  console.log("resubmission in assessment getting:", resubmission)
-
   console.log(assessmentId, validObjectId);
   const assessment = await Assessment.findById(validObjectId).populate("category");
 
@@ -622,6 +619,7 @@ export const getAllassessmentforStudent = asyncHandler(async (req, res) => {
         isSubmitted: 1,
         category: 1,
         source: 1,
+        lateSubmissionPolicy: 1,
         "course._id": 1,
         "course.courseTitle": 1,
         "course.thumbnail": 1,
@@ -816,6 +814,7 @@ export const checkFinalAssessmentExists = asyncHandler(async (req, res) => {
       : null,
   });
 });
+
 export const setDueDateForStudent = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const { studentId, newDueDate } = req.body;
@@ -873,5 +872,33 @@ export const settingAllowResubmission = asyncHandler(async (req, res) => {
   return res.status(200).json({
     message: "Resubmission setting updated successfully",
     allowResubmission: assessment.allowResubmission
+  });
+});
+
+export const updateLatePolicy = asyncHandler(async (req, res) => {
+  const { assessmentId } = req.params;
+  const { enabled, strategy, deductionType, deductionValue } = req.body;
+
+  const assessment = await Assessment.findByIdAndUpdate(
+    assessmentId,
+    {
+      $set: {
+        "lateSubmissionPolicy.enabled": enabled,
+        "lateSubmissionPolicy.policyType": strategy,
+        "lateSubmissionPolicy.deductionType": deductionType,
+        "lateSubmissionPolicy.deductionValue": deductionValue,
+      },
+    },
+    { new: true }
+  );
+
+  if (!assessment) {
+    throw new NotFoundError("Assessment not found");
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Late penalty policy updated successfully",
+    assessment,
   });
 });

@@ -11,6 +11,7 @@ import { updateGradebookOnSubmission } from "../Utiles/updateGradebookOnSubmissi
 import { ValidationError, NotFoundError } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 import { notifyGradePosted } from "../Utiles/notificationService.js";
+import { ParticipantListInstance } from "twilio/lib/rest/conversations/v1/conversation/participant.js";
 
 dotenv.config();
 
@@ -40,7 +41,7 @@ export const submission = asyncHandler(async (req, res) => {
     submissionCount = ++lastSubmission[0].resubmitted.count || 0;
   }
 
-    const assessment = await Assessment.findById(assessmentId);
+  const assessment = await Assessment.findById(assessmentId);
 
   if (alreadySubmitted && !assessment.allowResubmission) {
     throw new ValidationError(
@@ -48,7 +49,6 @@ export const submission = asyncHandler(async (req, res) => {
       "SUB_001",
     );
   }
-
 
   let answerFiles = [];
 
@@ -74,14 +74,12 @@ export const submission = asyncHandler(async (req, res) => {
   let totalScore = 0;
   let maxScore = 0;
 
-
   const dueDate = new Date(assessment.dueDate.date)
     .toISOString()
     .split("T")[0];
   const dueTime = assessment.dueDate.time;
   const dueDateTime = new Date(`${dueDate}T${dueTime}`);
   const now = new Date();
-
 
   const override = assessment.studentDueDateOverrides.find(
     o => o.student.toString() === studentId
@@ -91,7 +89,10 @@ export const submission = asyncHandler(async (req, res) => {
 
   if (override) {
     if (override.newDueDate) {
-      finalDueDate = override.newDueDate;
+      // Logic to handle override date/time same as base due date
+      const overDate = new Date(override.newDueDate.date).toISOString().split("T")[0];
+      const overTime = override.newDueDate.time;
+      finalDueDate = new Date(`${overDate}T${overTime}`);
     }
   }
 
@@ -115,8 +116,6 @@ export const submission = asyncHandler(async (req, res) => {
       totalScore += pointsAwarded;
 
       maxScore += question.points;
-
-      console.log(isCorrect, "isCorrect");
 
       return {
         questionId: ans.questionId,
@@ -147,6 +146,32 @@ export const submission = asyncHandler(async (req, res) => {
     }
   });
 
+  // --- LATE PENALTY LOGIC START ---
+  let penaltyApplied = 0;
+  const diffInMs = now - finalDueDate;
+  const daysLate = Math.ceil(diffInMs / (1000 * 60 * 60 * 24));
+
+  if (status === "after due date" && assessment.lateSubmissionPolicy?.enabled) {
+    const { strategy, deductionType, deductionValue } = assessment.lateSubmissionPolicy;
+
+    let deductionPerUnit = 0;
+    if (deductionType === "points") {
+      deductionPerUnit = deductionValue;
+    } else {
+      // Percentage based on max possible marks
+      deductionPerUnit = (maxScore * (deductionValue / 100));
+    }
+
+    if (strategy === "daily") {
+      penaltyApplied = deductionPerUnit * daysLate;
+    } else {
+      // One-time deduction
+      penaltyApplied = deductionPerUnit * daysLate;
+    }
+
+    totalScore = Math.max(0, totalScore - penaltyApplied);
+  }
+
   const graded = processedAnswers.every((a) => !a.requiresManualCheck);
 
   const submission = new Submission({
@@ -155,6 +180,7 @@ export const submission = asyncHandler(async (req, res) => {
     answers: processedAnswers,
     status,
     totalScore,
+    latePenaltyApplied: penaltyApplied, // Optional: track deduction in DB
     graded,
     allowResubmission: assessment.allowResubmission || false,
     resubmitted: { status: resubmission, count: submissionCount },
@@ -207,28 +233,25 @@ export const submission = asyncHandler(async (req, res) => {
   <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
     <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
       
-      <!-- Logo -->
       <div style="text-align: center; padding: 20px; background: #ffffff;">
         <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
              alt="Acewall Scholars Logo" 
              style="height: 60px; margin: 0 auto;" />
       </div>
 
-      <!-- Header -->
       <div style="background: #28a745; padding: 20px; text-align: center;">
         <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Assessment Result</h1>
       </div>
 
-      <!-- Body -->
       <div style="padding: 20px; color: #333;">
         <p style="font-size: 16px;">Hi ${student.firstName + " " + student.lastName || "Student"},</p>
         <p style="font-size: 16px;">You have successfully submitted your assessment titled <strong>${assessment.title}</strong>.</p>
         <p style="font-size: 16px;"><strong>Status:</strong> ${status}</p>
+        ${penaltyApplied > 0 ? `<p style="font-size: 16px; color: red;"><strong>Late Penalty:</strong> -${penaltyApplied.toFixed(2)} marks applied.</p>` : ''}
         <p style="font-size: 16px;"><strong>Total Score:</strong> ${totalScore}/${maxScore}</p>
         <p style="font-size: 16px;">Thank you!</p>
       </div>
 
-      <!-- Footer -->
       <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
         <p style="margin: 0;">Acewall Scholars © ${new Date().getFullYear()}</p>
         <p style="margin: 0;">If you have any query contact us on same email</p>
@@ -364,44 +387,6 @@ export const getSubmissionsofAssessment_forTeacher = asyncHandler(
   },
 );
 
-// export const checkbyTeacher = async (req, res) => {
-//   try {
-//     const { answers, feedback } = req.body;
-
-//     const submission = await Submission.findById(req.params.id);
-//     if (!submission)
-//       return res.status(404).json({ message: "Submission not found" });
-
-//     let totalScore = 0;
-
-//     submission.answers = submission.answers.map((a) => {
-//       const updated = answers.find(
-//         (u) => u.questionId === a.questionId.toString()
-//       );
-
-//       if (a.requiresManualCheck && updated) {
-//         a.pointsAwarded = updated.pointsAwarded;
-//         a.isCorrect = undefined; // QA may not have a simple correct/incorrect
-//         a.requiresManualCheck = false;
-//       }
-
-//       totalScore += a.pointsAwarded || 0;
-//       return a;
-//     });
-
-//     submission.totalScore = totalScore;
-//     submission.feedback = feedback || "";
-//     submission.graded = true;
-//     await submission.save();
-
-//     res.json({ message: "Submission graded", submission });
-//   } catch (err) {
-//     res
-//       .status(500)
-//       .json({ message: "Error grading submission", error: err.message });
-//   }
-// };
-
 export const teacherGrading = asyncHandler(async (req, res) => {
   const { submissionId } = req.params;
   const manualGrades = req.body;
@@ -467,7 +452,6 @@ export const teacherGrading = asyncHandler(async (req, res) => {
     submission.totalScore,
     allcourseMaxPoint,
     assessment.course,
-
   );
 
   // ✅ Send email only if the user has an email
@@ -530,27 +514,3 @@ export const teacherGrading = asyncHandler(async (req, res) => {
     message: "Submission graded",
   });
 });
-
-// export const TeachersAssessmentSubmissions = async (req, res) => {
-//   const { submissionId } = req.params;
-//   const { feedback, pointsAwarded } = req.body;
-//   const { teacherId } = req.user._id;
-//   try {
-//     const submission = await Submission.findById(submissionId); // Assuming you have a Submission model
-//     if (!submission) {
-//       return res.status(404).json({ message: "Submission not found" });
-//     }
-
-//     submission.feedback = feedback;
-//     submission.totalScore = pointsAwarded;
-//     submission.graded = true;
-//     await submission.save();
-
-//     res.json({ message: "Submission graded", submission });
-//   } catch (err) {
-//     console.error(err);
-//     res
-//       .status(500)
-//       .json({ message: "Error grading submission", error: err.message });
-//   }
-// };

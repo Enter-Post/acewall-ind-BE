@@ -8,7 +8,7 @@ import {
   getDiscussionbyId,
   getDiscussionsOfTeacher,
   lessonDiscussions,
-  setDueDateForStudentDiscussion,
+  setDueDateForStudentsDiscussion,
 } from "../../Contollers/Discussion/discussion.controller.js";
 import { upload } from "../../lib/multer.config.js";
 import { isUser } from "../../middlewares/Auth.Middleware.js";
@@ -151,6 +151,6 @@ router.get("/lesson/:lessonId", isUser, lessonDiscussions);
 // router.get("/course/:courseId", isUser, isEnrolledMiddleware, courseDiscussions);
 router.get("/course/:courseId", isUser, courseDiscussions);
 router.put("/editDiscussion/:discussionId", isUser, editDiscussionInfo);
-router.put("/setDueDateForStudent/:discussionId", isUser, setDueDateForStudentDiscussion);
+router.put("/setDueDateForStudent/:discussionId", isUser, setDueDateForStudentsDiscussion);
 
 export default router;
