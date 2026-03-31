@@ -68,6 +68,7 @@ const discussionSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    allowResubmission: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

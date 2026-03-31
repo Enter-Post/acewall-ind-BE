@@ -814,6 +814,7 @@ export const checkFinalAssessmentExists = asyncHandler(async (req, res) => {
       : null,
   });
 });
+
 export const setDueDateForStudent = asyncHandler(async (req, res) => {
   const { assessmentId } = req.params;
   const { studentId, newDueDate } = req.body;

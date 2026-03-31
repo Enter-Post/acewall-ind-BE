@@ -67,7 +67,10 @@ export const sendDiscussionComment = asyncHandler(async (req, res) => {
 
   if (override) {
     if (override.newDueDate) {
-      finalDueDate = override.newDueDate;
+      // Logic to handle override date/time same as base due date
+      const overDate = new Date(override.newDueDate.date).toISOString().split("T")[0];
+      const overTime = override.newDueDate.time;
+      finalDueDate = new Date(`${overDate}T${overTime}`);
     }
   }
 
