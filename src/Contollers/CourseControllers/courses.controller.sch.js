@@ -14,7 +14,7 @@ import Semester from "../../Models/semester.model.js";
 import Quarter from "../../Models/quarter.model.js";
 import Discussion from "../../Models/discussion.model.js";
 import stripe from "../../config/stripe.js";
-import { ValidationError, NotFoundError } from "../../Utiles/errors.js";
+import { ValidationError, NotFoundError, AuthorizationError } from "../../Utiles/errors.js";
 import { asyncHandler } from "../../middlewares/errorHandler.middleware.js";
 
 export const importCourseFromJSON = asyncHandler(async (req, res) => {
@@ -993,6 +993,17 @@ export const getCourseDetails = asyncHandler(async (req, res) => {
 
   if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
     throw new ValidationError("Valid course ID is required");
+  }
+
+  // First check if course exists and get creator info
+  const courseExists = await CourseSch.findById(courseId).select('createdby');
+  if (!courseExists) {
+    throw new NotFoundError("Course not found");
+  }
+
+  // Check if current teacher created the course
+  if (courseExists.createdby.toString() !== req.user._id.toString()) {
+    throw new AuthorizationError("Access denied: You can only access courses you created");
   }
 
   const course = await CourseSch.aggregate([

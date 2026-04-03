@@ -31,7 +31,7 @@ const router = express.Router();
  *       200:
  *         description: Chapters list
  */
-// router.get("/chapterofCourse/:courseId", isUser, isEnrolledMiddleware, ChapterofCourse);
+router.get("/chapterofCourse/v2/:courseId", isUser, isEnrolledMiddleware, ChapterofCourse);
 router.get("/chapterofCourse/:courseId", isUser, ChapterofCourse);
 
 /**

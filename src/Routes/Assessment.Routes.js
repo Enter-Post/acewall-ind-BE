@@ -302,8 +302,9 @@ router.delete("/deleteFile/:assessmentId/:fileId", deleteFile);
  *         description: Assessment details
  */
 
-// router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, isEnrolledMiddleware, getResultsMiddleware, getAssesmentbyID);
+router.get("/v2/:assessmentId", isUser, resolveEnrollmentFromAssessment, isEnrolledMiddleware, getResultsMiddleware, getAssesmentbyID);
 router.get("/:assessmentId", isUser, resolveEnrollmentFromAssessment, getResultsMiddleware, getAssesmentbyID);
+
 router.get("/resubmit/:assessmentId", isUser, resolveEnrollmentFromAssessment, getAssesmentbyID);
 
 /**

@@ -70,6 +70,7 @@ router.get("/isEnrolled/:courseId", isUser, isEnrolled);
 
 router.get("/studentCourses", isUser, studenCourses);
 router.get("/studentCourseDetails/:enrollmentId", isUser, studentCourseDetails);
+router.get("/studentCourseDetails/v2/:enrollmentId/:courseId", isUser, isEnrolledMiddleware, studentCourseDetails);
 router.get("/getChapterstdpre/:chapterId", isUser, chapterDetailsStdPre);
 
 
@@ -80,7 +81,7 @@ router.get(
 );
 // routes/adminRoutes.js
 
-// router.get("/getChapter/:chapterId", isUser, resolveEnrollmentFromChapter, isEnrolledMiddleware, chapterDetails);
+router.get("/getChapter/v2/:chapterId", isUser, resolveEnrollmentFromChapter, isEnrolledMiddleware, chapterDetails);
 router.get("/getChapter/:chapterId", isUser, resolveEnrollmentFromChapter, chapterDetails);
 
 /**

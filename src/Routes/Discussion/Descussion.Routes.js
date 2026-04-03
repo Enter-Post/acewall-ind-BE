@@ -89,7 +89,7 @@ router.get("/all", isUser, getDiscussionsOfTeacher);
  *       200:
  *         description: Discussion details
  */
-// router.get("/:id", isUser, resolveEnrollmentFromDiscussion, isEnrolledMiddleware, getDiscussionbyId);
+router.get("/v2/:id", isUser, resolveEnrollmentFromDiscussion, isEnrolledMiddleware, getDiscussionbyId);
 router.get("/:id", isUser, resolveEnrollmentFromDiscussion, getDiscussionbyId);
 
 /**
@@ -109,7 +109,7 @@ router.get("/:id", isUser, resolveEnrollmentFromDiscussion, getDiscussionbyId);
  *       200:
  *         description: List of chapter discussions
  */
-// router.get("/chapter/:chapterId", isUser, resolveEnrollmentFromChapter, isEnrolledMiddleware, chapterDiscussions);
+router.get("/v2/chapter/:chapterId", isUser, resolveEnrollmentFromChapter, isEnrolledMiddleware, chapterDiscussions);
 router.get("/chapter/:chapterId", isUser, resolveEnrollmentFromChapter, chapterDiscussions);
 
 /**
@@ -129,6 +129,7 @@ router.get("/chapter/:chapterId", isUser, resolveEnrollmentFromChapter, chapterD
  *       200:
  *         description: List of lesson discussions
  */
+router.get("/v2/lesson/:lessonId", isUser, isEnrolledMiddleware, lessonDiscussions);
 router.get("/lesson/:lessonId", isUser, lessonDiscussions);
 
 /**
@@ -148,8 +149,9 @@ router.get("/lesson/:lessonId", isUser, lessonDiscussions);
  *       200:
  *         description: List of course discussions
  */
-// router.get("/course/:courseId", isUser, isEnrolledMiddleware, courseDiscussions);
+router.get("/v2/course/:courseId", isUser, isEnrolledMiddleware, courseDiscussions);
 router.get("/course/:courseId", isUser, courseDiscussions);
+
 router.put("/editDiscussion/:discussionId", isUser, editDiscussionInfo);
 router.put("/setDueDateForStudent/:discussionId", isUser, setDueDateForStudentsDiscussion);
 
