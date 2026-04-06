@@ -2,13 +2,18 @@ import Enrollment from "../Models/Enrollement.model.js";
 
 export const isEnrolledMiddleware = async (req, res, next) => {
   const { courseId } = req.params;
+
+  console.log(courseId, "courseId")
+  console.log(req.user, "req.user")
+  
   const userId = req.user._id;
+
   try {
     let enrollment = await Enrollment.findOne({
       student: userId,
       course: courseId,
     });
-    
+
     if (!enrollment) {
       return res
         .status(404)
@@ -36,15 +41,15 @@ export const isEnrolledMiddleware = async (req, res, next) => {
 
     // Check if enrollment status allows access
     const activeStatuses = ["ACTIVE", "TRIAL", "APPLIEDFORCANCEL", "PAST_DUE"];
-    
+
     if (!activeStatuses.includes(enrollment.status)) {
       // Status is CANCELLED - access denied but can renew
-      const canRenew = enrollment.enrollmentType === "SUBSCRIPTION" && 
-                       enrollment.status === "CANCELLED";
-      
+      const canRenew = enrollment.enrollmentType === "SUBSCRIPTION" &&
+        enrollment.status === "CANCELLED";
+
       console.log("❌ ACCESS DENIED - Status:", enrollment.status);
-      
-      return res.status(403).json({ 
+
+      return res.status(403).json({
         message: "Your enrollment has been cancelled. Please renew your subscription to continue.",
         canRenew,
         enrollmentId: enrollment._id

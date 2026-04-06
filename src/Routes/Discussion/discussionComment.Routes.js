@@ -29,7 +29,7 @@ const router = express.Router();
  *       200:
  *         description: List of comments
  */
-// router.get("/get/:id", isUser, resolveEnrollmentFromDiscussion, isEnrolledMiddleware, getDiscussionComments);
+router.get("/v2/get/:id", isUser, resolveEnrollmentFromDiscussion, isEnrolledMiddleware, getDiscussionComments);
 router.get("/get/:id", isUser, resolveEnrollmentFromDiscussion, getDiscussionComments);
 
 /**
@@ -58,7 +58,7 @@ router.get("/get/:id", isUser, resolveEnrollmentFromDiscussion, getDiscussionCom
  *       201:
  *         description: Comment sent successfully
  */
-// router.post("/sendComment/:id", isUser, resolveEnrollmentFromDiscussion, isEnrolledMiddleware, sendDiscussionComment);
+router.post("/v2/sendComment/:id", isUser, resolveEnrollmentFromDiscussion, isEnrolledMiddleware, sendDiscussionComment);
 router.post("/sendComment/:id", isUser, resolveEnrollmentFromDiscussion, sendDiscussionComment);
 
 /**

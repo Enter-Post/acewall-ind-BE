@@ -7,6 +7,8 @@ import {
   getQuartersofSemester,
   getSemesterQuarter,
 } from "../../Contollers/CourseControllers/quarter.controller.js";
+import { isEnrolledMiddleware } from "../../middlewares/isEnrolled.middleware.js";
+import { isUser } from "../../middlewares/Auth.Middleware.js";
 
 const router = express.Router();
 
@@ -90,6 +92,7 @@ router.post("/getquarters/:semesterId", getQuartersofSemester);
  *         description: Quarters with semester info
  */
 router.get("/get/:semesterId", getSemesterQuarter);
+router.get("/get/v2/:courseId/:semesterId", isUser, isEnrolledMiddleware, getSemesterQuarter);
 
 /**
  * @openapi
