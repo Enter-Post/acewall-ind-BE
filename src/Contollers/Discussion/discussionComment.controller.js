@@ -41,15 +41,19 @@ export const sendDiscussionComment = asyncHandler(async (req, res) => {
   const { text } = req.body;
   const { id } = req.params;
 
-  const isCommented = await DiscussionComment.findOne({
+  const existingComments = await DiscussionComment.find({
     createdby: user._id,
     discussion: id,
   });
 
   const discussion = await Discussion.findById(id).populate('createdby', 'firstName lastName role');
 
-  if (user.role !== "teacher" && isCommented) {
-    throw new ConflictError("You have already commented on this discussion", "DCOM_001");
+  // Check comment limits for students
+  if (user.role !== "teacher") {
+    if (!discussion.allowResubmission && existingComments.length >= 1) {
+      throw new ConflictError("You have already commented on this discussion", "DCOM_001");
+    }
+    // If resubmission is allowed, student can comment unlimited times
   }
 
   const dueDate = new Date(discussion.dueDate.date)
@@ -192,20 +196,36 @@ export const isCommentedInDiscussion = asyncHandler(async (req, res) => {
   const user = req.user;
   const { id } = req.params;
 
-  const isCommented = await DiscussionComment.findOne({
+  const existingComments = await DiscussionComment.find({
     createdby: user._id,
     discussion: id,
   });
 
-  if (user.role !== "teacher" && isCommented) {
+  const discussion = await Discussion.findById(id);
+
+  // For teachers, always return false (they can always comment)
+  if (user.role === "teacher") {
     return res.status(200).json({
-      commented: true,
-      message: "User has commented"
+      commented: false,
+      canComment: true,
+      message: "Teacher can always comment"
     });
   }
 
+  // For students, check comment limits based on resubmission setting
+  if (!discussion.allowResubmission && existingComments.length >= 1) {
+    return res.status(200).json({
+      commented: true,
+      canComment: false,
+      message: "Student has already commented and resubmission is not allowed"
+    });
+  }
+
+  // If resubmission is allowed, student can comment unlimited times
+  // Student can still comment
   return res.status(200).json({
-    commented: false,
-    message: "User has not commented"
+    commented: existingComments.length > 0,
+    canComment: true,
+    message: existingComments.length > 0 ? "Student can still comment (resubmission allowed)" : "Student has not commented yet"
   });
 });
