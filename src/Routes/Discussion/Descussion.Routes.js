@@ -9,6 +9,7 @@ import {
   getDiscussionsOfTeacher,
   lessonDiscussions,
   setDueDateForStudentsDiscussion,
+  toggleAllowResubmission,
 } from "../../Contollers/Discussion/discussion.controller.js";
 import { upload } from "../../lib/multer.config.js";
 import { isUser } from "../../middlewares/Auth.Middleware.js";
@@ -154,5 +155,6 @@ router.get("/course/:courseId", isUser, courseDiscussions);
 
 router.put("/editDiscussion/:discussionId", isUser, editDiscussionInfo);
 router.put("/setDueDateForStudent/:discussionId", isUser, setDueDateForStudentsDiscussion);
+router.put("/toggleAllowResubmission/:discussionId", isUser, toggleAllowResubmission);
 
 export default router;

@@ -324,3 +324,28 @@ export const setDueDateForStudentsDiscussion = asyncHandler(async (req, res) => 
     message: `Due dates updated successfully for ${validStudentIds.length} students.`
   });
 });
+
+export const toggleAllowResubmission = asyncHandler(async (req, res) => {
+  const { discussionId } = req.params;
+  const { allowResubmission } = req.body;
+
+  // Validate and convert the allowResubmission parameter
+  const allowResubmissionValue = Boolean(allowResubmission);
+
+  // Find the discussion
+  const discussion = await Discussion.findById(discussionId);
+  if (!discussion) {
+    throw new NotFoundError("Discussion not found", "DISC_018");
+  }
+
+  // Update the allowResubmission field
+  discussion.allowResubmission = allowResubmissionValue;
+  await discussion.save();
+
+  return res.status(200).json({
+    success: true,
+    message: `Allow resubmission ${allowResubmissionValue ? 'enabled' : 'disabled'} successfully`,
+    allowResubmission: discussion.allowResubmission
+  });
+});
+
