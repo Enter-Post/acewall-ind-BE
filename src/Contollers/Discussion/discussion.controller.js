@@ -126,7 +126,11 @@ export const getDiscussionbyId = asyncHandler(async (req, res) => {
     .populate("course", "courseTitle thumbnail")
     .populate("chapter", "title")
     .populate("lesson", "title")
-    .populate("createdby", "firstName middleName lastName profileImg").lean();
+    .populate({
+      path: "studentDueDateOverrides.student",
+      select: "firstName middleName lastName email",
+    }).populate("createdby", "firstName middleName lastName profileImg").lean()
+
 
   if (!discussion) {
     throw new NotFoundError("Discussion not found", "DISC_001");
