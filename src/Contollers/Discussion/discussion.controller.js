@@ -153,6 +153,7 @@ export const getDiscussionbyId = asyncHandler(async (req, res) => {
 
 export const discussionforStudent = asyncHandler(async (req, res) => {
   let userId = req.user._id;
+  const { course } = req.query;
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new ValidationError("Invalid user ID", "DISC_002");
@@ -167,12 +168,20 @@ export const discussionforStudent = asyncHandler(async (req, res) => {
   });
   const allEnrolledCourseIds = studentEnrollment.map((enr) => enr.course);
 
-  const discussions = await Discussion.find({
-    $or: [
-      { course: { $in: allEnrolledCourseIds } },
-      { type: "public" } // keep public included in the same list
-    ]
-  })
+  let query = {};
+  
+  if (course && mongoose.Types.ObjectId.isValid(course)) {
+    query.course = new mongoose.Types.ObjectId(course);
+  } else {
+    query = {
+      $or: [
+        { course: { $in: allEnrolledCourseIds } },
+        { type: "public" } // keep public included in the same list
+      ]
+    };
+  }
+
+  const discussions = await Discussion.find(query)
     .populate("course", "courseTitle thumbnail")
     .populate("category", "title")
     .populate("chapter", "title")

@@ -83,8 +83,8 @@ export async function updateGradebookOnSubmission(studentId, courseId, itemId, t
         assessment: itemId,
         graded: true,
       })
-      .sort({ createdAt: -1 }) // 👈 This ensures the NEWEST attempt is used, regardless of score
-      .lean();
+        .sort({ createdAt: -1 }) // 👈 This ensures the NEWEST attempt is used, regardless of score
+        .lean();
 
       if (!submission) return false;
 
@@ -102,7 +102,9 @@ export async function updateGradebookOnSubmission(studentId, courseId, itemId, t
         createdby: studentId,
         discussion: itemId,
         isGraded: true,
-      }).lean();
+      })
+        .sort({ createdAt: -1 })
+        .lean();
 
       if (!comment) return false;
 
@@ -163,7 +165,7 @@ export async function updateGradebookOnSubmission(studentId, courseId, itemId, t
       }
 
       gradebook.finalPercentage = Number(finalPerc.toFixed(2)) || 0;
-      
+
       // Update Letters/GPA
       if (gradingSystem === "normalGrading") {
         gradebook.finalLetterGrade = await getLetterGrade(courseId, gradebook.finalPercentage);
@@ -267,7 +269,7 @@ export async function updateGradebookOnSubmission(studentId, courseId, itemId, t
     // 🟢 CRITICAL: Force Mongoose to save nested changes
     gradebook.markModified('semesters');
     gradebook.markModified('finalPercentage');
-    
+
     await gradebook.save();
     console.log("=== GRADEBOOK UPDATED SUCCESSFULLY ===");
     return true;
