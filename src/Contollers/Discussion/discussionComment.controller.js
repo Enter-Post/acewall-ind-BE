@@ -89,6 +89,7 @@ export const sendDiscussionComment = asyncHandler(async (req, res) => {
     createdby: user._id,
     status,
     discussion: id,
+    allowResubmission: discussion.allowResubmission,
   });
   await newDiscussionComment.save();
 
@@ -138,6 +139,7 @@ export const gradeDiscussionofStd = asyncHandler(async (req, res) => {
   }
 
   const discussionComment = await DiscussionComment.findById(discussionCommentId);
+
   if (!discussionComment) {
     throw new NotFoundError("Discussion comment not found", "DCOM_004");
   }
@@ -152,11 +154,13 @@ export const gradeDiscussionofStd = asyncHandler(async (req, res) => {
     isGraded: true,
   });
 
-  if (alreadyGraded) {
-    throw new ConflictError(
-      "This student has already been graded for this discussion.",
-      "DCOM_005"
-    );
+  if (!discussion.allowResubmission) {
+    if (alreadyGraded) {
+      throw new ConflictError(
+        "This student has already been graded for this discussion.",
+        "DCOM_005"
+      );
+    }
   }
 
   // Step 3: Grade the comment
@@ -173,7 +177,6 @@ export const gradeDiscussionofStd = asyncHandler(async (req, res) => {
     "discussion"           // type
   );
 
-  // Send notification to student
   try {
     await notifyDiscussionGraded(
       studentId,

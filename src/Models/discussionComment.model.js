@@ -26,6 +26,7 @@ const DiscussionCommentSchema = new mongoose.Schema(
     },
     marksObtained: { type: Number, default: 0 },
     isGraded: { type: Boolean, default: false },
+    allowResubmission: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

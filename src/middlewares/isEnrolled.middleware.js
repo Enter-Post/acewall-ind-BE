@@ -2,12 +2,8 @@ import Enrollment from "../Models/Enrollement.model.js";
 
 export const isEnrolledMiddleware = async (req, res, next) => {
   const { courseId } = req.params;
-
-  console.log(courseId, "courseId")
-  console.log(req.user, "req.user")
   
   const userId = req.user._id;
-
   try {
     let enrollment = await Enrollment.findOne({
       student: userId,
@@ -19,12 +15,6 @@ export const isEnrolledMiddleware = async (req, res, next) => {
         .status(404)
         .json({ message: "You are not enrolled in this course" });
     }
-
-    console.log("=== ENROLLMENT CHECK ===");
-    console.log("Status:", enrollment.status);
-    console.log("Cancellation Date:", enrollment.cancellationDate);
-    console.log("Current Date:", new Date());
-    console.log("Date passed?", new Date() >= enrollment.cancellationDate);
 
     // Auto-update APPLIEDFORCANCEL to CANCELLED if cancellation date has passed
     if (enrollment.status === "APPLIEDFORCANCEL" && enrollment.cancellationDate) {
