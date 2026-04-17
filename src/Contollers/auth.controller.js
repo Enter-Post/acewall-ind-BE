@@ -11,6 +11,7 @@ import Enrollment from "../Models/Enrollement.model.js";
 import mongoose from "mongoose";
 import twilio from "twilio";
 import stripe from "../config/stripe.js";
+import { OAuth2Client } from "google-auth-library";
 
 // Import error classes
 import {
@@ -21,6 +22,9 @@ import {
   ExternalServiceError,
 } from "../Utiles/errors.js";
 import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
+
+// Google OAuth2 Client
+const googleClient = new OAuth2Client(process.env.GOOGLE_CSS_CLIENT_ID);
 
 const generateReferralCode = async (firstName) => {
   const prefix = firstName.toUpperCase().replace(/\s+/g, "").slice(0, 4);
@@ -1700,4 +1704,199 @@ export const previewSignOut = asyncHandler(async (req, res) => {
   return res.status(200).json({
     message: "Preview Signout Successful",
   });
+});
+
+/**
+ * Google OAuth Login/Register
+ * POST /api/auth/google
+ */
+export const googleAuth = asyncHandler(async (req, res, next) => {
+  const { token, role } = req.body;
+
+  if (!token) {
+    throw new ValidationError("Google token is required", "VAL_001");
+  }
+
+  // Verify Google token
+  let ticket;
+  try {
+    ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CSS_CLIENT_ID,
+    });
+  } catch (error) {
+    throw new AuthenticationError(
+      "Invalid Google token",
+      "AUTH_034"
+    );
+  }
+
+  const payload = ticket.getPayload();
+  const { email, name, given_name, family_name, picture, sub: googleId } = payload;
+
+  if (!email) {
+    throw new ValidationError("Email not provided by Google", "VAL_002");
+  }
+
+  // Check if user exists
+  let user = await User.findOne({ email });
+
+  if (user) {
+    // User exists - login flow
+    // If user was created via local auth, allow them to login via Google
+    // Update provider to google if it was local (optional - can be removed if not desired)
+    if (user.provider === "local") {
+      // Keep local auth, but allow Google login
+      // Don't change provider, just log them in
+    }
+
+    // Ensure students have a referral code (for legacy users)
+    if (user.role === "student" && !user.referralCode) {
+      user.referralCode = await generateReferralCode(user.firstName);
+      await user.save();
+    }
+
+    // Generate JWT token
+    const jwtToken = generateToken(user, user.role, req, res);
+
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    return res.status(200).json({
+      message: "Login successful",
+      token: jwtToken,
+      user: userResponse,
+    });
+  } else {
+    // New user - registration flow
+    if (!role) {
+      throw new ValidationError(
+        "Role is required for new users",
+        "VAL_003"
+      );
+    }
+
+    // Validate role
+    const validRoles = ["student", "teacher"];
+    if (!validRoles.includes(role)) {
+      throw new ValidationError(
+        "Role must be either 'student' or 'teacher'",
+        "VAL_004"
+      );
+    }
+
+    // Parse name from Google profile
+    const firstName = given_name || name?.split(" ")[0] || "User";
+    const lastName = family_name || name?.split(" ").slice(1).join(" ") || "";
+
+    // Create new user
+    const newUser = new User({
+      firstName,
+      lastName,
+      email,
+      role,
+      provider: "google",
+      password: null, // No password for Google users
+      isVarified: true, // Google users are pre-verified
+      profileImg: picture
+        ? {
+            url: picture,
+            filename: `google_${googleId}`,
+            publicId: null,
+          }
+        : undefined,
+    });
+
+    // Generate referral code for students
+    if (role === "student") {
+      const refCode = await generateReferralCode(firstName);
+      newUser.referralCode = refCode;
+    }
+
+    // Send welcome email to teacher
+    if (role === "teacher") {
+      if (process.env.MAIL_USER) {
+        const transporter = nodemailer.createTransport({
+          host: process.env.MAIL_HOST,
+          port: Number(process.env.MAIL_PORT),
+          secure: Number(process.env.MAIL_PORT) === 465,
+          auth: {
+            user: process.env.MAIL_USER,
+            pass: process.env.MAIL_PASS,
+          },
+        });
+
+        const mailOptions = {
+          from: `"${process.env.MAIL_FROM_NAME || "Acewall Scholars"}" <${process.env.MAIL_USER}>`,
+          to: email,
+          subject: `Welcome to Acewall Scholars as an Instructor`,
+          html: `
+    <div style="font-family: Arial, sans-serif; background-color: #f4f7fb; padding: 20px;">
+      <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+        
+        <!-- Logo -->
+        <div style="text-align: center; padding: 20px; background: #ffffff;">
+          <img src="https://lirp.cdn-website.com/6602115c/dms3rep/multi/opt/acewall+scholars-431w.png" 
+               alt="Acewall Scholars Logo" 
+               style="height: 60px; margin: 0 auto;" />
+        </div>
+
+        <!-- Header -->
+        <div style="background: #28a745; padding: 20px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Welcome to Acewall Scholars</h1>
+        </div>
+
+        <!-- Body -->
+        <div style="padding: 20px; color: #333; text-align: left;">
+          <h2 style="margin-top: 0;">Hello ${firstName},</h2>
+          <p>
+            Thank you for registering to be an <strong>Instructor</strong> on the 
+            <strong>Acewall Scholars Learning Platform</strong>. We are excited to partner with you.
+          </p>
+          <p>You can start creating your course now! Before it can be published for purchase, please submit the required documents:</p>
+          <ul>
+            <li>University Transcripts</li>
+            <li>Teacher's License or Certifications in your field of instruction</li>
+            <li>Two Forms of ID:
+              <ul>
+                <li>Passport</li>
+                <li>Government issued ID</li>
+                <li>Driver's License</li>
+                <li>Birth Certificate</li>
+              </ul>
+            </li>
+            <li>Resume/CV</li>
+          </ul>
+          <p><em>(File types allowed: JPG, JPEG, PDF)</em></p>
+          <p>We look forward to seeing the impact you will make!</p>
+        </div>
+
+        <!-- Footer -->
+        <div style="background: #f0f4f8; color: #555; text-align: center; padding: 15px; font-size: 12px;">
+          <p style="margin: 0;">Acewall Scholars &copy; ${new Date().getFullYear()}</p>
+          <p style="margin: 0;">If you have any query contact us on same email</p>
+        </div>
+      </div>
+    </div>
+    `,
+        };
+
+        await transporter.sendMail(mailOptions);
+      }
+    }
+
+    await newUser.save();
+
+    // Generate JWT token
+    const jwtToken = generateToken(newUser, newUser.role, req, res);
+
+    const userResponse = newUser.toObject();
+    delete userResponse.password;
+
+    return res.status(201).json({
+      message: "Account created successfully",
+      token: jwtToken,
+      user: userResponse,
+    });
+  }
 });
