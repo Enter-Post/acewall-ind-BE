@@ -29,6 +29,7 @@ import {
   updatePhone,
   previewSignIn,
   previewSignOut,
+  googleAuth,
 } from "../Contollers/auth.controller.js";
 import { isUser } from "../middlewares/Auth.Middleware.js";
 import { upload } from "../lib/multer.config.js";
@@ -87,6 +88,7 @@ router.post("/verifyPhoneOTP", verifyPhoneOtp);
 router.post("/resendOTP", resendOTP);
 router.post("/resendPhoneOTP", resendPhoneOTP);
 router.post("/login", login);
+router.post("/google", googleAuth);
 router.post("/forgotPassword", forgetPassword);
 router.post("/verifyForgotPassOTP", verifyOTPForgotPassword);
 router.post("/resetPassword", resetPassword);

@@ -31,7 +31,18 @@ const UserSchema = new mongoose.Schema(
     phone: { type: String },
     homeAddress: { type: String },
     mailingAddress: { type: String },
-    password: { type: String, required: true },
+    password: {
+      type: String,
+      required: function() {
+        return this.provider === "local";
+      },
+    },
+
+    provider: {
+      type: String,
+      enum: ["local", "google"],
+      default: "local",
+    },
 
     isVarified: {
       type: Boolean,
