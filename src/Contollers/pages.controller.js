@@ -9,7 +9,7 @@ import { asyncHandler } from "../middlewares/errorHandler.middleware.js";
 // ✅ Create a new course post/page
 // Create Page
 export const createpage = asyncHandler(async (req, res) => {
-    const { title, description } = req.body;
+    const { title, description, driveFiles, driveImage } = req.body;
     const { courseId, type, typeId } = req.params;
 
     if (!courseId) {
@@ -30,6 +30,22 @@ export const createpage = asyncHandler(async (req, res) => {
             })
         );
 
+        // Handle Google Drive files
+        let driveFilesArray = [];
+        if (driveFiles) {
+            try {
+                driveFilesArray = JSON.parse(driveFiles);
+                if (!Array.isArray(driveFilesArray)) {
+                    driveFilesArray = [driveFilesArray];
+                }
+            } catch (e) {
+                driveFilesArray = [];
+            }
+        }
+
+        // Combine regular uploads with Google Drive files
+        const allFiles = [...uploadedFiles, ...driveFilesArray];
+
         let imageData = null;
         if (image) {
             const result = await uploadToCloudinary(image.buffer, "page_images");
@@ -38,6 +54,16 @@ export const createpage = asyncHandler(async (req, res) => {
                 publicId: result.public_id,
                 filename: image.originalname,
             };
+        }
+
+        // Handle Google Drive image
+        if (driveImage) {
+            try {
+                const parsedDriveImage = JSON.parse(driveImage);
+                imageData = parsedDriveImage;
+            } catch (e) {
+                // Invalid driveImage format, ignore
+            }
         }
 
         let newPage;
@@ -50,7 +76,7 @@ export const createpage = asyncHandler(async (req, res) => {
                 type,
                 lesson: typeId,
                 image: imageData,
-                files: uploadedFiles,
+                files: allFiles,
             });
 
         } else if (type === "chapter") {
@@ -61,7 +87,7 @@ export const createpage = asyncHandler(async (req, res) => {
                 type,
                 chapter: typeId,
                 image: imageData,
-                files: uploadedFiles,
+                files: allFiles,
             });
 
         }
