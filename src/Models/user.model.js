@@ -119,7 +119,29 @@ const UserSchema = new mongoose.Schema(
     referralPoints : {
       type: Number,
       default: 0,
-    }
+    },
+    googleDrive: {
+      connected: {
+        type: Boolean,
+        default: false,
+      },
+      accessToken: {
+        type: String,
+        default: null,
+      },
+      refreshToken: {
+        type: String,
+        default: null,
+      },
+      expiryDate: {
+        type: Date,
+        default: null,
+      },
+      scope: {
+        type: String,
+        default: null,
+      },
+    },
   },
   { timestamps: true }
 );
