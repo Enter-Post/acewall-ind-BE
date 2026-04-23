@@ -23,7 +23,8 @@ export const createDiscussion = asyncHandler(async (req, res) => {
     lesson,
     category,
     semester,
-    quarter
+    quarter,
+    driveFiles
   } = req.body;
   const files = req.files;
   const createdby = req.user._id;
@@ -43,6 +44,22 @@ export const createDiscussion = asyncHandler(async (req, res) => {
     }
   }
 
+  // Handle Google Drive files
+  let driveFilesArray = [];
+  if (driveFiles) {
+    try {
+      driveFilesArray = JSON.parse(driveFiles);
+      if (!Array.isArray(driveFilesArray)) {
+        driveFilesArray = [driveFilesArray];
+      }
+    } catch (e) {
+      driveFilesArray = [];
+    }
+  }
+
+  // Combine regular uploads with Google Drive files
+  const allFiles = [...uploadedFiles, ...driveFilesArray];
+
   const parsedDueDate = JSON.parse(dueDate);
 
   const dueDateObject = {
@@ -59,7 +76,7 @@ export const createDiscussion = asyncHandler(async (req, res) => {
     description,
     course,
     type,
-    files: uploadedFiles,
+    files: allFiles,
     createdby,
     totalMarks,
     dueDate: dueDateObject,
