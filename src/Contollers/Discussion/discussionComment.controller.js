@@ -24,15 +24,28 @@ export const getDiscussionComments = asyncHandler(async (req, res) => {
     .skip(skip)
     .limit(parseInt(limit));
 
-  const totalComments = await DiscussionComment.countDocuments({
-    discussion: id,
+  const sanitizedComments = discussionComments.map((comment) => {
+    const user = comment.createdby
+      ? comment.createdby
+      : {
+        firstName: "Deleted",
+        lastName: "User",
+        profileImg: null,
+        role: null,
+      };
+
+    return {
+      ...comment.toObject(),
+      createdby: user,
+    };
   });
 
-  return res.status(200).json({
-    discussionComments,
+
+  res.status(200).json({
+    message: "Comments fetched successfully",
+    discussionComments: sanitizedComments,
     totalPages: Math.ceil(totalComments / limit),
     currentPage: parseInt(page),
-    message: "Comments fetched successfully"
   });
 });
 
