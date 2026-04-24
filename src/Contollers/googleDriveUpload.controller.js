@@ -90,6 +90,7 @@ export const uploadFromGoogleDrive = asyncHandler(async (req, res) => {
         url: uploadResult.secure_url,
         publicId: uploadResult.public_id,
         filename: uploadResult.original_filename || fileMetadata.data.name,
+        type: uploadResult.resource_type === "image" ? `image/${uploadResult.format}` : fileMetadata.data.mimeType,
         format: uploadResult.format,
         resourceType: uploadResult.resource_type,
         size: uploadResult.bytes,
