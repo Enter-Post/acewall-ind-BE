@@ -52,6 +52,7 @@ export const submission = asyncHandler(async (req, res) => {
 
   let answerFiles = [];
 
+  // Handle local files uploaded via multer
   for (const file of files) {
     const result = await uploadToCloudinary(file.buffer, "assessment_files");
     answerFiles.push({
@@ -60,6 +61,22 @@ export const submission = asyncHandler(async (req, res) => {
       public_id: result.public_id,
     });
   }
+
+  // Handle Google Drive files
+  Object.keys(req.body).forEach(key => {
+    if (key.startsWith("driveFile_")) {
+      try {
+        const driveFile = JSON.parse(req.body[key]);
+        answerFiles.push({
+          url: driveFile.url || driveFile.secure_url,
+          filename: driveFile.filename || driveFile.name,
+          public_id: driveFile.publicId || driveFile.public_id,
+        });
+      } catch (e) {
+        console.error("Error parsing drive file:", e);
+      }
+    }
+  });
 
   if (assessment.assessmentType === "file") {
     finalQuestionsubmitted = [answers];

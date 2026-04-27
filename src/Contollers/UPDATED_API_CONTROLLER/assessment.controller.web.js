@@ -29,18 +29,44 @@ export const createAssessment_updated = asyncHandler(async (req, res) => {
 
   const parsedQuestions = JSON.parse(questions || "[]");
 
-  const questionFiles = [];
+  // Process each question to handle files
+  for (let questionIndex = 0; questionIndex < parsedQuestions.length; questionIndex++) {
+    const question = parsedQuestions[questionIndex];
+    if (question.type !== "file") continue;
 
-  for (const file of files) {
-    const result = await uploadToCloudinary(file.buffer, "assessment_files");
-    questionFiles.push({
-      url: result.secure_url,
-      publicId: result.public_id,
-      filename: file.originalname,
+    const questionFiles = [];
+
+    // Handle local files uploaded via multer
+    const localFiles = files.filter(f => f.fieldname.startsWith(`question_${questionIndex}_file_`));
+    for (const file of localFiles) {
+      const result = await uploadToCloudinary(file.buffer, "assessment_files");
+      questionFiles.push({
+        url: result.secure_url,
+        publicId: result.public_id,
+        filename: file.originalname,
+      });
+    }
+
+    // Handle Google Drive files
+    const driveFiles = [];
+    Object.keys(req.body).forEach(key => {
+      if (key.startsWith(`question_${questionIndex}_driveFile_`)) {
+        try {
+          const driveFile = JSON.parse(req.body[key]);
+          driveFiles.push({
+            url: driveFile.url || driveFile.secure_url,
+            publicId: driveFile.publicId || driveFile.public_id,
+            filename: driveFile.filename || driveFile.name,
+          });
+        } catch (e) {
+          console.error("Error parsing drive file:", e);
+        }
+      }
     });
-  }
 
-  parsedQuestions[0].files = questionFiles;
+    // Combine local and drive files
+    question.files = [...questionFiles, ...driveFiles];
+  }
 
   if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
     for (const [index, q] of parsedQuestions.entries()) {
