@@ -1002,9 +1002,14 @@ export const getCourseDetails = asyncHandler(async (req, res) => {
   }
 
   // Check if current teacher created the course
-  if (courseExists.createdby.toString() !== req.user._id.toString()) {
-    throw new AuthorizationError("Access denied: You can only access courses you created");
-  }
+ if (
+  courseExists.createdby.toString() !== req.user._id.toString() &&
+  req.user.role !== "admin"
+) {
+  throw new AuthorizationError(
+    "Access denied: Only the creator or admin can access this course"
+  );
+}
 
   const course = await CourseSch.aggregate([
     {

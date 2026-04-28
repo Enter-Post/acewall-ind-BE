@@ -5,7 +5,7 @@ import { v2 as cloudinary } from "cloudinary";
 
 export const createLesson = async (req, res) => {
   const createdby = req.user._id;
-  const { title, description, youtubeLinks, otherLink, chapter } = req.body;
+  const { title, description, youtubeLinks, otherLink, chapter, driveFiles } = req.body;
   const pdfFiles = req.files;
 
   console.log(req.body.otherLink, "otherLink");
@@ -27,13 +27,34 @@ export const createLesson = async (req, res) => {
       }
     }
 
+    // Handle Google Drive files
+    let driveFilesArray = [];
+    if (driveFiles) {
+      try {
+        const parsed = JSON.parse(driveFiles);
+        driveFilesArray = Array.isArray(parsed) ? parsed : [parsed];
+        // Map drive files to the expected schema format
+        driveFilesArray = driveFilesArray.map(file => ({
+          url: file.url || file.secure_url,
+          public_id: file.publicId || file.public_id,
+          filename: file.filename || file.name,
+        }));
+      } catch (e) {
+        console.error("Error parsing driveFiles:", e);
+        driveFilesArray = [];
+      }
+    }
+
+    // Combine regular uploads with Google Drive files
+    const allFiles = [...uploadedFiles, ...driveFilesArray];
+
     // Create new lesson with or without PDF files
     const newLesson = new Lesson({
       title,
       description,
       youtubeLinks,
       otherLink,
-      pdfFiles: uploadedFiles.length > 0 ? uploadedFiles : undefined, // If no PDF files, set as undefined
+      pdfFiles: allFiles.length > 0 ? allFiles : undefined, // If no PDF files, set as undefined
       chapter,
       createdby,
     });

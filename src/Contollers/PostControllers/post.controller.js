@@ -10,7 +10,7 @@ import { notifyNewCoursePost } from "../../Utiles/notificationService.js";
 import { EXCLUDED_ENROLLMENT_STATUSES } from "../../Utiles/notificationConstants.js";
 
 export const createPost = asyncHandler(async (req, res) => {
-    const { text, color, postType, courseId } = req.body;
+    const { text, color, postType, courseId, driveUrl, drivePublicId, driveFilename } = req.body;
     const assets = req.files || [];
     const author = req.user._id;
 
@@ -25,6 +25,16 @@ export const createPost = asyncHandler(async (req, res) => {
             type: asset.mimetype
         };
     });
+
+    // Handle Google Drive upload (Cloudinary URL)
+    if (driveUrl) {
+        uploadedFiles.push({
+            url: driveUrl,
+            fileName: driveFilename || 'drive-file',
+            type: driveUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? 'image/jpeg' : 
+                  driveUrl.match(/\.(mp4|webm|mov)$/i) ? 'video/mp4' : 'application/octet-stream'
+        });
+    }
 
     const postData = {
         text,
