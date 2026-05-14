@@ -52,15 +52,17 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
     homeAddress,
     mailingAddress,
     password,
+    phone,
   } = req.body;
 
-  // 1. Removed 'phone' from the required fields check
+  // Check required fields including phone
   if (
     !firstName ||
     !lastName ||
     !email ||
     !password ||
-    !role
+    !role ||
+    !phone
   ) {
     throw new ValidationError("All required fields must be filled.", "VAL_001");
   }
@@ -86,11 +88,20 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
   const otp = generateOTP();
   const hashedOTP = await bcrypt.hash(otp, 10);
 
+  // Generate phone OTP
+  const phoneOtp = generateOTP();
+  const hashedPhoneOTP = await bcrypt.hash(phoneOtp, 10);
+
+  // Format phone number with country code if not provided
+  const formattedPhone = phone.startsWith('+') ? phone : `+${phone.replace(/\D/g, '')}`;
+
   await OTP.findOneAndUpdate(
     { email },
     {
       otp: hashedOTP,
+      phoneOtp: hashedPhoneOTP,
       expiresAt: Date.now() + 10 * 60 * 1000,
+      isVerified: false,
       userData: {
         firstName,
         middleName,
@@ -100,6 +111,7 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
         homeAddress,
         mailingAddress,
         password: hashedPassword,
+        phone: formattedPhone,
       },
     },
     { upsert: true }
@@ -156,7 +168,19 @@ export const initiateSignup = asyncHandler(async (req, res, next) => {
   `,
   });
 
-  res.status(201).json({ message: "OTP sent to your email." });
+  // Send OTP via SMS using Twilio
+  try {
+    await twilioClient.messages.create({
+      body: `Your Acewall Scholars phone verification code is: ${phoneOtp}`,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: formattedPhone,
+    });
+  } catch (smsError) {
+    console.error("Failed to send SMS:", smsError);
+    // Don't throw error - email OTP is the primary method
+  }
+
+  res.status(201).json({ message: "OTP sent to your email and phone number." });
 });
 
 
@@ -268,8 +292,6 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
   if (!otpEntry) {
     throw new ValidationError("OTP not found or already used.", "AUTH_006");
   }
-  console.log("working here 1")
-
 
   // 2. Check validity and expiration
   const isExpired = Date.now() > otpEntry.expiresAt;
@@ -278,72 +300,14 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
   if (!isValid || isExpired) {
     throw new ValidationError("Invalid or expired OTP.", "AUTH_006");
   }
-  console.log("working here 2")
 
-
-  // 3. Extract user data stored during the initiateSignup phase
-  const {
-    firstName,
-    middleName,
-    lastName,
-    role,
-    email: userEmail,
-    homeAddress,
-    mailingAddress,
-    password,
-  } = otpEntry.userData;
-
-  console.log("working here 3")
-
-  // 4. Create the final User account
-  const newUser = new User({
-    firstName,
-    middleName,
-    lastName,
-    role,
-    email: userEmail,
-    homeAddress,
-    mailingAddress,
-    password, // This is already hashed from initiateSignup
-    isVerified: true, // Mark the user as verified
-  });
-  console.log("working here 4")
-
-
-  if (role === "student") {
-    const refCode = await generateReferralCode(firstName);
-    newUser.referralCode = refCode;
-  }
-
-  if (role === "teacher") {
-    const account = await stripe.accounts.create({
-      type: "express",
-      email: otpEntry.userData.email,
-      capabilities: {
-        card_payments: { requested: true },
-        transfers: { requested: true },
-      },
-      business_type: "individual",
-      business_profile: {
-        url: "https://acewallscholarslearningonline.org",
-        product_description: "Online courses and live classes sold via LMS platform",
-      },
-    });
-    newUser.stripeAccountId = account.id;
-  }
-
-  await newUser.save();
-
-  await OTP.deleteOne({ email });
-
-  const userResponse = newUser.toObject();
-  delete userResponse.password;
-
-  generateToken(newUser, newUser.role, req, res);
+  // 3. Mark email as verified - user creation happens after phone verification
+  otpEntry.isVerified = true;
+  await otpEntry.save();
 
   res.status(200).json({
-    message: "Email verified successfully. Registration complete!",
-    user: userResponse,
+    message: "Email verified successfully. Please verify your phone number.",
+    emailVerified: true,
   });
 });
 
@@ -366,6 +330,23 @@ export const verifyPhoneOtp = asyncHandler(async (req, res) => {
 
   if (newUser.role === "student") {
     newUser.referralCode = await generateReferralCode(newUser.firstName);
+  }
+
+  if (newUser.role === "teacher") {
+    const account = await stripe.accounts.create({
+      type: "express",
+      email: newUser.email,
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
+      business_type: "individual",
+      business_profile: {
+        url: "https://acewallscholarslearningonline.org",
+        product_description: "Online courses and live classes sold via LMS platform",
+      },
+    });
+    newUser.stripeAccountId = account.id;
   }
 
   await newUser.save();
