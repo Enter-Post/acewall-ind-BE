@@ -40,13 +40,13 @@ export { GOOGLE_DRIVE_CLIENT_ID, GOOGLE_DRIVE_CLIENT_SECRET, GOOGLE_DRIVE_REDIRE
 /**
  * Generate OAuth URL for Google Drive connection
  * GET /api/drive/auth-url
+ * Accepts state parameter containing userId and redirectTo for proper callback handling
  */
 export const getGoogleDriveAuthUrl = asyncHandler(async (req, res) => {
-  const userId = req.user?._id;
+  const { state } = req.query;
 
-  if (!userId) {
-    throw new AuthenticationError("User not authenticated", "AUTH_001");
-  }
+  // Log for debugging
+  console.log("Auth URL request received, state:", state);
 
   if (!GOOGLE_DRIVE_CLIENT_ID || !GOOGLE_DRIVE_CLIENT_SECRET) {
     throw new ValidationError(
@@ -58,13 +58,16 @@ export const getGoogleDriveAuthUrl = asyncHandler(async (req, res) => {
   const oauth2Client = createOAuth2Client();
 
   // Generate authorization URL with offline access and consent prompt
+  // Pass state directly to callback - it contains userId and redirectTo
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: SCOPES,
-    state: userId.toString(), // Pass user ID to callback for verification
+    state: state || "", // Pass state from frontend for redirect handling
     include_granted_scopes: true,
   });
+
+  console.log("Generated auth URL with state length:", state?.length);
 
   return res.status(200).json({
     success: true,
@@ -75,9 +78,13 @@ export const getGoogleDriveAuthUrl = asyncHandler(async (req, res) => {
 /**
  * Handle OAuth callback from Google
  * GET /api/drive/callback
+ * Decodes state parameter to extract userId and redirectTo for proper redirect handling
  */
 export const handleGoogleDriveCallback = asyncHandler(async (req, res) => {
   const { code, state, error } = req.query;
+
+  // Log for debugging
+  console.log("Google Drive callback received:", { code: !!code, state: !!state, error, stateValue: state });
 
   if (error) {
     console.error("Google OAuth error:", error);
@@ -89,12 +96,35 @@ export const handleGoogleDriveCallback = asyncHandler(async (req, res) => {
   }
 
   if (!code || !state) {
+    console.error("Missing code or state in callback");
     return res.redirect(
       `${process.env.CLIENT_URL || "http://localhost:5173"}/drive-callback?error=invalid_callback`
     );
   }
 
-  const userId = state;
+  // Decode and parse state safely to extract userId and redirectTo
+  // State is URL-safe base64-encoded JSON from frontend
+  let parsedState;
+  try {
+    // Convert URL-safe base64 back to standard base64
+    const base64State = state.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if needed
+    const paddedBase64 = base64State.padEnd(base64State.length + (4 - base64State.length % 4) % 4, '=');
+    parsedState = JSON.parse(atob(paddedBase64));
+  } catch (err) {
+    console.error("Invalid state parameter:", err);
+    return res.redirect(
+      `${process.env.CLIENT_URL || "http://localhost:5173"}/drive-callback?error=invalid_state`
+    );
+  }
+
+  const { userId, redirectTo } = parsedState;
+
+  if (!userId) {
+    return res.redirect(
+      `${process.env.CLIENT_URL || "http://localhost:5173"}/drive-callback?error=missing_user_id`
+    );
+  }
 
   try {
     const oauth2Client = createOAuth2Client();
@@ -123,9 +153,16 @@ export const handleGoogleDriveCallback = asyncHandler(async (req, res) => {
 
     await user.save();
 
-    // Redirect to frontend with success
+    // Validate redirect URL to prevent open redirect vulnerabilities
+    // Only allow internal frontend paths beginning with "/"
+    const safeRedirect =
+      redirectTo && redirectTo.startsWith("/")
+        ? redirectTo
+        : "/";
+
+    // Redirect user back to the original page where they initiated connection
     return res.redirect(
-      `${process.env.CLIENT_URL || "http://localhost:5173"}/drive-callback?status=success`
+      `${process.env.CLIENT_URL || "http://localhost:5173"}${safeRedirect}?drive=connected`
     );
   } catch (error) {
     console.error("Google Drive callback error:", error);
