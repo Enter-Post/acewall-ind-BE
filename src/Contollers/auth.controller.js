@@ -303,10 +303,45 @@ export const verifyEmailOtp = asyncHandler(async (req, res, next) => {
 
   // 3. Mark email as verified - user creation happens after phone verification
   otpEntry.isVerified = true;
+
+  // 4. Generate and send Phone OTP
+  function generateOTP(length = 6) {
+    const digits = "0123456789";
+    let generatedOtp = "";
+    const bytes = crypto.randomBytes(length);
+
+    for (let i = 0; i < length; i++) {
+      generatedOtp += digits[bytes[i] % digits.length];
+    }
+
+    return generatedOtp;
+  }
+
+  const phoneOtp = generateOTP();
+  const hashedPhoneOTP = await bcrypt.hash(phoneOtp, 10);
+
+  otpEntry.phoneOtp = hashedPhoneOTP;
+  otpEntry.expiresAt = Date.now() + 10 * 60 * 1000; // Reset expiration for 10 more minutes
   await otpEntry.save();
 
+  // Send SMS via Twilio
+  try {
+    await twilioClient.messages.create({
+      body: `Your Acewall Scholars phone verification code is: ${phoneOtp}`,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: otpEntry.userData.phone,
+    });
+  } catch (error) {
+    console.error("Failed to send SMS in verifyEmailOtp:", error);
+    return res.status(200).json({
+      message: "Email verified successfully, but failed to send phone OTP. Please use the resend option.",
+      emailVerified: true,
+      smsError: true,
+    });
+  }
+
   res.status(200).json({
-    message: "Email verified successfully. Please verify your phone number.",
+    message: "Email verified successfully. An OTP has been sent to your phone number.",
     emailVerified: true,
   });
 });
@@ -476,11 +511,19 @@ export const resendPhoneOTP = asyncHandler(async (req, res) => {
   console.log(userData, "userData")
 
   // 🚀 Send SMS using purchased number
-  await twilioClient.messages.create({
-    body: `Your Acewall Scholars phone verification code is: ${phoneOtp}`,
-    from: process.env.TWILIO_PHONE_NUMBER, // purchased Twilio number
-    to: userData.phone,
-  });
+  try {
+    await twilioClient.messages.create({
+      body: `Your Acewall Scholars phone verification code is: ${phoneOtp}`,
+      from: process.env.TWILIO_PHONE_NUMBER, // purchased Twilio number
+      to: userData.phone,
+    });
+  } catch (error) {
+    console.error("Failed to send SMS:", error);
+    return res.status(500).json({
+      message: "Failed to send SMS. Please check your Twilio configuration or try again later.",
+      error: error.message
+    });
+  }
 
   return res.status(200).json({
     message: "New OTP has been sent to your phone number."
